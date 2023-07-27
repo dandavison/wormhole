@@ -1,5 +1,6 @@
 mod handlers;
 mod repo_paths;
+mod tower_hyper_tonic;
 
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response, Server};

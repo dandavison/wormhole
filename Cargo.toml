@@ -1,0 +1,10 @@
+[package]
+name = "wormhole"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+dirs = "5.0.1"
+hyper = { version = "0.14", features = ["full"] }
+regex = "1.9.1"
+tokio = { version = "1", features = ["full"] }

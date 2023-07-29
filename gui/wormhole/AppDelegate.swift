@@ -1,30 +1,13 @@
-//
-//  AppDelegate.swift
-//  wormhole
-//
-//  Created by Dan Davison on 7/28/23.
-//
-
-import Cocoa
+import AppKit
 
 @main
 class AppDelegate: NSObject, NSApplicationDelegate {
 
-    
-
+    var window: NSWindow!
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
-        // Insert code here to initialize your application
+        let viewController = SearchableListViewController()
+        window = NSWindow(contentViewController: viewController)
+        window.makeKeyAndOrderFront(nil)
     }
-
-    func applicationWillTerminate(_ aNotification: Notification) {
-        // Insert code here to tear down your application
-    }
-
-    func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
-        return true
-    }
-
-
 }
-

@@ -50,7 +50,7 @@ class SearchableListViewController: NSViewController, NSTableViewDataSource, NST
     }
 
     func fetchProjects() {
-        let url = URL(string: "http://o/projects/")!
+        let url = URL(string: "http://o/list-projects/")!
         let task = URLSession.shared.dataTask(with: url) { (data, response, error) in
             if let error = error {
                 print("Error: \(error)")
@@ -60,6 +60,18 @@ class SearchableListViewController: NSViewController, NSTableViewDataSource, NST
                 DispatchQueue.main.async {
                     self.tableView.reloadData()
                 }
+            }
+        }
+        task.resume()
+    }
+
+    func openProjectInVSCode(project: String) {
+        let url = URL(string: "http://o/project/" + project)!
+        let task = URLSession.shared.dataTask(with: url) { (data, response, error) in
+            if let error = error {
+                print("Error: \(error)")
+            } else if let data = data {
+                print(data)
             }
         }
         task.resume()
@@ -84,8 +96,9 @@ class SearchableListViewController: NSViewController, NSTableViewDataSource, NST
     }
 
     @objc func doubleClick(_ sender: Any) {
-        let selectedName = filteredData[tableView.selectedRow]
-        print("Selected: \(selectedName)")
+        let project = filteredData[tableView.selectedRow]
+        print("Selected: \(project)")
         self.view.window?.close()
+        openProjectInVSCode(project: project)
     }
 }

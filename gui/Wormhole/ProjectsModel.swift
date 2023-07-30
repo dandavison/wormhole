@@ -31,7 +31,6 @@ final class ProjectsModel: ObservableObject {
             do {
                 self.projects = try await fetchProjects()
                 self.$currentText
-                    .debounce(for: 0.3, scheduler: RunLoop.main)
                     .removeDuplicates()
                     .map { text -> [ProjectGroup<String>] in
                         guard !text.isEmpty else {

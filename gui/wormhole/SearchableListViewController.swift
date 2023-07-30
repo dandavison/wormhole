@@ -10,7 +10,7 @@ class SearchableListViewController: NSViewController, NSTableViewDataSource, NST
         if searchField.stringValue.isEmpty {
             return data
         } else {
-            return data.filter { $0.contains(searchField.stringValue) }
+            return data.filter { $0.lowercased().contains(searchField.stringValue.lowercased()) }
         }
     }
 

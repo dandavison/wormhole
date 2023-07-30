@@ -10,7 +10,7 @@ struct Window {
     name: String,
 }
 
-pub fn set_project(project: &Project) -> Result<(), String> {
+pub fn open(project: &Project) -> Result<(), String> {
     if let Some(window) = get_window(&project.name) {
         tmux(["select-window", "-t", &window.id].iter());
     } else {

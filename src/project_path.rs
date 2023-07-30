@@ -1,6 +1,9 @@
 use std::path::PathBuf;
 
-use crate::project::{get_project_by_path, Project};
+use crate::{
+    project::{get_project_by_path, Project},
+    tmux, vscode,
+};
 
 pub struct ProjectPath {
     pub project: &'static Project,
@@ -9,6 +12,12 @@ pub struct ProjectPath {
 }
 
 impl ProjectPath {
+    pub fn open(&self) -> Result<bool, String> {
+        tmux::open(self.project)?;
+        vscode::open(self)?;
+        Ok(true)
+    }
+
     pub fn from_absolute_path(path: PathBuf) -> Option<Self> {
         if let Some(project) = get_project_by_path(&path) {
             Some(ProjectPath {

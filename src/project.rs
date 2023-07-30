@@ -4,12 +4,28 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use crate::config;
+use crate::project_path::ProjectPath;
 
 pub static PROJECTS: OnceLock<HashMap<String, Project>> = OnceLock::new();
 
 pub struct Project {
     pub name: String,
     pub path: PathBuf,
+}
+
+impl Project {
+    pub fn open(&'static self) -> Result<bool, String> {
+        self.root().open()?;
+        Ok(true)
+    }
+
+    fn root(&'static self) -> ProjectPath {
+        ProjectPath {
+            project: self,
+            relative_path: "".into(),
+            line: None,
+        }
+    }
 }
 
 pub fn get_project_by_path(query_path: &Path) -> Option<&'static Project> {

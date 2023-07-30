@@ -14,7 +14,7 @@ pub struct Project {
 
 pub fn get_project_by_path(query_path: &Path) -> Option<&'static Project> {
     for (_, project) in PROJECTS.get().unwrap().iter() {
-        if project.path.starts_with(query_path) {
+        if query_path.starts_with(&project.path) {
             return Some(project);
         }
     }

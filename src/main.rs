@@ -1,4 +1,5 @@
 mod endpoints;
+mod hammerspoon;;
 mod handlers;
 mod project;
 mod project_path;
@@ -21,9 +22,9 @@ async fn wormhole(req: Request<Body>) -> Result<Response<Body>, Infallible> {
     if &path == "/list-projects/" {
         Ok(endpoints::projects())
     } else {
-        let _ = handlers::open_path_in_vscode(&path).unwrap()
-            || handlers::open_project_in_vscode(&path).unwrap()
-            || handlers::open_github_url_in_vscode(&path).unwrap();
+        let _ = handlers::select_project_by_path(&path).unwrap()
+            || handlers::select_project_by_name(&path).unwrap()
+            || handlers::select_project_by_github_url(&path).unwrap();
         Ok(Response::new(Body::from("Sent to wormhole.")))
     }
 }

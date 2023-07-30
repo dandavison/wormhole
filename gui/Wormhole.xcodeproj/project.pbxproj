@@ -1,0 +1,606 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		37E3A79D2A7707DC00DAE183 /* WormholeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37E3A79C2A7707DC00DAE183 /* WormholeApp.swift */; };
+		37E3A79F2A7707DC00DAE183 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37E3A79E2A7707DC00DAE183 /* ContentView.swift */; };
+		37E3A7A12A7707DE00DAE183 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 37E3A7A02A7707DE00DAE183 /* Assets.xcassets */; };
+		37E3A7A42A7707DE00DAE183 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 37E3A7A32A7707DE00DAE183 /* Preview Assets.xcassets */; };
+		37E3A7AF2A7707DE00DAE183 /* WormholeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37E3A7AE2A7707DE00DAE183 /* WormholeTests.swift */; };
+		37E3A7B92A7707DE00DAE183 /* WormholeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37E3A7B82A7707DE00DAE183 /* WormholeUITests.swift */; };
+		37E3A7BB2A7707DE00DAE183 /* WormholeUITestsLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37E3A7BA2A7707DE00DAE183 /* WormholeUITestsLaunchTests.swift */; };
+		37E3A7C82A77087E00DAE183 /* ProjectsModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37E3A7C72A77087E00DAE183 /* ProjectsModel.swift */; };
+		37E3A7CA2A7708A100DAE183 /* ProjectInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37E3A7C92A7708A100DAE183 /* ProjectInput.swift */; };
+		37E3A7CC2A7708BF00DAE183 /* SuggestionTestField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37E3A7CB2A7708BF00DAE183 /* SuggestionTestField.swift */; };
+		37E3A7CE2A7708D500DAE183 /* ProjectSelectorModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37E3A7CD2A7708D500DAE183 /* ProjectSelectorModel.swift */; };
+		37E3A7D02A7708F300DAE183 /* SuggestionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37E3A7CF2A7708F300DAE183 /* SuggestionsView.swift */; };
+		37E3A7D22A77091100DAE183 /* BorderlessWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37E3A7D12A77091100DAE183 /* BorderlessWindow.swift */; };
+		37E3A7D42A77092A00DAE183 /* VisualEffectBlur.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37E3A7D32A77092A00DAE183 /* VisualEffectBlur.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		37E3A7AB2A7707DE00DAE183 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 37E3A7912A7707DC00DAE183 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 37E3A7982A7707DC00DAE183;
+			remoteInfo = Wormhole;
+		};
+		37E3A7B52A7707DE00DAE183 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 37E3A7912A7707DC00DAE183 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 37E3A7982A7707DC00DAE183;
+			remoteInfo = Wormhole;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		37E3A7992A7707DC00DAE183 /* Wormhole.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Wormhole.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		37E3A79C2A7707DC00DAE183 /* WormholeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WormholeApp.swift; sourceTree = "<group>"; };
+		37E3A79E2A7707DC00DAE183 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		37E3A7A02A7707DE00DAE183 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		37E3A7A32A7707DE00DAE183 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
+		37E3A7A52A7707DE00DAE183 /* Wormhole.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Wormhole.entitlements; sourceTree = "<group>"; };
+		37E3A7AA2A7707DE00DAE183 /* WormholeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WormholeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		37E3A7AE2A7707DE00DAE183 /* WormholeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WormholeTests.swift; sourceTree = "<group>"; };
+		37E3A7B42A7707DE00DAE183 /* WormholeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WormholeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		37E3A7B82A7707DE00DAE183 /* WormholeUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WormholeUITests.swift; sourceTree = "<group>"; };
+		37E3A7BA2A7707DE00DAE183 /* WormholeUITestsLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WormholeUITestsLaunchTests.swift; sourceTree = "<group>"; };
+		37E3A7C72A77087E00DAE183 /* ProjectsModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectsModel.swift; sourceTree = "<group>"; };
+		37E3A7C92A7708A100DAE183 /* ProjectInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectInput.swift; sourceTree = "<group>"; };
+		37E3A7CB2A7708BF00DAE183 /* SuggestionTestField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestionTestField.swift; sourceTree = "<group>"; };
+		37E3A7CD2A7708D500DAE183 /* ProjectSelectorModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectSelectorModel.swift; sourceTree = "<group>"; };
+		37E3A7CF2A7708F300DAE183 /* SuggestionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestionsView.swift; sourceTree = "<group>"; };
+		37E3A7D12A77091100DAE183 /* BorderlessWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BorderlessWindow.swift; sourceTree = "<group>"; };
+		37E3A7D32A77092A00DAE183 /* VisualEffectBlur.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualEffectBlur.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		37E3A7962A7707DC00DAE183 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		37E3A7A72A7707DE00DAE183 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		37E3A7B12A7707DE00DAE183 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		37E3A7902A7707DC00DAE183 = {
+			isa = PBXGroup;
+			children = (
+				37E3A79B2A7707DC00DAE183 /* Wormhole */,
+				37E3A7AD2A7707DE00DAE183 /* WormholeTests */,
+				37E3A7B72A7707DE00DAE183 /* WormholeUITests */,
+				37E3A79A2A7707DC00DAE183 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		37E3A79A2A7707DC00DAE183 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				37E3A7992A7707DC00DAE183 /* Wormhole.app */,
+				37E3A7AA2A7707DE00DAE183 /* WormholeTests.xctest */,
+				37E3A7B42A7707DE00DAE183 /* WormholeUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		37E3A79B2A7707DC00DAE183 /* Wormhole */ = {
+			isa = PBXGroup;
+			children = (
+				37E3A79C2A7707DC00DAE183 /* WormholeApp.swift */,
+				37E3A79E2A7707DC00DAE183 /* ContentView.swift */,
+				37E3A7A02A7707DE00DAE183 /* Assets.xcassets */,
+				37E3A7A52A7707DE00DAE183 /* Wormhole.entitlements */,
+				37E3A7A22A7707DE00DAE183 /* Preview Content */,
+				37E3A7C72A77087E00DAE183 /* ProjectsModel.swift */,
+				37E3A7C92A7708A100DAE183 /* ProjectInput.swift */,
+				37E3A7CB2A7708BF00DAE183 /* SuggestionTestField.swift */,
+				37E3A7CD2A7708D500DAE183 /* ProjectSelectorModel.swift */,
+				37E3A7CF2A7708F300DAE183 /* SuggestionsView.swift */,
+				37E3A7D12A77091100DAE183 /* BorderlessWindow.swift */,
+				37E3A7D32A77092A00DAE183 /* VisualEffectBlur.swift */,
+			);
+			path = Wormhole;
+			sourceTree = "<group>";
+		};
+		37E3A7A22A7707DE00DAE183 /* Preview Content */ = {
+			isa = PBXGroup;
+			children = (
+				37E3A7A32A7707DE00DAE183 /* Preview Assets.xcassets */,
+			);
+			path = "Preview Content";
+			sourceTree = "<group>";
+		};
+		37E3A7AD2A7707DE00DAE183 /* WormholeTests */ = {
+			isa = PBXGroup;
+			children = (
+				37E3A7AE2A7707DE00DAE183 /* WormholeTests.swift */,
+			);
+			path = WormholeTests;
+			sourceTree = "<group>";
+		};
+		37E3A7B72A7707DE00DAE183 /* WormholeUITests */ = {
+			isa = PBXGroup;
+			children = (
+				37E3A7B82A7707DE00DAE183 /* WormholeUITests.swift */,
+				37E3A7BA2A7707DE00DAE183 /* WormholeUITestsLaunchTests.swift */,
+			);
+			path = WormholeUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		37E3A7982A7707DC00DAE183 /* Wormhole */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 37E3A7BE2A7707DE00DAE183 /* Build configuration list for PBXNativeTarget "Wormhole" */;
+			buildPhases = (
+				37E3A7952A7707DC00DAE183 /* Sources */,
+				37E3A7962A7707DC00DAE183 /* Frameworks */,
+				37E3A7972A7707DC00DAE183 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Wormhole;
+			productName = Wormhole;
+			productReference = 37E3A7992A7707DC00DAE183 /* Wormhole.app */;
+			productType = "com.apple.product-type.application";
+		};
+		37E3A7A92A7707DE00DAE183 /* WormholeTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 37E3A7C12A7707DE00DAE183 /* Build configuration list for PBXNativeTarget "WormholeTests" */;
+			buildPhases = (
+				37E3A7A62A7707DE00DAE183 /* Sources */,
+				37E3A7A72A7707DE00DAE183 /* Frameworks */,
+				37E3A7A82A7707DE00DAE183 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				37E3A7AC2A7707DE00DAE183 /* PBXTargetDependency */,
+			);
+			name = WormholeTests;
+			productName = WormholeTests;
+			productReference = 37E3A7AA2A7707DE00DAE183 /* WormholeTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		37E3A7B32A7707DE00DAE183 /* WormholeUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 37E3A7C42A7707DE00DAE183 /* Build configuration list for PBXNativeTarget "WormholeUITests" */;
+			buildPhases = (
+				37E3A7B02A7707DE00DAE183 /* Sources */,
+				37E3A7B12A7707DE00DAE183 /* Frameworks */,
+				37E3A7B22A7707DE00DAE183 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				37E3A7B62A7707DE00DAE183 /* PBXTargetDependency */,
+			);
+			name = WormholeUITests;
+			productName = WormholeUITests;
+			productReference = 37E3A7B42A7707DE00DAE183 /* WormholeUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		37E3A7912A7707DC00DAE183 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					37E3A7982A7707DC00DAE183 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+					37E3A7A92A7707DE00DAE183 = {
+						CreatedOnToolsVersion = 15.0;
+						TestTargetID = 37E3A7982A7707DC00DAE183;
+					};
+					37E3A7B32A7707DE00DAE183 = {
+						CreatedOnToolsVersion = 15.0;
+						TestTargetID = 37E3A7982A7707DC00DAE183;
+					};
+				};
+			};
+			buildConfigurationList = 37E3A7942A7707DC00DAE183 /* Build configuration list for PBXProject "Wormhole" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 37E3A7902A7707DC00DAE183;
+			productRefGroup = 37E3A79A2A7707DC00DAE183 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				37E3A7982A7707DC00DAE183 /* Wormhole */,
+				37E3A7A92A7707DE00DAE183 /* WormholeTests */,
+				37E3A7B32A7707DE00DAE183 /* WormholeUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		37E3A7972A7707DC00DAE183 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				37E3A7A42A7707DE00DAE183 /* Preview Assets.xcassets in Resources */,
+				37E3A7A12A7707DE00DAE183 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		37E3A7A82A7707DE00DAE183 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		37E3A7B22A7707DE00DAE183 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		37E3A7952A7707DC00DAE183 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				37E3A7CA2A7708A100DAE183 /* ProjectInput.swift in Sources */,
+				37E3A79F2A7707DC00DAE183 /* ContentView.swift in Sources */,
+				37E3A7D02A7708F300DAE183 /* SuggestionsView.swift in Sources */,
+				37E3A7CE2A7708D500DAE183 /* ProjectSelectorModel.swift in Sources */,
+				37E3A79D2A7707DC00DAE183 /* WormholeApp.swift in Sources */,
+				37E3A7C82A77087E00DAE183 /* ProjectsModel.swift in Sources */,
+				37E3A7D42A77092A00DAE183 /* VisualEffectBlur.swift in Sources */,
+				37E3A7D22A77091100DAE183 /* BorderlessWindow.swift in Sources */,
+				37E3A7CC2A7708BF00DAE183 /* SuggestionTestField.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		37E3A7A62A7707DE00DAE183 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				37E3A7AF2A7707DE00DAE183 /* WormholeTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		37E3A7B02A7707DE00DAE183 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				37E3A7BB2A7707DE00DAE183 /* WormholeUITestsLaunchTests.swift in Sources */,
+				37E3A7B92A7707DE00DAE183 /* WormholeUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		37E3A7AC2A7707DE00DAE183 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 37E3A7982A7707DC00DAE183 /* Wormhole */;
+			targetProxy = 37E3A7AB2A7707DE00DAE183 /* PBXContainerItemProxy */;
+		};
+		37E3A7B62A7707DE00DAE183 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 37E3A7982A7707DC00DAE183 /* Wormhole */;
+			targetProxy = 37E3A7B52A7707DE00DAE183 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		37E3A7BC2A7707DE00DAE183 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.4;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		37E3A7BD2A7707DE00DAE183 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.4;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		37E3A7BF2A7707DE00DAE183 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Wormhole/Wormhole.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "\"Wormhole/Preview Content\"";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dandavison.Wormhole;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		37E3A7C02A7707DE00DAE183 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Wormhole/Wormhole.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "\"Wormhole/Preview Content\"";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dandavison.Wormhole;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		37E3A7C22A7707DE00DAE183 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.4;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dandavison.WormholeTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Wormhole.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Wormhole";
+			};
+			name = Debug;
+		};
+		37E3A7C32A7707DE00DAE183 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.4;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dandavison.WormholeTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Wormhole.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Wormhole";
+			};
+			name = Release;
+		};
+		37E3A7C52A7707DE00DAE183 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dandavison.WormholeUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = Wormhole;
+			};
+			name = Debug;
+		};
+		37E3A7C62A7707DE00DAE183 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dandavison.WormholeUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = Wormhole;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		37E3A7942A7707DC00DAE183 /* Build configuration list for PBXProject "Wormhole" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				37E3A7BC2A7707DE00DAE183 /* Debug */,
+				37E3A7BD2A7707DE00DAE183 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		37E3A7BE2A7707DE00DAE183 /* Build configuration list for PBXNativeTarget "Wormhole" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				37E3A7BF2A7707DE00DAE183 /* Debug */,
+				37E3A7C02A7707DE00DAE183 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		37E3A7C12A7707DE00DAE183 /* Build configuration list for PBXNativeTarget "WormholeTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				37E3A7C22A7707DE00DAE183 /* Debug */,
+				37E3A7C32A7707DE00DAE183 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		37E3A7C42A7707DE00DAE183 /* Build configuration list for PBXNativeTarget "WormholeUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				37E3A7C52A7707DE00DAE183 /* Debug */,
+				37E3A7C62A7707DE00DAE183 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 37E3A7912A7707DC00DAE183 /* Project object */;
+}

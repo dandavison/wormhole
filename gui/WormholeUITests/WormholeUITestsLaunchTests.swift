@@ -1,13 +1,13 @@
 //
-//  wormholeUITestsLaunchTests.swift
-//  wormholeUITests
+//  WormholeUITestsLaunchTests.swift
+//  WormholeUITests
 //
-//  Created by Dan Davison on 7/28/23.
+//  Created by Dan Davison on 7/30/23.
 //
 
 import XCTest
 
-final class wormholeUITestsLaunchTests: XCTestCase {
+final class WormholeUITestsLaunchTests: XCTestCase {
 
     override class var runsForEachTargetApplicationUIConfiguration: Bool {
         true

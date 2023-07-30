@@ -65,7 +65,7 @@ class SearchableListViewController: NSViewController, NSTableViewDataSource, NST
         task.resume()
     }
 
-    func openProjectInVSCode(project: String) {
+    func openProject(project: String) {
         let url = URL(string: "http://o/project/" + project)!
         let task = URLSession.shared.dataTask(with: url) { (data, response, error) in
             if let error = error {
@@ -99,7 +99,7 @@ class SearchableListViewController: NSViewController, NSTableViewDataSource, NST
         let project = filteredData[tableView.selectedRow]
         print("Selected: \(project)")
         self.view.window?.close()
-        openProjectInVSCode(project: project)
+        openProject(project: project)
         NSApplication.shared.terminate(nil)
     }
 }

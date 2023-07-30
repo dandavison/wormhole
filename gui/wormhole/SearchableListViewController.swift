@@ -100,5 +100,6 @@ class SearchableListViewController: NSViewController, NSTableViewDataSource, NST
         print("Selected: \(project)")
         self.view.window?.close()
         openProjectInVSCode(project: project)
+        NSApplication.shared.terminate(nil)
     }
 }

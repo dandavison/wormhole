@@ -1,8 +1,9 @@
 use std::process::Command;
 
-use crate::{hammerspoon, project_path::ProjectPath};
+use crate::{hammerspoon, project_path::ProjectPath, tmux};
 
 pub fn open(path: ProjectPath) -> Result<bool, String> {
+    tmux::set_project(path.project)?;
     let mut uri = format!(
         "vscode-insiders://file/{}",
         path.absolute_path().to_str().unwrap()

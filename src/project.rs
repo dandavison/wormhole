@@ -3,7 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-const PROJECTS_FILE: &'static str = "/Users/dan/.config/wormhole/wormhole-projects.yaml";
+use crate::config;
 
 pub static PROJECTS: OnceLock<HashMap<String, Project>> = OnceLock::new();
 
@@ -31,10 +31,12 @@ pub fn get_project_by_repo_name(repo_name: &str) -> Option<&'static Project> {
 
 pub fn read_projects() -> HashMap<String, Project> {
     let home_dir = dirs::home_dir().unwrap_or_else(|| panic!("Cannot determine home directory"));
-    fs::read_to_string(PROJECTS_FILE)
-        .unwrap_or_else(|_| panic!("Couldn't read projects file: {}", PROJECTS_FILE))
+    let expand_user = |p: &str| p.replace("~", &home_dir.to_string_lossy());
+    let projects_file = expand_user(config::PROJECTS_FILE);
+    fs::read_to_string(projects_file)
+        .unwrap_or_else(|_| panic!("Couldn't read projects file: {}", config::PROJECTS_FILE))
         .lines()
-        .map(|path| PathBuf::from(path.replace("~", &home_dir.to_string_lossy())))
+        .map(|path| PathBuf::from(expand_user(path)))
         .filter_map(|path| {
             path.file_name()
                 .map(|name| name.to_string_lossy().to_string())

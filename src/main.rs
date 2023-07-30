@@ -1,8 +1,10 @@
+mod config;
 mod endpoints;
-mod hammerspoon;;
+mod hammerspoon;
 mod handlers;
 mod project;
 mod project_path;
+mod tmux;
 mod vscode;
 
 use std::convert::Infallible;

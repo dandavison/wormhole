@@ -26,9 +26,10 @@ pub fn focus_vscode_workspace(workspace: &str) -> Result<bool, String> {
         .arg("-c")
         .arg(&hammerspoon)
         .output()
-        .expect("Failed to execute command");
+        .expect("Failed to execute command")
+        .stdout;
 
-    let stdout = str::from_utf8(&output.stdout).unwrap();
+    let stdout = str::from_utf8(&output).unwrap();
     eprintln!("{}", stdout);
     Ok(true)
 }

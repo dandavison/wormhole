@@ -7,7 +7,11 @@ class SearchableListViewController: NSViewController, NSTableViewDataSource, NST
 
     var data: [String] = []
     var filteredData: [String] {
-        return data.filter { $0.hasPrefix(searchField.stringValue) }
+        if searchField.stringValue.isEmpty {
+            return data
+        } else {
+            return data.filter { $0.contains(searchField.stringValue) }
+        }
     }
 
     override func loadView() {

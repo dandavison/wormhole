@@ -26,23 +26,21 @@ impl Project {
             line: None,
         }
     }
-}
-
-pub fn get_project_by_path(query_path: &Path) -> Option<&'static Project> {
-    for (_, project) in PROJECTS.get().unwrap().iter() {
-        if query_path.starts_with(&project.path) {
-            return Some(project);
+    pub fn by_path(query_path: &Path) -> Option<&'static Self> {
+        for project in PROJECTS.get().unwrap().values() {
+            if query_path.starts_with(&project.path) {
+                return Some(project);
+            }
         }
+        None
     }
-    None
-}
+    pub fn by_name(name: &str) -> Option<&'static Self> {
+        PROJECTS.get().unwrap().get(name)
+    }
 
-pub fn get_project_by_name(name: &str) -> Option<&'static Project> {
-    PROJECTS.get().unwrap().get(name)
-}
-
-pub fn get_project_by_repo_name(repo_name: &str) -> Option<&'static Project> {
-    get_project_by_name(repo_name)
+    pub fn by_repo_name(repo_name: &str) -> Option<&'static Self> {
+        Self::by_name(repo_name)
+    }
 }
 
 pub fn read_projects() -> HashMap<String, Project> {

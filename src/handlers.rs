@@ -1,15 +1,12 @@
 use regex::Regex;
 use std::{path::PathBuf, str};
 
-use crate::{
-    project::{get_project_by_name, get_project_by_repo_name},
-    project_path::ProjectPath,
-};
+use crate::{project::Project, project_path::ProjectPath};
 
 pub fn select_project_by_name(path: &str) -> Result<bool, String> {
     if let Some(name) = path.strip_prefix("/project/") {
         println!("Handling as project: {}", name);
-        if let Some(project) = get_project_by_name(name) {
+        if let Some(project) = Project::by_name(name) {
             project.open()?;
         }
     }
@@ -49,7 +46,7 @@ pub fn select_project_by_github_url(url: &str) -> Result<bool, String> {
             line,
             repo
         );
-        if let Some(project) = get_project_by_repo_name(repo) {
+        if let Some(project) = Project::by_repo_name(repo) {
             ProjectPath {
                 project,
                 relative_path: path,

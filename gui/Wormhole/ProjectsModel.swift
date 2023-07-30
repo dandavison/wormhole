@@ -46,6 +46,7 @@ final class ProjectsModel: ObservableObject {
                         }
                         return projectGroups
                     }
+                    .receive(on: DispatchQueue.main)
                     .assign(to: \ProjectsModel.projectGroups, on: self)
                     .store(in: &cancellables)
 
@@ -55,6 +56,7 @@ final class ProjectsModel: ObservableObject {
                     .map { text -> String? in
                         return text
                     }
+                    .receive(on: DispatchQueue.main)
                     .assign(to: \ProjectsModel.currentProject, on: self)
                     .store(in: &cancellables)
             } catch {

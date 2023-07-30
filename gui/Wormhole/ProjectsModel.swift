@@ -33,11 +33,9 @@ final class ProjectsModel: ObservableObject {
                 self.$currentText
                     .removeDuplicates()
                     .map { text -> [ProjectGroup<String>] in
-                        guard !text.isEmpty else {
-                            return []
-                        }
                         let text = text.lowercased()
-                        let projects = self.projects.lazy.filter({ $0.lowercased().contains(text) }).map { word -> Project<String> in
+                        let _projects = text.isEmpty ? self.projects : self.projects.lazy.filter({ $0.lowercased().contains(text) })
+                        let projects = _projects.map { word -> Project<String> in
                             Project(text: word, value: word)
                         }
                         var projectGroups: [ProjectGroup<String>] = []

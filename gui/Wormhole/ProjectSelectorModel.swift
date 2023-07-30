@@ -12,7 +12,7 @@ internal final class ProjectSelectorModel<V: Equatable>: ObservableObject {
     @Published var projectGroups: [ProjectGroup<V>] = []
     @Published var selectedProject: Project<V>?
 
-    @Published var projectsVisible: Bool = false
+    @Published var projectsVisible: Bool = true
 
     @Published var projectConfirmed: Bool = false
 
@@ -24,14 +24,12 @@ internal final class ProjectSelectorModel<V: Equatable>: ObservableObject {
         self.textBinding?.wrappedValue = text
 
         self.selectedProject = nil
-        self.projectsVisible = text.isEmpty ? false : true
+        self.projectsVisible = true
         self.projectConfirmed = false
     }
 
     internal func cancel() {
         self.projectConfirmed = false
-        self.projectsVisible = false
-
         self.selectedProject = nil
     }
 

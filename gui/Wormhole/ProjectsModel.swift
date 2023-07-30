@@ -36,7 +36,8 @@ final class ProjectsModel: ObservableObject {
                         guard !text.isEmpty else {
                             return []
                         }
-                        let projects = self.projects.lazy.filter({ $0.hasPrefix(text) }).prefix(10).map { word -> Project<String> in
+                        let text = text.lowercased()
+                        let projects = self.projects.lazy.filter({ $0.lowercased().contains(text) }).map { word -> Project<String> in
                             Project(text: word, value: word)
                         }
                         var projectGroups: [ProjectGroup<String>] = []

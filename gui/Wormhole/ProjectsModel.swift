@@ -30,6 +30,7 @@ final class ProjectsModel: ObservableObject {
         Task {
             do {
                 self.projects = try await fetchProjects()
+                // self.currentText = projects[0]
                 self.$currentText
                     .removeDuplicates()
                     .map { text -> [ProjectGroup<String>] in

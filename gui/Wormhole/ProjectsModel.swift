@@ -41,7 +41,7 @@ final class ProjectsModel: ObservableObject {
                         }
                         var projectGroups: [ProjectGroup<String>] = []
                         if !projects.isEmpty {
-                            projectGroups.append(ProjectGroup<String>(title: "Projects", projects: Array(projects)))
+                            projectGroups.append(ProjectGroup<String>(title: "", projects: Array(projects)))
                         }
                         return projectGroups
                     }

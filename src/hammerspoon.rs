@@ -27,9 +27,7 @@ pub fn focus_vscode_workspace(workspace: &str) -> Result<bool, String> {
 pub fn focus_alacritty() {
     hammerspoon(&format!(
         r#"
-        if string.find(window:application():title(), 'Alacritty', 1, true) then
-            window:focus()
-        end
+        hs.application.launchOrFocus("/Applications/Alacritty.app")
     "#,
     ));
 }

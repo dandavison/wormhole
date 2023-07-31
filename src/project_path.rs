@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::thread;
 
 use crate::{project::Project, tmux, vscode};
@@ -29,6 +29,12 @@ impl ProjectPath {
         });
         tmux_thread.join().unwrap();
         vscode_thread.join().unwrap();
+        if Path::new("/tmp/wormhole-land-in-tmux").exists() {
+            eprintln!("focusing tmux");
+            tmux::focus()
+        } else {
+            eprintln!("not focusing tmux");
+        }
         self.project.move_to_front();
         Ok(true)
     }

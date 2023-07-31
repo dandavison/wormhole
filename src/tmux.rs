@@ -3,6 +3,7 @@ use std::str;
 use std::{process::Command, slice::Iter};
 
 use crate::config;
+use crate::hammerspoon;
 use crate::project::Project;
 
 struct Window {
@@ -35,6 +36,10 @@ pub fn open(project: &Project) -> Result<(), String> {
         );
     }
     Ok(())
+}
+
+pub fn focus() {
+    hammerspoon::focus_alacritty()
 }
 
 fn get_window(name: &str) -> Option<Window> {

@@ -12,6 +12,7 @@ impl ProjectPath {
     pub fn open(&self) -> Result<bool, String> {
         tmux::open(&self.project)?;
         vscode::open(self)?;
+        self.project.move_to_front();
         Ok(true)
     }
 

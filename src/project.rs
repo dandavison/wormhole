@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -47,6 +48,11 @@ impl Project {
     pub fn by_repo_name(repo_name: &str) -> Option<Self> {
         Self::by_name(repo_name)
     }
+
+    pub fn move_to_front(&self) {
+        let idx = PROJECTS.lock().unwrap().get_index_of(&self.name).unwrap();
+        PROJECTS.lock().unwrap().move_index(idx, 0)
+    }
 }
 
 pub fn read_projects() {
@@ -67,5 +73,7 @@ pub fn read_projects() {
 }
 
 pub fn list_project_names() -> Vec<String> {
-    PROJECTS.lock().unwrap().keys().cloned().collect()
+    let mut names: VecDeque<_> = PROJECTS.lock().unwrap().keys().cloned().collect();
+    names.rotate_left(1);
+    names.into()
 }

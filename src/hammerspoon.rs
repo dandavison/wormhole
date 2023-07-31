@@ -2,7 +2,7 @@ use std::process::Command;
 use std::str;
 
 pub fn focus_vscode_workspace(workspace: &str) -> Result<bool, String> {
-    let hammerspoon = format!(
+    hammerspoon(&format!(
         r#"
     print('Searching for window matching "{}"')
     local function is_vscode_with_workspace(window)
@@ -20,16 +20,28 @@ pub fn focus_vscode_workspace(workspace: &str) -> Result<bool, String> {
     end
     "#,
         workspace, workspace
-    );
+    ));
+    Ok(true)
+}
 
+pub fn focus_alacritty() {
+    hammerspoon(&format!(
+        r#"
+        if string.find(window:application():title(), 'Alacritty', 1, true) then
+            window:focus()
+        end
+    "#,
+    ));
+}
+
+fn hammerspoon(lua: &str) {
     let output = Command::new("hs")
         .arg("-c")
-        .arg(&hammerspoon)
+        .arg(lua)
         .output()
-        .expect("Failed to execute command")
+        .expect("Failed to execute hammerspoon")
         .stdout;
 
     let stdout = str::from_utf8(&output).unwrap();
     eprintln!("{}", stdout);
-    Ok(true)
 }

@@ -1,4 +1,4 @@
-[_Early stage project under development_]
+[_Personal project under development, currently implemented only for a MacOS: VSCode + Tmux development environment_]
 
 Wormhole is for people who work on multiple projects/repositories concurrently.
 
@@ -18,3 +18,7 @@ Example workflows:
 - Use the [MacOS app](https://github.com/dandavison/wormhole-gui) to switch projects
 - Use Wormhole URLs to link to code from Google Docs, Notion, Swimlanes.io, etc
 - Use Wormhole URLs to open code from terminal applications
+
+Wormhole URLs open the code in your editor/IDE at the correct line, while
+ensuring that your editor/IDE selects the correct project workspace for the
+file, and also switch your terminal emulator to that project.

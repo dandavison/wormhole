@@ -3,14 +3,14 @@ use std::path::PathBuf;
 use crate::{project::Project, tmux, vscode};
 
 pub struct ProjectPath {
-    pub project: &'static Project,
+    pub project: Project,
     pub relative_path: PathBuf,
     pub line: Option<usize>,
 }
 
 impl ProjectPath {
     pub fn open(&self) -> Result<bool, String> {
-        tmux::open(self.project)?;
+        tmux::open(&self.project)?;
         vscode::open(self)?;
         Ok(true)
     }
@@ -18,8 +18,8 @@ impl ProjectPath {
     pub fn from_absolute_path(path: PathBuf) -> Option<Self> {
         if let Some(project) = Project::by_path(&path) {
             Some(ProjectPath {
-                project,
                 relative_path: path.strip_prefix(&project.path).unwrap().into(),
+                project,
                 line: None,
             })
         } else {

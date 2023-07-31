@@ -33,7 +33,7 @@ async fn wormhole(req: Request<Body>) -> Result<Response<Body>, Infallible> {
 
 #[tokio::main]
 async fn main() {
-    project::PROJECTS.get_or_init(project::read_projects);
+    project::read_projects();
     let addr = SocketAddr::from(([127, 0, 0, 1], 80));
 
     let make_svc = make_service_fn(|_conn| async { Ok::<_, Infallible>(service_fn(wormhole)) });

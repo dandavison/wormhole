@@ -1,9 +1,10 @@
 use hyper::{Body, Response};
+use itertools::Itertools;
 
-use crate::project::PROJECTS;
+use crate::project::list_project_names;
 
 pub fn projects() -> Response<Body> {
-    let mut project_names: Vec<_> = PROJECTS.get().unwrap().keys().cloned().collect();
-    project_names.sort();
-    Response::new(Body::from(project_names.join("\n")))
+    Response::new(Body::from(
+        list_project_names().iter().map(|s| s.as_str()).join("\n"),
+    ))
 }

@@ -1,6 +1,6 @@
 //
 //  ContentView.swift
-//  SuggestionsDemo
+//  ProjectsDemo
 //
 //  Created by Stephan Michels on 16.09.20.
 //
@@ -11,7 +11,7 @@ struct ContentView: View {
     @StateObject var model = ProjectsModel()
     
     var body: some View {
-        SuggestionInput(text: self.$model.currentText,
+        ProjectInput(text: self.$model.currentText,
                         projectGroups: self.model.projectGroups)
         .frame(width: 300)
     }

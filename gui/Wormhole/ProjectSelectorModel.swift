@@ -1,6 +1,6 @@
 //
-//  SuggestionsModel.swift
-//  SuggestionsDemo
+//  ProjectsModel.swift
+//  ProjectsDemo
 //
 //  Created by Stephan Michels on 12.12.20.
 //
@@ -55,10 +55,10 @@ internal final class ProjectSelectorModel<V: Equatable>: ObservableObject {
         self.projectConfirmed = false
 
         guard let selectedProject = self.selectedProject else {
-            guard let suggestion = self.firstProject else {
+            guard let project = self.firstProject else {
                 return
             }
-            self.selectedProject = suggestion
+            self.selectedProject = project
             return
         }
 

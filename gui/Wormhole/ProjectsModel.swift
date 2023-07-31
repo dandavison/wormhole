@@ -1,6 +1,6 @@
 //
 //  ProjectsModel.swift
-//  SuggestionsDemo
+//  ProjectsDemo
 //
 //  Created by Dan Davison on 7/30/23.
 //

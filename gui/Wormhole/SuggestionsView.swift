@@ -1,49 +1,49 @@
 //
-//  SuggestionsView.swift
-//  SuggestionsDemo
+//  ProjectsView.swift
+//  ProjectsDemo
 //
 //  Created by Stephan Michels on 12.12.20.
 //
 
 import SwiftUI
 
-struct SuggestionView<V: Equatable>: View {
-    var suggestion: Project<V>
+struct ProjectView<V: Equatable>: View {
+    var project: Project<V>
     @ObservedObject var model: ProjectSelectorModel<V>
     
     var body: some View {
-        let suggestion = self.suggestion
+        let project = self.project
         let model = self.model
         
-        return Text(suggestion.text)
-            .id(suggestion.text)
+        return Text(project.text)
+            .id(project.text)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .foregroundColor(model.selectedProject == suggestion ? .white : .primary)
+            .foregroundColor(model.selectedProject == project ? .white : .primary)
             .padding(EdgeInsets(top: 4, leading: 6, bottom: 4, trailing: 6))
             .background(
                 RoundedRectangle(cornerRadius: 5)
-                    .foregroundColor(model.selectedProject == suggestion ? Color.accentColor : Color.clear)
+                    .foregroundColor(model.selectedProject == project ? Color.accentColor : Color.clear)
             )
             .onHover(perform: { hovering in
                 if hovering {
-                    model.chooseProject(suggestion)
-                } else if model.selectedProject == suggestion {
+                    model.chooseProject(project)
+                } else if model.selectedProject == project {
                     model.chooseProject(nil)
                 }
             })
             .onTapGesture {
-                model.confirmProject(suggestion)
+                model.confirmProject(project)
             }
     }
 }
 
-struct SuggestionGroupView<V: Equatable>: View {
-    var suggestionGroup: ProjectGroup<V>
+struct ProjectGroupView<V: Equatable>: View {
+    var projectGroup: ProjectGroup<V>
     var showDivider: Bool
     @ObservedObject var model: ProjectSelectorModel<V>
     
     var body: some View {
-        let suggestionGroup = self.suggestionGroup
+        let projectGroup = self.projectGroup
         let model = self.model
         
         return VStack(alignment: .leading) {
@@ -51,45 +51,45 @@ struct SuggestionGroupView<V: Equatable>: View {
                 Divider()
                     .padding(.top, 7)
             }
-            if let title = suggestionGroup.title {
+            if let title = projectGroup.title {
                 Text(title)
                     .foregroundColor(.gray)
                     .font(.system(size: 12, weight: .bold))
             }
             VStack(spacing: 0) {
-                ForEach(Array(suggestionGroup.projects.enumerated()), id: \.0)  { (_, suggestion) in
-                    SuggestionView(suggestion: suggestion, model: model)
+                ForEach(Array(projectGroup.projects.enumerated()), id: \.0)  { (_, project) in
+                    ProjectView(project: project, model: model)
                 }
             }
         }
     }
 }
 
-struct SuggestionPopup<V: Equatable>: View {
+struct ProjectPopup<V: Equatable>: View {
     @ObservedObject var model: ProjectSelectorModel<V>
     
     var body: some View {
         let model = self.model
-        let suggestionGroups = model.projectGroups
+        let projectGroups = model.projectGroups
         
         return VStack(spacing: 0) {
-            ForEach(Array(suggestionGroups.enumerated()), id: \.0)  { (suggestionGroupIndex, suggestionGroup) in
-                SuggestionGroupView(suggestionGroup: suggestionGroup, showDivider: suggestionGroupIndex > 0, model: model)
+            ForEach(Array(projectGroups.enumerated()), id: \.0)  { (projectGroupIndex, projectGroup) in
+                ProjectGroupView(projectGroup: projectGroup, showDivider: projectGroupIndex > 0, model: model)
             }
         }
         .padding(10)
     }
 }
 
-struct SuggestionsView_Previews: PreviewProvider {
+struct ProjectsView_Previews: PreviewProvider {
     static var previews: some View {
-        let suggestion1 = Project(text: "Eight", value: "Eight")
-        let suggestion2 = Project(text: "Elder", value: "Elder")
-        let group = ProjectGroup(title: "English", projects: [suggestion1, suggestion2])
+        let project1 = Project(text: "Eight", value: "Eight")
+        let project2 = Project(text: "Elder", value: "Elder")
+        let group = ProjectGroup(title: "English", projects: [project1, project2])
         let model = ProjectSelectorModel<String>()
         model.projectGroups = [group]
-        model.selectedProject = suggestion2
+        model.selectedProject = project2
         
-        return SuggestionPopup(model: model)
+        return ProjectPopup(model: model)
     }
 }

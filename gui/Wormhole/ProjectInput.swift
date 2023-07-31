@@ -1,6 +1,6 @@
 //
-//  SuggestionInput.swift
-//  SuggestionsDemo
+//  ProjectInput.swift
+//  ProjectsDemo
 //
 //  Created by Stephan Michels on 13.12.20.
 //
@@ -25,7 +25,7 @@ struct ProjectGroup<V: Equatable>: Equatable {
     }
 }
 
-struct SuggestionInput<V: Equatable>: View {
+struct ProjectInput<V: Equatable>: View {
     @Binding var text: String
     var projectGroups: [ProjectGroup<V>]
     
@@ -40,13 +40,13 @@ struct SuggestionInput<V: Equatable>: View {
         }
         model.textBinding = self.$text
         
-        return SuggestionTextField(text: self.$text, model: model)
+        return ProjectTextField(text: self.$text, model: model)
             .borderlessWindow(isVisible: Binding<Bool>(get: { model.projectsVisible && !model.projectGroups.isEmpty }, set: { model.projectsVisible = $0 }),
                               behavior: .transient,
                               anchor: .bottomLeading,
                               windowAnchor: .topLeading,
                               windowOffset: CGPoint(x: -20, y: -16)) {
-                SuggestionPopup(model: model)
+                ProjectPopup(model: model)
                     .frame(width: model.width)
                     .background(VisualEffectBlur(material: .popover, blendingMode: .behindWindow, cornerRadius: 8))
 //                    .visualEffect(.adaptive(.windowBackground))
@@ -62,8 +62,8 @@ struct SuggestionInput<V: Equatable>: View {
     }
 }
 
-//struct SuggestionInput_Previews: PreviewProvider {
+//struct ProjectInput_Previews: PreviewProvider {
 //    static var previews: some View {
-//        SuggestionInput()
+//        ProjectInput()
 //    }
 //}

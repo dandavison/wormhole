@@ -163,7 +163,7 @@ public struct BorderlessWindow<Content>: NSViewRepresentable where Content: View
                         return event
                     }
                     
-                    // If the mouse event is in the suggestion window, then there is nothing to do.
+                    // If the mouse event is in the project window, then there is nothing to do.
                     if event.window != self.window {
                         if behaviour == .semitransient {
                             if event.window != self.window.parent {

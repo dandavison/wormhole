@@ -1,5 +1,5 @@
 //
-//  SuggestionTextField.swift
+//  ProjectTextField.swift
 //  PubChemDemo
 //
 //  Created by Stephan Michels on 27.08.20.
@@ -12,7 +12,7 @@ import Combine
 
 // original code from https://developer.apple.com/library/archive/samplecode/CustomMenus
 
-struct SuggestionTextField<V: Equatable>: NSViewRepresentable {
+struct ProjectTextField<V: Equatable>: NSViewRepresentable {
     @Binding var text: String
     @ObservedObject var model: ProjectSelectorModel<V>
     
@@ -45,21 +45,21 @@ struct SuggestionTextField<V: Equatable>: NSViewRepresentable {
             coordinator.updatingSelectedRange = false
         }
         
-        if let selectedSuggestion = model.selectedProject {
-            let suggestionText = selectedSuggestion.text
+        if let selectedProject = model.selectedProject {
+            let projectText = selectedProject.text
             
-            if searchField.stringValue != suggestionText {
-                searchField.stringValue = suggestionText
+            if searchField.stringValue != projectText {
+                searchField.stringValue = projectText
             }
             
             if let fieldEditor = searchField.window?.fieldEditor(false, for: searchField) {
                 if model.projectConfirmed {
-                    let range = NSRange(suggestionText.startIndex..<suggestionText.endIndex, in: fieldEditor.string)
+                    let range = NSRange(projectText.startIndex..<projectText.endIndex, in: fieldEditor.string)
                     if fieldEditor.selectedRange != range {
                         fieldEditor.selectedRange = range
                     }
-                } else if suggestionText.hasPrefix(text) {
-                    let range = NSRange(suggestionText.index(suggestionText.startIndex, offsetBy: text.count)..<suggestionText.index(suggestionText.startIndex, offsetBy: suggestionText.count), in: fieldEditor.string)
+                } else if projectText.hasPrefix(text) {
+                    let range = NSRange(projectText.index(projectText.startIndex, offsetBy: text.count)..<projectText.index(projectText.startIndex, offsetBy: projectText.count), in: fieldEditor.string)
                     if fieldEditor.selectedRange != range {
                         fieldEditor.selectedRange = range
                     }
@@ -155,8 +155,8 @@ struct SuggestionTextField<V: Equatable>: NSViewRepresentable {
             }
             
             if commandSelector == #selector(NSResponder.insertNewline(_:)) {
-                if let suggestion = self.model.selectedProject {
-                    self.model.confirmProject(suggestion)
+                if let project = self.model.selectedProject {
+                    self.model.confirmProject(project)
                 }
                 
                 return true

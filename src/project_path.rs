@@ -1,7 +1,9 @@
 use std::path::PathBuf;
+use std::thread;
 
 use crate::{project::Project, tmux, vscode};
 
+#[derive(Clone)]
 pub struct ProjectPath {
     pub project: Project,
     pub relative_path: PathBuf,
@@ -10,8 +12,23 @@ pub struct ProjectPath {
 
 impl ProjectPath {
     pub fn open(&self) -> Result<bool, String> {
-        tmux::open(&self.project)?;
-        vscode::open(self)?;
+        let project = self.project.clone();
+        let tmux_thread = thread::spawn(move || {
+            tmux::open(&project)
+                .unwrap_or_else(|err| eprintln!("Error opening {} in tmux: {}", &project.name, err))
+        });
+        let project_path = self.clone();
+        let vscode_thread = thread::spawn(move || {
+            vscode::open(&project_path).unwrap_or_else(|err| {
+                eprintln!(
+                    "Error opening {} in vscode: {}",
+                    project_path.relative_path.to_str().unwrap(),
+                    err
+                )
+            });
+        });
+        tmux_thread.join().unwrap();
+        vscode_thread.join().unwrap();
         self.project.move_to_front();
         Ok(true)
     }

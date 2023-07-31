@@ -54,7 +54,7 @@ struct ProjectGroupView<V: Equatable>: View {
             if let title = projectGroup.title {
                 Text(title)
                     .foregroundColor(.gray)
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.system(size: 12, weight: .bold).monospaced())
             }
             VStack(spacing: 0) {
                 ForEach(Array(projectGroup.projects.enumerated()), id: \.0)  { (_, project) in

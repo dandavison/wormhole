@@ -19,7 +19,7 @@ struct ProjectTextField<V: Equatable>: NSViewRepresentable {
     func makeNSView(context: Context) -> NSSearchField {
         let searchField = NSSearchField(frame: .zero)
         searchField.controlSize = .regular
-        searchField.font = NSFont.systemFont(ofSize: NSFont.systemFontSize(for: searchField.controlSize))
+        searchField.font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize(for: searchField.controlSize), weight: NSFont.Weight(0))
         searchField.translatesAutoresizingMaskIntoConstraints = false
         searchField.setContentCompressionResistancePriority(NSLayoutConstraint.Priority(rawValue: 1), for: .horizontal)
         searchField.setContentHuggingPriority(NSLayoutConstraint.Priority(rawValue: 1), for: .horizontal)

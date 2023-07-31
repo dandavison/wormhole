@@ -56,6 +56,7 @@ struct ProjectInput<V: Equatable>: View {
                 .shadow(color: Color(white: 0, opacity: 0.10),
                         radius: 5, x: 0, y: 2)
                 .padding(20)
+                .font(.system(size: 12).monospaced())
             }
     }
 }

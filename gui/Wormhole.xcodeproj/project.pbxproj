@@ -16,7 +16,7 @@
 		37E3A7BB2A7707DE00DAE183 /* WormholeUITestsLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37E3A7BA2A7707DE00DAE183 /* WormholeUITestsLaunchTests.swift */; };
 		37E3A7C82A77087E00DAE183 /* ProjectsModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37E3A7C72A77087E00DAE183 /* ProjectsModel.swift */; };
 		37E3A7CA2A7708A100DAE183 /* ProjectInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37E3A7C92A7708A100DAE183 /* ProjectInput.swift */; };
-		37E3A7CC2A7708BF00DAE183 /* SuggestionTestField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37E3A7CB2A7708BF00DAE183 /* SuggestionTestField.swift */; };
+		37E3A7CC2A7708BF00DAE183 /* ProjectTextField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37E3A7CB2A7708BF00DAE183 /* ProjectTextField.swift */; };
 		37E3A7CE2A7708D500DAE183 /* ProjectSelectorModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37E3A7CD2A7708D500DAE183 /* ProjectSelectorModel.swift */; };
 		37E3A7D02A7708F300DAE183 /* SuggestionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37E3A7CF2A7708F300DAE183 /* SuggestionsView.swift */; };
 		37E3A7D22A77091100DAE183 /* BorderlessWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37E3A7D12A77091100DAE183 /* BorderlessWindow.swift */; };
@@ -54,7 +54,7 @@
 		37E3A7BA2A7707DE00DAE183 /* WormholeUITestsLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WormholeUITestsLaunchTests.swift; sourceTree = "<group>"; };
 		37E3A7C72A77087E00DAE183 /* ProjectsModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectsModel.swift; sourceTree = "<group>"; };
 		37E3A7C92A7708A100DAE183 /* ProjectInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectInput.swift; sourceTree = "<group>"; };
-		37E3A7CB2A7708BF00DAE183 /* SuggestionTestField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestionTestField.swift; sourceTree = "<group>"; };
+		37E3A7CB2A7708BF00DAE183 /* ProjectTextField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectTextField.swift; sourceTree = "<group>"; };
 		37E3A7CD2A7708D500DAE183 /* ProjectSelectorModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectSelectorModel.swift; sourceTree = "<group>"; };
 		37E3A7CF2A7708F300DAE183 /* SuggestionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestionsView.swift; sourceTree = "<group>"; };
 		37E3A7D12A77091100DAE183 /* BorderlessWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BorderlessWindow.swift; sourceTree = "<group>"; };
@@ -116,7 +116,7 @@
 				37E3A7A22A7707DE00DAE183 /* Preview Content */,
 				37E3A7C72A77087E00DAE183 /* ProjectsModel.swift */,
 				37E3A7C92A7708A100DAE183 /* ProjectInput.swift */,
-				37E3A7CB2A7708BF00DAE183 /* SuggestionTestField.swift */,
+				37E3A7CB2A7708BF00DAE183 /* ProjectTextField.swift */,
 				37E3A7CD2A7708D500DAE183 /* ProjectSelectorModel.swift */,
 				37E3A7CF2A7708F300DAE183 /* SuggestionsView.swift */,
 				37E3A7D12A77091100DAE183 /* BorderlessWindow.swift */,
@@ -288,7 +288,7 @@
 				37E3A7C82A77087E00DAE183 /* ProjectsModel.swift in Sources */,
 				37E3A7D42A77092A00DAE183 /* VisualEffectBlur.swift in Sources */,
 				37E3A7D22A77091100DAE183 /* BorderlessWindow.swift in Sources */,
-				37E3A7CC2A7708BF00DAE183 /* SuggestionTestField.swift in Sources */,
+				37E3A7CC2A7708BF00DAE183 /* ProjectTextField.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

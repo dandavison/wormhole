@@ -49,8 +49,6 @@ struct ProjectInput<V: Equatable>: View {
                 ProjectPopup(model: model)
                     .frame(width: model.width)
                     .background(VisualEffectBlur(material: .popover, blendingMode: .behindWindow, cornerRadius: 8))
-//                    .visualEffect(.adaptive(.windowBackground))
-//                .clipShape(RoundedRectangle(cornerRadius: 5))
                 .overlay(RoundedRectangle(cornerRadius: 8)
                             .stroke(lineWidth: 1)
                             .foregroundColor(Color(white: 0.6, opacity: 0.2))
@@ -61,9 +59,3 @@ struct ProjectInput<V: Equatable>: View {
             }
     }
 }
-
-//struct ProjectInput_Previews: PreviewProvider {
-//    static var previews: some View {
-//        ProjectInput()
-//    }
-//}

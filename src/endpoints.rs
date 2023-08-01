@@ -13,11 +13,11 @@ pub fn list_projects() -> Response<Body> {
 }
 
 pub fn add_project(path: &str) -> Response<Body> {
-    let resp = if let Some(path) = path.strip_prefix("/add-project/") {
-        project::add_project(path);
-        format!("Added project: {}", path)
-    } else {
-        "Not an add-project URL".to_string()
-    };
-    Response::new(Body::from(resp))
+    project::add_project(path);
+    Response::new(Body::from(format!("Added project: {}", path)))
+}
+
+pub fn remove_project(name: &str) -> Response<Body> {
+    project::remove_project(name);
+    Response::new(Body::from(format!("removed project: {}", name)))
 }

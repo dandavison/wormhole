@@ -114,4 +114,11 @@ pub fn add_project(path: &str) {
     let mut projects = PROJECTS.lock().unwrap();
     let project = Project::from_directory_path(PathBuf::from(path.to_string()));
     projects.insert(project.name.clone(), project);
+    thread::spawn(write_projects);
+}
+
+pub fn remove_project(name: &str) {
+    let mut projects = PROJECTS.lock().unwrap();
+    projects.remove(name);
+    thread::spawn(write_projects);
 }

@@ -23,8 +23,11 @@ async fn wormhole(req: Request<Body>) -> Result<Response<Body>, Infallible> {
     println!("Request: {}", &path);
     if &path == "/list-projects/" {
         Ok(endpoints::list_projects())
-    } else if path.starts_with("/add-project/") {
+    } else if let Some(path) = path.strip_prefix("/add-project/") {
+        // An absolute path must have a double slash: /add-project//Users/me/file.rs
         Ok(endpoints::add_project(&path))
+    } else if let Some(name) = path.strip_prefix("/remove-project/") {
+        Ok(endpoints::remove_project(&name))
     } else {
         let _ = handlers::select_project_by_path(&path).unwrap()
             || handlers::select_project_by_name(&path).unwrap()

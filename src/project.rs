@@ -1,9 +1,10 @@
 use std::collections::VecDeque;
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::{fs, thread};
 
 use indexmap::IndexMap;
+use itertools::Itertools;
 use lazy_static::lazy_static;
 
 use crate::config;
@@ -51,7 +52,8 @@ impl Project {
 
     pub fn move_to_front(&self) {
         let idx = PROJECTS.lock().unwrap().get_index_of(&self.name).unwrap();
-        PROJECTS.lock().unwrap().move_index(idx, 0)
+        PROJECTS.lock().unwrap().move_index(idx, 0);
+        thread::spawn(write_projects);
     }
 
     fn from_directory_path(path: PathBuf) -> Self {
@@ -61,11 +63,8 @@ impl Project {
 }
 
 pub fn read_projects() {
-    let home_dir = dirs::home_dir().unwrap_or_else(|| panic!("Cannot determine home directory"));
-    let expand_user = |p: &str| p.replace("~", &home_dir.to_string_lossy());
-    let projects_file = expand_user(config::PROJECTS_FILE);
     PROJECTS.lock().unwrap().extend(
-        fs::read_to_string(projects_file)
+        fs::read_to_string(projects_file())
             .unwrap_or_else(|_| panic!("Couldn't read projects file: {}", config::PROJECTS_FILE))
             .lines()
             .map(|path| PathBuf::from(expand_user(path)))
@@ -74,6 +73,34 @@ pub fn read_projects() {
                     .map(|name| name.to_string_lossy().to_string())
                     .map(|name| (name.clone(), Project { name, path }))
             }),
+    )
+}
+
+fn projects_file() -> String {
+    expand_user(config::PROJECTS_FILE)
+}
+
+fn expand_user(path: &str) -> String {
+    path.replacen("~", &home_dir().to_str().unwrap(), 1)
+}
+
+fn contract_user(path: &str) -> String {
+    path.replacen(&home_dir().to_str().unwrap(), "~", 1)
+}
+
+fn home_dir() -> PathBuf {
+    dirs::home_dir().unwrap_or_else(|| panic!("Cannot determine home directory"))
+}
+
+pub fn write_projects() -> Result<(), std::io::Error> {
+    fs::write(
+        projects_file(),
+        PROJECTS
+            .lock()
+            .unwrap()
+            .values()
+            .map(|p| contract_user(p.path.to_str().unwrap()))
+            .join("\n"),
     )
 }
 

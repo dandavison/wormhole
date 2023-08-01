@@ -53,6 +53,11 @@ impl Project {
         let idx = PROJECTS.lock().unwrap().get_index_of(&self.name).unwrap();
         PROJECTS.lock().unwrap().move_index(idx, 0)
     }
+
+    fn from_directory_path(path: PathBuf) -> Self {
+        let name = path.file_name().unwrap().to_str().unwrap().to_string();
+        Self { name, path }
+    }
 }
 
 pub fn read_projects() {
@@ -76,4 +81,10 @@ pub fn list_project_names() -> Vec<String> {
     let mut names: VecDeque<_> = PROJECTS.lock().unwrap().keys().cloned().collect();
     names.rotate_left(1);
     names.into()
+}
+
+pub fn add_project(path: &str) {
+    let mut projects = PROJECTS.lock().unwrap();
+    let project = Project::from_directory_path(PathBuf::from(path.to_string()));
+    projects.insert(project.name.clone(), project);
 }

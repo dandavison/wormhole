@@ -22,7 +22,9 @@ async fn wormhole(req: Request<Body>) -> Result<Response<Body>, Infallible> {
     }
     println!("Request: {}", &path);
     if &path == "/list-projects/" {
-        Ok(endpoints::projects())
+        Ok(endpoints::list_projects())
+    } else if path.starts_with("/add-project/") {
+        Ok(endpoints::add_project(&path))
     } else {
         let _ = handlers::select_project_by_path(&path).unwrap()
             || handlers::select_project_by_name(&path).unwrap()

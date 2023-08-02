@@ -1,5 +1,6 @@
 use std::fs;
 use std::str;
+use std::thread;
 use std::{process::Command, slice::Iter};
 
 use crate::config;
@@ -15,15 +16,6 @@ pub fn open(project: &Project) -> Result<(), String> {
     if let Some(window) = get_window(&project.name) {
         tmux(["select-window", "-t", &window.id].iter());
     } else {
-        fs::write(
-            config::ENV_FILE,
-            format!(
-                "export WORMHOLE_PROJECT_NAME={} WORMHOLE_PROJECT_DIR={}",
-                project.name,
-                project.path.to_str().unwrap()
-            ),
-        )
-        .unwrap();
         tmux(
             [
                 "new-window",
@@ -35,6 +27,18 @@ pub fn open(project: &Project) -> Result<(), String> {
             .iter(),
         );
     }
+    let project = project.clone();
+    thread::spawn(move || {
+        fs::write(
+            config::ENV_FILE,
+            format!(
+                "export WORMHOLE_PROJECT_NAME={} WORMHOLE_PROJECT_DIR={}",
+                &project.name,
+                project.path.as_path().to_str().unwrap()
+            ),
+        )
+        .unwrap()
+    });
     Ok(())
 }
 

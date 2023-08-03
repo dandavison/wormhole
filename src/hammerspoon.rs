@@ -1,6 +1,8 @@
 use std::process::Command;
 use std::str;
 
+use crate::util::info;
+
 pub fn focus_vscode_workspace(workspace: &str) -> Result<bool, String> {
     hammerspoon(&format!(
         r#"
@@ -40,6 +42,7 @@ fn hammerspoon(lua: &str) {
         .expect("Failed to execute hammerspoon")
         .stdout;
 
-    let stdout = str::from_utf8(&output).unwrap();
-    eprintln!("{}", stdout);
+    for line in str::from_utf8(&output).unwrap().split_terminator("\n") {
+        info(line);
+    }
 }

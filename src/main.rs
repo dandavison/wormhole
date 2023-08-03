@@ -5,6 +5,7 @@ mod handlers;
 mod project;
 mod project_path;
 mod tmux;
+mod util;
 mod vscode;
 
 use std::convert::Infallible;
@@ -12,15 +13,18 @@ use std::net::SocketAddr;
 
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response, Server};
+use util::warn;
 
 async fn wormhole(req: Request<Body>) -> Result<Response<Body>, Infallible> {
-    let path = req.uri().to_string();
+    let uri = req.uri();
+    println!("Request: {}", uri);
+    let path = uri.path().to_string();
     if &path == "/favicon.ico" {
         return Ok(Response::new(Body::from(
             "Stop sending me /favicon requests",
         )));
     }
-    println!("Request: {}", &path);
+    let sent_into_wormhole = Response::new(Body::from("Sent into wormhole."));
     if &path == "/list-projects/" {
         Ok(endpoints::list_projects())
     } else if let Some(path) = path.strip_prefix("/add-project/") {
@@ -28,11 +32,15 @@ async fn wormhole(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         Ok(endpoints::add_project(&path))
     } else if let Some(name) = path.strip_prefix("/remove-project/") {
         Ok(endpoints::remove_project(&name))
+    } else if let Some(name) = path.strip_prefix("/project/") {
+        handlers::select_project_by_name(name, uri.query());
+        Ok(sent_into_wormhole)
+    } else if let Some(absolute_path) = path.strip_prefix("/file/") {
+        handlers::select_project_by_path(absolute_path);
+        Ok(sent_into_wormhole)
     } else {
-        let _ = handlers::select_project_by_path(&path).unwrap()
-            || handlers::select_project_by_name(&path).unwrap()
-            || handlers::select_project_by_github_url(&path).unwrap();
-        Ok(Response::new(Body::from("Sent to wormhole.")))
+        handlers::select_project_by_github_url(&path, uri.query()).unwrap();
+        Ok(sent_into_wormhole)
     }
 }
 
@@ -47,6 +55,6 @@ async fn main() {
     let server = Server::bind(&addr).serve(make_svc);
 
     if let Err(e) = server.await {
-        eprintln!("server error: {}", e);
+        warn(&format!("server error: {}", e));
     }
 }

@@ -1,6 +1,6 @@
 use std::process::Command;
 
-use crate::{hammerspoon, project_path::ProjectPath};
+use crate::{hammerspoon, project_path::ProjectPath, util::warn};
 
 pub fn open(path: &ProjectPath) -> Result<(), String> {
     let mut uri = format!(
@@ -11,7 +11,7 @@ pub fn open(path: &ProjectPath) -> Result<(), String> {
         uri.push_str(&format!(":{}", line));
     }
     hammerspoon::focus_vscode_workspace(&path.project.name)?;
-    eprintln!("vscode::open({uri})");
+    warn(&format!("vscode::open({uri})"));
     if let Ok(_) = Command::new("open").arg(&uri).output() {
         Ok(())
     } else {

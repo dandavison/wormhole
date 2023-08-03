@@ -8,6 +8,7 @@ use itertools::Itertools;
 use lazy_static::lazy_static;
 
 use crate::config;
+use crate::handlers::Destination;
 use crate::project_path::ProjectPath;
 
 lazy_static! {
@@ -21,8 +22,8 @@ pub struct Project {
 }
 
 impl Project {
-    pub fn open(&self) -> Result<bool, String> {
-        self.root().open()?;
+    pub fn open(&self, land_in: Option<Destination>) -> Result<bool, String> {
+        self.root().open(land_in)?;
         Ok(true)
     }
 

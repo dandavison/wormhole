@@ -22,8 +22,7 @@ internal final class ProjectSelectorModel<V: Equatable>: ObservableObject {
     }
 
     internal func cancel() {
-        self.projectConfirmed = false
-        self.selectedProject = nil
+        NSApplication.shared.terminate(nil)
     }
 
     internal func moveUp() {

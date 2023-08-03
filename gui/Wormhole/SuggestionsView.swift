@@ -25,7 +25,7 @@ struct ProjectView<V: Equatable>: View {
                 }
             })
             .onTapGesture {
-                model.confirmProject(project)
+                model.confirmProject(project, modifier: false)
             }
     }
 }

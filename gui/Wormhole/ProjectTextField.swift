@@ -146,11 +146,19 @@ struct ProjectTextField<V: Equatable>: NSViewRepresentable {
                 return true
             }
 
+            if let event = NSApp.currentEvent, event.modifierFlags.contains(.shift), commandSelector == #selector(NSResponder.insertNewline(_:)) {
+                if let project = self.model.selectedProject {
+                    self.model.confirmProject(project, modifier: true)
+                }
+
+                return true
+            }
+
             if commandSelector == #selector(NSResponder.insertNewline(_:)) {
                 if let project = self.model.selectedProject {
-                    self.model.confirmProject(project)
+                    self.model.confirmProject(project, modifier: false)
                 }
-                
+
                 return true
             }
 

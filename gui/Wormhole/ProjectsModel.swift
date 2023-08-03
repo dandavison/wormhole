@@ -1,18 +1,11 @@
-//
-//  ProjectsModel.swift
-//  ProjectsDemo
-//
-//  Created by Dan Davison on 7/30/23.
-//
-
 import Foundation
 import Combine
 
 final class ProjectsModel: ObservableObject {
-    var projects: [String]
+    var projectNames: [String]
 
     @Published var currentText: String = ""
-    @Published var projectGroups: [ProjectGroup<String>] = []
+    @Published var projects: [Project<String>] = []
     @Published var currentProject: String?
 
     private var cancellables: Set<AnyCancellable> = []
@@ -26,27 +19,22 @@ final class ProjectsModel: ObservableObject {
     }
 
     init() {
-        self.projects = []
+        self.projectNames = []
         Task {
             do {
-                self.projects = try await fetchProjects()
+                self.projectNames = try await fetchProjects()
                 // self.currentText = projects[0]
                 self.$currentText
                     .removeDuplicates()
-                    .map { text -> [ProjectGroup<String>] in
+                    .map { text -> [Project<String>] in
                         let text = text.lowercased()
-                        let _projects = text.isEmpty ? self.projects : self.projects.lazy.filter({ $0.lowercased().contains(text) })
-                        let projects = _projects.map { word -> Project<String> in
+                        let projects = text.isEmpty ? self.projectNames : self.projectNames.lazy.filter({ $0.lowercased().contains(text) })
+                        return projects.map { word -> Project<String> in
                             Project(text: word, value: word)
                         }
-                        var projectGroups: [ProjectGroup<String>] = []
-                        if !projects.isEmpty {
-                            projectGroups.append(ProjectGroup<String>(title: "", projects: Array(projects)))
-                        }
-                        return projectGroups
                     }
                     .receive(on: DispatchQueue.main)
-                    .assign(to: \ProjectsModel.projectGroups, on: self)
+                    .assign(to: \ProjectsModel.projects, on: self)
                     .store(in: &cancellables)
 
                 self.$currentText

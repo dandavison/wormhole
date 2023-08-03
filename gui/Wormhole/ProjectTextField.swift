@@ -1,11 +1,3 @@
-//
-//  ProjectTextField.swift
-//  PubChemDemo
-//
-//  Created by Stephan Michels on 27.08.20.
-//  Copyright © 2020 Stephan Michels. All rights reserved.
-//
-
 import AppKit
 import SwiftUI
 import Combine

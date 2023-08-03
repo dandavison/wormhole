@@ -1,15 +1,8 @@
-//
-//  ProjectsModel.swift
-//  ProjectsDemo
-//
-//  Created by Stephan Michels on 12.12.20.
-//
-
 import Foundation
 import SwiftUI
 
 internal final class ProjectSelectorModel<V: Equatable>: ObservableObject {
-    @Published var projectGroups: [ProjectGroup<V>] = []
+    @Published var projects: [Project<V>] = []
     @Published var selectedProject: Project<V>?
 
     @Published var projectsVisible: Bool = true
@@ -31,10 +24,6 @@ internal final class ProjectSelectorModel<V: Equatable>: ObservableObject {
     internal func cancel() {
         self.projectConfirmed = false
         self.selectedProject = nil
-    }
-
-    private var projects: [Project<V>] {
-        self.projectGroups.flatMap(\.projects)
     }
 
     internal func moveUp() {

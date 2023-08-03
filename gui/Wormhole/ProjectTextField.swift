@@ -15,7 +15,7 @@ import Combine
 struct ProjectTextField<V: Equatable>: NSViewRepresentable {
     @Binding var text: String
     @ObservedObject var model: ProjectSelectorModel<V>
-    
+
     func makeNSView(context: Context) -> NSSearchField {
         let searchField = NSSearchField(frame: .zero)
         searchField.controlSize = .regular
@@ -24,34 +24,34 @@ struct ProjectTextField<V: Equatable>: NSViewRepresentable {
         searchField.setContentCompressionResistancePriority(NSLayoutConstraint.Priority(rawValue: 1), for: .horizontal)
         searchField.setContentHuggingPriority(NSLayoutConstraint.Priority(rawValue: 1), for: .horizontal)
         searchField.delegate = context.coordinator
-        
+
         let searchFieldCell = searchField.cell!
         searchFieldCell.lineBreakMode = .byWordWrapping
-        
+
         context.coordinator.searchField = searchField
-        
+
         return searchField
     }
-    
+
     func updateNSView(_ searchField: NSSearchField, context: Context) {
         let model = self.model
         let text = self.text
-        
+
         let coordinator = context.coordinator
         coordinator.model = model
-        
+
         coordinator.updatingSelectedRange = true
         defer {
             coordinator.updatingSelectedRange = false
         }
-        
+
         if let selectedProject = model.selectedProject {
             let projectText = selectedProject.text
-            
+
             if searchField.stringValue != projectText {
                 searchField.stringValue = projectText
             }
-            
+
             if let fieldEditor = searchField.window?.fieldEditor(false, for: searchField) {
                 if model.projectConfirmed {
                     let range = NSRange(projectText.startIndex..<projectText.endIndex, in: fieldEditor.string)
@@ -71,24 +71,24 @@ struct ProjectTextField<V: Equatable>: NSViewRepresentable {
             }
         }
     }
-    
+
     func makeCoordinator() -> Coordinator {
         return Coordinator(text: self.$text, model: self.model)
     }
-    
+
     class Coordinator: NSObject, NSSearchFieldDelegate, NSWindowDelegate, NSTableViewDataSource, NSTableViewDelegate {
         @Binding var text: String
         var model: ProjectSelectorModel<V>
         var didChangeSelectionSubscription: AnyCancellable?
         var frameDidChangeSubscription: AnyCancellable?
         var updatingSelectedRange: Bool = false
-        
+
         init(text: Binding<String>, model: ProjectSelectorModel<V>) {
             self._text = text
             self.model = model
-            
+
             super.init()
-            
+
             self.didChangeSelectionSubscription = NotificationCenter.default.publisher(for: NSTextView.didChangeSelectionNotification)
                 .sink(receiveValue: { notification in
                     guard !self.updatingSelectedRange,
@@ -100,7 +100,7 @@ struct ProjectTextField<V: Equatable>: NSViewRepresentable {
                     self.model.chooseProject(nil)
                 })
         }
-        
+
         var searchField: NSSearchField! {
             didSet {
                 if let searchField = self.searchField {
@@ -116,17 +116,17 @@ struct ProjectTextField<V: Equatable>: NSViewRepresentable {
         }
 
         // MARK: - NSSearchField Delegate Methods
-        
+
         @objc func controlTextDidChange(_ notification: Notification) {
             let text = self.searchField.stringValue
-            
+
             self.model.modifiedText(text)
         }
-        
+
         func controlTextDidEndEditing(_ obj: Notification) {
             self.model.cancel()
         }
-        
+
         @objc func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
             if commandSelector == #selector(NSResponder.moveUp(_:)) {
                 guard self.model.projectsVisible else {
@@ -135,7 +135,7 @@ struct ProjectTextField<V: Equatable>: NSViewRepresentable {
                 self.model.moveUp()
                 return true
             }
-            
+
             if commandSelector == #selector(NSResponder.moveDown(_:)) {
                 guard self.model.projectsVisible else {
                     return false
@@ -143,17 +143,17 @@ struct ProjectTextField<V: Equatable>: NSViewRepresentable {
                 self.model.moveDown()
                 return true
             }
-            
+
             if commandSelector == #selector(NSResponder.complete(_:)) ||
                 commandSelector == #selector(NSResponder.cancelOperation(_:)) {
                 guard self.model.projectsVisible else {
                     return false
                 }
                 self.model.cancel()
-                
+
                 return true
             }
-            
+
             if commandSelector == #selector(NSResponder.insertNewline(_:)) {
                 if let project = self.model.selectedProject {
                     self.model.confirmProject(project)
@@ -161,7 +161,7 @@ struct ProjectTextField<V: Equatable>: NSViewRepresentable {
                 
                 return true
             }
-            
+
             return false
         }
     }

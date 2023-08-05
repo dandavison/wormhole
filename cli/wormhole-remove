@@ -1,0 +1,3 @@
+#!/bin/bash
+name="$1"
+curl http://o/remove-project/$name

@@ -24,27 +24,23 @@ struct ProjectInput<V: Equatable>: View {
         }
         model.textBinding = self.$text
         
-        return ZStack {
-            Color.black.ignoresSafeArea()
-            ProjectTextField(text: self.$text, model: model).background(Color.black)
-                .borderlessWindow(isVisible: Binding<Bool>(get: { model.projectsVisible && !model.projects.isEmpty }, set: { model.projectsVisible = $0 }),
-                                  behavior: .transient,
-                                  anchor: .bottomLeading,
-                                  windowAnchor: .topLeading,
-                                  windowOffset: CGPoint(x: -20, y: -16)) {
-                    ProjectPopup(model: model)
-                        .frame(width: model.width)
-                        .background(VisualEffectBlur(material: .popover, blendingMode: .behindWindow, cornerRadius: 8))
-                        .overlay(RoundedRectangle(cornerRadius: 8)
-                                    .stroke(lineWidth: 1)
-                                    .foregroundColor(Color(white: 0.6, opacity: 0.2))
-                        )
-                        .shadow(color: Color(white: 0, opacity: 0.10),
-                                radius: 5, x: 0, y: 2)
-                        .padding(20)
-                        .font(.system(size: 12).monospaced())
-                }
-
-        }
+        return ProjectTextField(text: self.$text, model: model)
+            .borderlessWindow(isVisible: Binding<Bool>(get: { model.projectsVisible && !model.projects.isEmpty }, set: { model.projectsVisible = $0 }),
+                              behavior: .transient,
+                              anchor: .bottomLeading,
+                              windowAnchor: .topLeading,
+                              windowOffset: CGPoint(x: -20, y: -16)) {
+                ProjectPopup(model: model)
+                    .frame(width: model.width)
+                    .background(VisualEffectBlur(material: .popover, blendingMode: .behindWindow, cornerRadius: 8))
+                    .overlay(RoundedRectangle(cornerRadius: 8)
+                                .stroke(lineWidth: 1)
+                                .foregroundColor(Color(white: 0.6, opacity: 0.2))
+                    )
+                    .shadow(color: Color(white: 0, opacity: 0.10),
+                            radius: 5, x: 0, y: 2)
+                    .padding(20)
+                    .font(.system(size: 12).monospaced())
+            }
     }
 }

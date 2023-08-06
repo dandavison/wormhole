@@ -33,7 +33,9 @@ impl ProjectPath {
         tmux_thread.join().unwrap();
         vscode_thread.join().unwrap();
         // We always focus the window for VSCode workspace, so by default, we will land in VSCode.
-        if matches!(land_in, Some(Destination::Tmux)) {
+        let flip_keybinding = Path::new("/tmp/wormhole-toggle").exists();
+        let land_in_tmux = matches!(land_in, Some(Destination::Tmux));
+        if flip_keybinding ^ land_in_tmux {
             tmux::focus()
         }
         self.project.move_to_front();

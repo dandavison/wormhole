@@ -4,8 +4,11 @@ struct ContentView: View {
     @StateObject var model = ProjectsModel()
     
     var body: some View {
-        ProjectInput(text: self.$model.currentText, projects: self.model.projects)
-        .frame(width: 300)
+        ZStack {
+            Color.black.ignoresSafeArea()
+            ProjectInput(text: self.$model.currentText, projects: self.model.projects)
+            .frame(width: 300)
+        }
     }
 }
 

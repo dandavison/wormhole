@@ -37,11 +37,14 @@ struct ProjectPopup<V: Equatable>: View {
         let model = self.model
         let projects = model.projects
         
-        return VStack(spacing: 0) {
-            ForEach(projects.indices, id: \.self)  { idx in
-                ProjectView(project: projects[idx], model: model)
+        return ZStack {
+            Color.black.ignoresSafeArea()
+            VStack(spacing: 0) {
+                ForEach(projects.indices, id: \.self)  { idx in
+                    ProjectView(project: projects[idx], model: model)
+                }
             }
+            .padding(10)
         }
-        .padding(10)
     }
 }

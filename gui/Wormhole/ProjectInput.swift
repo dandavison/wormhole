@@ -33,14 +33,14 @@ struct ProjectInput<V: Equatable>: View {
                 ProjectPopup(model: model)
                     .frame(width: model.width)
                     .background(VisualEffectBlur(material: .popover, blendingMode: .behindWindow, cornerRadius: 8))
-                .overlay(RoundedRectangle(cornerRadius: 8)
-                            .stroke(lineWidth: 1)
-                            .foregroundColor(Color(white: 0.6, opacity: 0.2))
-                )
-                .shadow(color: Color(white: 0, opacity: 0.10),
-                        radius: 5, x: 0, y: 2)
-                .padding(20)
-                .font(.system(size: 12).monospaced())
+                    .overlay(RoundedRectangle(cornerRadius: 8)
+                                .stroke(lineWidth: 1)
+                                .foregroundColor(Color(white: 0.6, opacity: 0.2))
+                    )
+                    .shadow(color: Color(white: 0, opacity: 0.10),
+                            radius: 5, x: 0, y: 2)
+                    .padding(20)
+                    .font(.system(size: 12).monospaced())
             }
     }
 }

@@ -11,7 +11,7 @@ struct ProjectView<V: Equatable>: View {
         return Text(project.text)
             .id(project.text)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .foregroundColor(model.selectedProject == project ? .green : .blue).bold()
+            .foregroundColor(model.selectedProject == project ? .green : .cyan)
             .padding(EdgeInsets(top: 4, leading: 6, bottom: 4, trailing: 6))
             .background(ZStack {
                 Color.black.ignoresSafeArea()

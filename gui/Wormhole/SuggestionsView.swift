@@ -13,9 +13,11 @@ struct ProjectView<V: Equatable>: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .foregroundColor(model.selectedProject == project ? .green : .blue).bold()
             .padding(EdgeInsets(top: 4, leading: 6, bottom: 4, trailing: 6))
-            .background(
+            .background(ZStack {
+                Color.black.ignoresSafeArea()
                 RoundedRectangle(cornerRadius: 5)
-                    .foregroundColor(model.selectedProject == project ? Color.accentColor : Color.clear)
+                    .border(model.selectedProject == project ? Color.green : Color.clear)
+                }
             )
             .onHover(perform: { hovering in
                 if hovering {

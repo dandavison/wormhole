@@ -25,6 +25,7 @@ final class ProjectsModel: ObservableObject {
                 self.projectNames = try await fetchProjects()
                 // self.currentText = projects[0]
                 self.$currentText
+                    .debounce(for: 0.3, scheduler: RunLoop.main)
                     .removeDuplicates()
                     .map { text -> [Project<String>] in
                         let text = text.lowercased()

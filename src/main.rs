@@ -43,6 +43,13 @@ async fn wormhole(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         Ok(endpoints::add_project(&path))
     } else if let Some(name) = path.strip_prefix("/remove-project/") {
         Ok(endpoints::remove_project(&name))
+    } else if path == "/previous-project/" {
+        if let Some(project) = project::previous_project() {
+            handlers::select_project_by_name(&project.name, None);
+            Ok(sent_into_wormhole)
+        } else {
+            Ok(Response::new(Body::from("There is no previous project")))
+        }
     } else if let Some(name) = path.strip_prefix("/project/") {
         handlers::select_project_by_name(name, params.land_in);
         Ok(sent_into_wormhole)

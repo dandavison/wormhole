@@ -123,3 +123,7 @@ pub fn remove_project(name: &str) {
     projects.remove(name);
     thread::spawn(write_projects);
 }
+
+pub fn previous_project() -> Option<Project> {
+    PROJECTS.lock().unwrap().values().nth(1).cloned()
+}

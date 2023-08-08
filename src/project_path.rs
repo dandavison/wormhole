@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::thread;
 
-use crate::handlers::Destination;
+use crate::Destination;
 use crate::util::warn;
 use crate::{project::Project, tmux, vscode};
 

@@ -8,8 +8,8 @@ use itertools::Itertools;
 use lazy_static::lazy_static;
 
 use crate::config;
-use crate::handlers::Destination;
 use crate::project_path::ProjectPath;
+use crate::Destination;
 
 lazy_static! {
     static ref PROJECTS: Mutex<IndexMap<String, Project>> = Mutex::new(IndexMap::new());

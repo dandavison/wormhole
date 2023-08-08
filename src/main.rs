@@ -13,17 +13,28 @@ use std::net::SocketAddr;
 
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response, Server};
+use url::form_urlencoded;
+
 use util::warn;
+
+pub enum Destination {
+    VSCode,
+    Tmux,
+}
+
+pub struct QueryParams {
+    pub land_in: Option<Destination>,
+    pub line: Option<usize>,
+}
 
 async fn wormhole(req: Request<Body>) -> Result<Response<Body>, Infallible> {
     let uri = req.uri();
     println!("Request: {}", uri);
     let path = uri.path().to_string();
     if &path == "/favicon.ico" {
-        return Ok(Response::new(Body::from(
-            "Stop sending me /favicon requests",
-        )));
+        return Ok(Response::new(Body::from("")));
     }
+    let params = QueryParams::from_query(uri.query());
     let sent_into_wormhole = Response::new(Body::from("Sent into wormhole."));
     if &path == "/list-projects/" {
         Ok(endpoints::list_projects())
@@ -33,14 +44,39 @@ async fn wormhole(req: Request<Body>) -> Result<Response<Body>, Infallible> {
     } else if let Some(name) = path.strip_prefix("/remove-project/") {
         Ok(endpoints::remove_project(&name))
     } else if let Some(name) = path.strip_prefix("/project/") {
-        handlers::select_project_by_name(name, uri.query());
+        handlers::select_project_by_name(name, params.land_in);
         Ok(sent_into_wormhole)
     } else if let Some(absolute_path) = path.strip_prefix("/file/") {
-        handlers::select_project_by_path(absolute_path);
+        handlers::select_project_by_path(absolute_path, params.land_in);
         Ok(sent_into_wormhole)
     } else {
-        handlers::select_project_by_github_url(&path, uri.query()).unwrap();
+        handlers::select_project_by_github_url(&path, params.line, params.land_in).unwrap();
         Ok(sent_into_wormhole)
+    }
+}
+
+impl QueryParams {
+    pub fn from_query(query: Option<&str>) -> Self {
+        let mut params = QueryParams {
+            land_in: None,
+            line: None,
+        };
+        if let Some(query) = query {
+            for (key, val) in
+                form_urlencoded::parse(query.to_lowercase().as_bytes()).collect::<Vec<(_, _)>>()
+            {
+                if key == "land-in" {
+                    if val == "tmux" {
+                        params.land_in = Some(Destination::Tmux);
+                    } else if val == "vscode" {
+                        params.land_in = Some(Destination::VSCode);
+                    }
+                } else if key == "line" {
+                    params.line = val.parse::<usize>().ok();
+                }
+            }
+        }
+        params
     }
 }
 

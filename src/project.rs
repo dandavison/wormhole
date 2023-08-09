@@ -34,6 +34,13 @@ impl Project {
         }
     }
 
+    pub fn root(&self) -> ProjectPath {
+        ProjectPath {
+            project: (*self).clone(),
+            relative_path: Some(("".into(), None)),
+        }
+    }
+
     pub fn by_path(query_path: &Path) -> Option<Self> {
         for project in PROJECTS.lock().unwrap().values() {
             if query_path.starts_with(&project.path) {

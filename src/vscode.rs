@@ -4,8 +4,8 @@ use crate::{hammerspoon, project::Project, project_path::ProjectPath, util::warn
 
 pub fn open_project(project: &Project, window_action: &WindowAction) -> Result<(), String> {
     let found_workspace = hammerspoon::select_vscode_workspace(&project.name, window_action)?;
-    if !found_workspace {
-        open_vscode_application_at_path(&project.as_project_path())
+    if !(found_workspace) {
+        open_vscode_application_at_path(&project.root())
     } else {
         Ok(())
     }

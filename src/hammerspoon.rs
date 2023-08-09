@@ -1,6 +1,7 @@
 use std::process::{Command, Output};
 use std::str;
 
+use crate::util::info;
 use crate::WindowAction;
 
 impl WindowAction {
@@ -13,36 +14,41 @@ impl WindowAction {
 }
 
 pub fn select_vscode_workspace(workspace: &str, action: &WindowAction) -> Result<bool, String> {
-    let not_found = "not-found";
+    let found_it = "found-it";
     if let Ok(output) = hammerspoon(&format!(
         r#"
-    local function is_vscode_with_workspace(window)
+    local function is_requested_vscode_workspace(window)
         if string.find(window:application():title(), 'Code', 1, true) then
+            print(window:title())
             return string.find(window:title(), '{}', 1, true)
         end
     end
 
-    local found = false
+    print("Searching for window: {}")
     for _, window in pairs(hs.window.allWindows()) do
-        if is_vscode_with_workspace(window) then
+        if is_requested_vscode_workspace(window) then
             window:{}()
-            found = true
+            print("{}")
+            break
         end
-    end
-    if not found then
-        print("{}")
     end
     "#,
         workspace,
+        workspace,
         action.lua(),
-        not_found,
+        found_it,
     )) {
-        dbg!(str::from_utf8(&output.stdout).unwrap());
-        if output.stdout == not_found.as_bytes() {
-            Ok(false)
-        } else {
-            Ok(true)
+        let mut found = false;
+        for line in str::from_utf8(&output.stdout)
+            .unwrap()
+            .split_terminator("\n")
+        {
+            info(line);
+            if line.contains(found_it) {
+                found = true
+            }
         }
+        Ok(found)
     } else {
         Err("Hammerspoon command failed".into())
     }

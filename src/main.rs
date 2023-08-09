@@ -10,6 +10,7 @@ mod vscode;
 
 use std::convert::Infallible;
 use std::net::SocketAddr;
+use std::thread;
 
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response, Server};
@@ -27,7 +28,7 @@ pub struct QueryParams {
     pub line: Option<usize>,
 }
 
-async fn wormhole(req: Request<Body>) -> Result<Response<Body>, Infallible> {
+async fn wormhole_spawner(req: Request<Body>) -> Result<Response<Body>, Infallible> {
     let uri = req.uri();
     println!("Request: {}", uri);
     let path = uri.path().to_string();
@@ -35,7 +36,6 @@ async fn wormhole(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         return Ok(Response::new(Body::from("")));
     }
     let params = QueryParams::from_query(uri.query());
-    let sent_into_wormhole = Response::new(Body::from("Sent into wormhole."));
     if &path == "/list-projects/" {
         Ok(endpoints::list_projects())
     } else if let Some(path) = path.strip_prefix("/add-project/") {
@@ -43,23 +43,26 @@ async fn wormhole(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         Ok(endpoints::add_project(&path))
     } else if let Some(name) = path.strip_prefix("/remove-project/") {
         Ok(endpoints::remove_project(&name))
-    } else if path == "/previous-project/" {
+    } else {
+        thread::spawn(|| wormhole(path, params));
+        Ok(Response::new(Body::from("Sent into wormhole.")))
+    }
+}
+
+fn wormhole(path: String, params: QueryParams) {
+    if path == "/previous-project/" {
         if let Some(project) = project::previous_project() {
             handlers::select_project_by_name(&project.name, None);
-            Ok(sent_into_wormhole)
         } else {
-            Ok(Response::new(Body::from("There is no previous project")))
+            warn("There is no previous project");
         }
     } else if let Some(name) = path.strip_prefix("/project/") {
         handlers::select_project_by_name(name, params.land_in);
-        Ok(sent_into_wormhole)
     } else if let Some(absolute_path) = path.strip_prefix("/file/") {
         handlers::select_project_by_path(absolute_path, params.land_in);
-        Ok(sent_into_wormhole)
     } else {
         handlers::select_project_by_github_url(&path, params.line, params.land_in).unwrap();
-        Ok(sent_into_wormhole)
-    }
+    };
 }
 
 impl QueryParams {
@@ -92,7 +95,8 @@ async fn main() {
     project::read_projects();
     let addr = SocketAddr::from(([127, 0, 0, 1], 80));
 
-    let make_svc = make_service_fn(|_conn| async { Ok::<_, Infallible>(service_fn(wormhole)) });
+    let make_svc =
+        make_service_fn(|_conn| async { Ok::<_, Infallible>(service_fn(wormhole_spawner)) });
 
     // Serve forever: a Wormhole service is created for each incoming connection
     let server = Server::bind(&addr).serve(make_svc);

@@ -2,12 +2,21 @@ use std::process::Command;
 
 use crate::{hammerspoon, project::Project, project_path::ProjectPath, util::warn, WindowAction};
 
-pub fn open_project(project: &Project, window_action: WindowAction) -> Result<(), String> {
-    hammerspoon::select_vscode_workspace(&project.name, window_action)
+pub fn open_project(project: &Project, window_action: &WindowAction) -> Result<(), String> {
+    let found_workspace = hammerspoon::select_vscode_workspace(&project.name, window_action)?;
+    if !found_workspace {
+        open_vscode_application_at_path(&project.as_project_path())
+    } else {
+        Ok(())
+    }
 }
 
-pub fn open_path(path: &ProjectPath, window_action: WindowAction) -> Result<(), String> {
+pub fn open_path(path: &ProjectPath, window_action: &WindowAction) -> Result<(), String> {
     open_project(&path.project, window_action)?;
+    open_vscode_application_at_path(path)
+}
+
+fn open_vscode_application_at_path(path: &ProjectPath) -> Result<(), String> {
     if let Some((_, line)) = path.relative_path {
         let mut uri = format!(
             "vscode-insiders://file/{}",

@@ -25,7 +25,7 @@ impl ProjectPath {
             _ => WindowAction::Raise,
         };
         let vscode_thread = thread::spawn(move || {
-            vscode::open_path(&project_path, vscode_window_action).unwrap_or_else(|err| {
+            vscode::open_path(&project_path, &vscode_window_action).unwrap_or_else(|err| {
                 warn(&format!(
                     "Error opening {:?} in vscode: {}",
                     project_path.relative_path, err

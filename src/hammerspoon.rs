@@ -13,15 +13,6 @@ pub fn focus_vscode_workspace(workspace: &str) -> Result<bool, String> {
         end
     end
 
-    -- HACK: Save in all VSCode workspaces to prevent VSCode "Do you want to save..." dialog.
-    for _, window in pairs(hs.window.allWindows()) do
-        if string.find(window:application():title(), 'Code', 1, true) then
-            window:focus()
-            hs.eventtap.keyStroke({{"cmd"}}, "s")
-            break
-        end
-    end
-
     for _, window in pairs(hs.window.allWindows()) do
         if is_vscode_with_workspace(window) then
             print('Found matching window: ' .. window:title())

@@ -1,15 +1,14 @@
 use std::path::{Path, PathBuf};
 use std::thread;
 
-use crate::Destination;
 use crate::util::warn;
 use crate::{project::Project, tmux, vscode};
+use crate::{Destination, WindowAction};
 
 #[derive(Clone)]
 pub struct ProjectPath {
     pub project: Project,
-    pub relative_path: PathBuf,
-    pub line: Option<usize>,
+    pub relative_path: Option<(PathBuf, Option<usize>)>,
 }
 
 impl ProjectPath {
@@ -21,12 +20,15 @@ impl ProjectPath {
             })
         });
         let project_path = self.clone();
+        let vscode_window_action = match &land_in {
+            Some(Destination::VSCode) => WindowAction::Focus,
+            _ => WindowAction::Raise,
+        };
         let vscode_thread = thread::spawn(move || {
-            vscode::open(&project_path).unwrap_or_else(|err| {
+            vscode::open_path(&project_path, vscode_window_action).unwrap_or_else(|err| {
                 warn(&format!(
-                    "Error opening {} in vscode: {}",
-                    project_path.relative_path.to_str().unwrap(),
-                    err
+                    "Error opening {:?} in vscode: {}",
+                    project_path.relative_path, err
                 ))
             });
         });
@@ -45,9 +47,8 @@ impl ProjectPath {
     pub fn from_absolute_path(path: &Path) -> Option<Self> {
         if let Some(project) = Project::by_path(&path) {
             Some(ProjectPath {
-                relative_path: path.strip_prefix(&project.path).unwrap().into(),
-                project,
-                line: None,
+                project: project.clone(),
+                relative_path: Some((path.strip_prefix(&project.path).unwrap().into(), None)),
             })
         } else {
             warn(&format!(
@@ -59,6 +60,11 @@ impl ProjectPath {
     }
 
     pub fn absolute_path(&self) -> PathBuf {
-        self.project.path.join(&self.relative_path)
+        self.project.path.join(
+            self.relative_path
+                .as_ref()
+                .and_then(|(p, _)| p.to_str())
+                .unwrap_or("".into()),
+        )
     }
 }

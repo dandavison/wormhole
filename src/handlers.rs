@@ -4,7 +4,8 @@ use std::{path::PathBuf, str};
 use crate::{
     project::Project,
     project_path::ProjectPath,
-    util::{info, warn}, Destination
+    util::{info, warn},
+    Destination,
 };
 
 pub fn select_project_by_name(name: &str, land_in: Option<Destination>) {
@@ -27,7 +28,11 @@ pub fn select_project_by_path(absolute_path: &str, land_in: Option<Destination>)
     }
 }
 
-pub fn select_project_by_github_url(path: &str, line: Option<usize>, land_in: Option<Destination>) -> Result<bool, String> {
+pub fn select_project_by_github_url(
+    path: &str,
+    line: Option<usize>,
+    land_in: Option<Destination>,
+) -> Result<bool, String> {
     let re = Regex::new(r"/([^/]+)/([^/]+)/blob/([^/]+)/([^?]*)").unwrap();
     if let Some(captures) = re.captures(path) {
         info("Handling as github URL");
@@ -43,8 +48,7 @@ pub fn select_project_by_github_url(path: &str, line: Option<usize>, land_in: Op
         if let Some(project) = Project::by_repo_name(repo) {
             ProjectPath {
                 project,
-                relative_path: path,
-                line,
+                relative_path: Some((path, line)),
             }
             .open(land_in)?;
             Ok(true)

@@ -2,8 +2,18 @@ use std::process::Command;
 use std::str;
 
 use crate::util::info;
+use crate::WindowAction;
 
-pub fn focus_vscode_workspace(workspace: &str) -> Result<bool, String> {
+impl WindowAction {
+    fn lua(&self) -> &'static str {
+        match self {
+            WindowAction::Focus => "focus",
+            WindowAction::Raise => "raise",
+        }
+    }
+}
+
+pub fn select_vscode_workspace(workspace: &str, action: WindowAction) -> Result<(), String> {
     hammerspoon(&format!(
         r#"
     print('Searching for window matching "{}"')
@@ -16,14 +26,16 @@ pub fn focus_vscode_workspace(workspace: &str) -> Result<bool, String> {
     for _, window in pairs(hs.window.allWindows()) do
         if is_vscode_with_workspace(window) then
             print('Found matching window: ' .. window:title())
-            window:focus()
+            window:{}()
             break
         end
     end
     "#,
-        workspace, workspace
+        workspace,
+        workspace,
+        action.lua(),
     ));
-    Ok(true)
+    Ok(())
 }
 
 pub fn focus_alacritty() {

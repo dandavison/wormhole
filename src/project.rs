@@ -23,15 +23,14 @@ pub struct Project {
 
 impl Project {
     pub fn open(&self, land_in: Option<Destination>) -> Result<bool, String> {
-        self.root().open(land_in)?;
+        self.as_project_path().open(land_in)?;
         Ok(true)
     }
 
-    fn root(&self) -> ProjectPath {
+    fn as_project_path(&self) -> ProjectPath {
         ProjectPath {
             project: (*self).clone(),
-            relative_path: "".into(),
-            line: None,
+            relative_path: None,
         }
     }
     pub fn by_path(query_path: &Path) -> Option<Self> {

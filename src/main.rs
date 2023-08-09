@@ -23,6 +23,11 @@ pub enum Destination {
     Tmux,
 }
 
+pub enum WindowAction {
+    Focus,
+    Raise,
+}
+
 pub struct QueryParams {
     pub land_in: Option<Destination>,
     pub line: Option<usize>,
@@ -30,7 +35,7 @@ pub struct QueryParams {
 
 async fn wormhole_spawner(req: Request<Body>) -> Result<Response<Body>, Infallible> {
     let uri = req.uri();
-    println!("Request: {}", uri);
+    println!("\nRequest: {}", uri);
     let path = uri.path().to_string();
     if &path == "/favicon.ico" {
         return Ok(Response::new(Body::from("")));

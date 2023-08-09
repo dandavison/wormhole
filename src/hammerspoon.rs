@@ -13,7 +13,7 @@ impl WindowAction {
 }
 
 pub fn select_vscode_workspace(workspace: &str, action: &WindowAction) -> Result<bool, String> {
-    let found = "found";
+    let not_found = "not-found";
     if let Ok(output) = hammerspoon(&format!(
         r#"
     local function is_vscode_with_workspace(window)
@@ -25,17 +25,21 @@ pub fn select_vscode_workspace(workspace: &str, action: &WindowAction) -> Result
     for _, window in pairs(hs.window.allWindows()) do
         if is_vscode_with_workspace(window) then
             window:{}()
-            print("{}")
+            os.exit()
         end
     end
+    print("{}")
     "#,
         workspace,
         action.lua(),
-        found,
+        not_found,
     )) {
-        Ok(str::from_utf8(&output.stdout)
-            .map(|s| s.contains(found))
-            .unwrap_or(true))
+        dbg!(str::from_utf8(&output.stdout).unwrap());
+        if output.stdout == not_found.as_bytes() {
+            Ok(false)
+        } else {
+            Ok(true)
+        }
     } else {
         Err("Hammerspoon command failed".into())
     }

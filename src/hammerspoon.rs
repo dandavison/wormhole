@@ -22,13 +22,16 @@ pub fn select_vscode_workspace(workspace: &str, action: &WindowAction) -> Result
         end
     end
 
+    local found = false
     for _, window in pairs(hs.window.allWindows()) do
         if is_vscode_with_workspace(window) then
             window:{}()
-            os.exit()
+            found = true
         end
     end
-    print("{}")
+    if not found then
+        print("{}")
+    end
     "#,
         workspace,
         action.lua(),

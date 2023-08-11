@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::thread;
 
 use crate::util::warn;
-use crate::{project::Project, tmux, vscode};
+use crate::{editor, project::Project, tmux};
 use crate::{Destination, WindowAction};
 
 #[derive(Clone)]
@@ -20,21 +20,20 @@ impl ProjectPath {
             })
         });
         let project_path = self.clone();
-        let vscode_window_action = match &land_in {
-            Some(Destination::VSCode) => WindowAction::Focus,
+        let editor_window_action = match &land_in {
+            Some(Destination::Editor) => WindowAction::Focus,
             _ => WindowAction::Raise,
         };
-        let vscode_thread = thread::spawn(move || {
-            vscode::open_path(&project_path, vscode_window_action).unwrap_or_else(|err| {
+        let editor_thread = thread::spawn(move || {
+            editor::open_path(&project_path, editor_window_action).unwrap_or_else(|err| {
                 warn(&format!(
-                    "Error opening {:?} in vscode: {}",
+                    "Error opening {:?} in editor: {}",
                     project_path.relative_path, err
                 ))
             });
         });
         tmux_thread.join().unwrap();
-        vscode_thread.join().unwrap();
-        // We always focus the window for VSCode workspace, so by default, we will land in VSCode.
+        editor_thread.join().unwrap();
         let flip_keybinding = Path::new("/tmp/wormhole-toggle").exists();
         let land_in_tmux = matches!(land_in, Some(Destination::Tmux));
         if flip_keybinding ^ land_in_tmux {

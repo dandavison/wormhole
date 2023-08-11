@@ -1,4 +1,5 @@
 mod config;
+mod editor;
 mod endpoints;
 mod hammerspoon;
 mod handlers;
@@ -6,7 +7,6 @@ mod project;
 mod project_path;
 mod tmux;
 mod util;
-mod vscode;
 
 use std::convert::Infallible;
 use std::net::SocketAddr;
@@ -19,7 +19,7 @@ use url::form_urlencoded;
 use util::warn;
 
 pub enum Destination {
-    VSCode,
+    Editor,
     Tmux,
 }
 
@@ -84,7 +84,7 @@ impl QueryParams {
                     if val == "tmux" {
                         params.land_in = Some(Destination::Tmux);
                     } else if val == "vscode" {
-                        params.land_in = Some(Destination::VSCode);
+                        params.land_in = Some(Destination::Editor);
                     }
                 } else if key == "line" {
                     params.line = val.parse::<usize>().ok();

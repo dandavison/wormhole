@@ -3,5 +3,9 @@ pub fn info(msg: &str) {
 }
 
 pub fn warn(msg: &str) {
-    eprintln!("    {}", msg)
+    eprintln!("    WARNING: {}", msg)
+}
+
+pub fn error(msg: &str) {
+    eprintln!("    ERROR: {}", msg)
 }

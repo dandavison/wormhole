@@ -14,6 +14,7 @@ struct Window {
 }
 
 pub fn open(project: &Project) -> Result<(), String> {
+    info(&format!("tmux::open({project:?})"));
     if let Some(window) = get_window(&project.name) {
         tmux(["select-window", "-t", &window.id].iter());
     } else {

@@ -9,30 +9,42 @@ use lazy_static::lazy_static;
 
 use crate::config;
 use crate::project_path::ProjectPath;
-use crate::Destination;
+use crate::util::info;
+use crate::Application;
 
 lazy_static! {
     static ref PROJECTS: Mutex<IndexMap<String, Project>> = Mutex::new(IndexMap::new());
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Project {
     pub name: String,
     pub path: PathBuf,
 }
 
 impl Project {
-    pub fn open(&self, land_in: Option<Destination>) -> Result<bool, String> {
+    pub fn open(&self, land_in: Option<Application>) -> Result<bool, String> {
+        info(&format!("Project({}).open({land_in:?})", self.name));
         self.as_project_path().open(land_in)?;
         Ok(true)
     }
 
+    #[allow(dead_code)]
     fn as_project_path(&self) -> ProjectPath {
         ProjectPath {
             project: (*self).clone(),
             relative_path: None,
         }
     }
+
+    #[allow(dead_code)]
+    fn root(&self) -> ProjectPath {
+        ProjectPath {
+            project: (*self).clone(),
+            relative_path: Some(("".into(), None)),
+        }
+    }
+
     pub fn by_path(query_path: &Path) -> Option<Self> {
         for project in PROJECTS.lock().unwrap().values() {
             if query_path.starts_with(&project.path) {

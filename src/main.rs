@@ -18,18 +18,21 @@ use url::form_urlencoded;
 
 use util::warn;
 
-pub enum Destination {
+#[derive(Debug)]
+pub enum Application {
     Editor,
-    Tmux,
+    Terminal,
+    Other,
 }
 
+#[derive(Debug)]
 pub enum WindowAction {
     Focus,
     Raise,
 }
 
 pub struct QueryParams {
-    pub land_in: Option<Destination>,
+    pub land_in: Option<Application>,
     pub line: Option<usize>,
 }
 
@@ -82,9 +85,9 @@ impl QueryParams {
             {
                 if key == "land-in" {
                     if val == "tmux" {
-                        params.land_in = Some(Destination::Tmux);
+                        params.land_in = Some(Application::Terminal);
                     } else if val == "vscode" {
-                        params.land_in = Some(Destination::Editor);
+                        params.land_in = Some(Application::Editor);
                     }
                 } else if key == "line" {
                     params.line = val.parse::<usize>().ok();

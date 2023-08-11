@@ -5,10 +5,11 @@ use crate::{
     project::Project,
     project_path::ProjectPath,
     util::{info, warn},
-    Destination,
+    Application,
 };
 
-pub fn select_project_by_name(name: &str, land_in: Option<Destination>) {
+pub fn select_project_by_name(name: &str, land_in: Option<Application>) {
+    info(&format!("select_project_by_name({name}, {land_in:?})"));
     if let Some(project) = Project::by_name(name) {
         project.open(land_in).unwrap();
     } else {
@@ -16,7 +17,7 @@ pub fn select_project_by_name(name: &str, land_in: Option<Destination>) {
     }
 }
 
-pub fn select_project_by_path(absolute_path: &str, land_in: Option<Destination>) {
+pub fn select_project_by_path(absolute_path: &str, land_in: Option<Application>) {
     let absolute_path = PathBuf::from(absolute_path);
     if let Some(project_path) = ProjectPath::from_absolute_path(&absolute_path) {
         project_path.open(land_in).unwrap();
@@ -31,7 +32,7 @@ pub fn select_project_by_path(absolute_path: &str, land_in: Option<Destination>)
 pub fn select_project_by_github_url(
     path: &str,
     line: Option<usize>,
-    land_in: Option<Destination>,
+    land_in: Option<Application>,
 ) -> Result<bool, String> {
     let re = Regex::new(r"/([^/]+)/([^/]+)/blob/([^/]+)/([^?]*)").unwrap();
     if let Some(captures) = re.captures(path) {

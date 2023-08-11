@@ -1,6 +1,8 @@
 use std::process::Command;
 use std::str;
 
+use crate::editor::Editor;
+use crate::project::Project;
 use crate::util::info;
 use crate::WindowAction;
 
@@ -13,26 +15,34 @@ impl WindowAction {
     }
 }
 
-pub fn select_vscode_workspace(workspace: &str, action: WindowAction) -> Result<(), String> {
+pub fn select_editor_workspace(
+    editor: Editor,
+    project: &Project,
+    action: WindowAction,
+) -> Result<(), String> {
     hammerspoon(&format!(
         r#"
-    print('Searching for window matching "{}"')
-    local function is_vscode_with_workspace(window)
-        if string.find(window:application():title(), 'Code', 1, true) then
+    print('Searching for application "{}" window matching "{}"')
+    local function is_requested_workspace(window)
+        print(window:application():title() .. ' -- ' window:title())
+        if window:application():title() == {} then
             return string.find(window:title(), '{}', 1, true)
         end
     end
 
     for _, window in pairs(hs.window.allWindows()) do
-        if is_vscode_with_workspace(window) then
+        if is_requested_workspace(window) then
+            print('Found matching application: ' .. window:application():title())
             print('Found matching window: ' .. window:title())
             window:{}()
             break
         end
     end
     "#,
-        workspace,
-        workspace,
+        editor.application_name(),
+        project.name,
+        editor.application_name(),
+        project.name,
         action.lua(),
     ));
     Ok(())

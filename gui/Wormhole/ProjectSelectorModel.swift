@@ -95,7 +95,7 @@ internal final class ProjectSelectorModel<V: Equatable>: ObservableObject {
 
         Task {
             do {
-                try await openProject(name: project.text, inTmux: modifier)
+                try await openProject(name: project.text, landInTerminal: modifier)
                 await NSApplication.shared.terminate(nil)
             } catch {
                 print("Error while opening project: " + project.text)
@@ -103,11 +103,9 @@ internal final class ProjectSelectorModel<V: Equatable>: ObservableObject {
         }
     }
 
-    internal func openProject(name: String, inTmux: Bool) async throws {
+    internal func openProject(name: String, landInTerminal: Bool) async throws {
         var url = "http://o/project/" + name
-        if inTmux {
-            url = url + "?land-in=tmux"
-        }
+        url = url + (landInTerminal ? "?land-in=terminal" : "?land-in=editor")
         let _ = try await URLSession.shared.data(from: URL(string: url)!)
     }
 

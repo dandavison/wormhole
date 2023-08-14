@@ -85,9 +85,9 @@ impl QueryParams {
                 form_urlencoded::parse(query.to_lowercase().as_bytes()).collect::<Vec<(_, _)>>()
             {
                 if key == "land-in" {
-                    if val == "tmux" {
+                    if val == "terminal" {
                         params.land_in = Some(Application::Terminal);
-                    } else if val == "vscode" {
+                    } else if val == "editor" {
                         params.land_in = Some(Application::Editor);
                     }
                 } else if key == "line" {

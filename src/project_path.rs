@@ -3,7 +3,7 @@ use std::thread;
 
 use crate::hammerspoon::current_application;
 use crate::util::{info, warn};
-use crate::{editor, project::Project, tmux};
+use crate::{config, editor, project::Project};
 use crate::{Application, WindowAction};
 
 #[derive(Clone, Debug)]
@@ -17,7 +17,7 @@ impl ProjectPath {
         info(&format!("ProjectPath({self:?}).open({land_in:?})"));
         let project = self.project.clone();
         let terminal_thread = thread::spawn(move || {
-            tmux::open(&project).unwrap_or_else(|err| {
+            config::TERMINAL.open(&project).unwrap_or_else(|err| {
                 warn(&format!("Error opening {} in tmux: {}", &project.name, err))
             })
         });
@@ -43,7 +43,7 @@ impl ProjectPath {
         let flip_keybinding = Path::new("/tmp/wormhole-toggle").exists();
         let land_in_terminal = matches!(land_in, Some(Application::Terminal));
         if flip_keybinding ^ land_in_terminal {
-            tmux::focus()
+            config::TERMINAL.focus()
         }
         self.project.move_to_front();
         Ok(true)

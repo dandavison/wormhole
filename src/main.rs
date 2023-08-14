@@ -5,6 +5,7 @@ mod hammerspoon;
 mod handlers;
 mod project;
 mod project_path;
+mod terminal;
 mod tmux;
 mod util;
 

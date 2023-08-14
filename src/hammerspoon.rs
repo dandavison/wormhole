@@ -87,10 +87,10 @@ pub fn select_editor_workspace(
     Ok(())
 }
 
-pub fn focus_alacritty() {
+pub fn launch_or_focus(application_name: &str) {
     hammerspoon(&format!(
         r#"
-        hs.application.launchOrFocus("/Applications/Alacritty.app")
+        hs.application.launchOrFocus("/Applications/{application_name}.app")
     "#,
     ));
 }

@@ -4,7 +4,6 @@ use std::thread;
 use std::{process::Command, slice::Iter};
 
 use crate::config;
-use crate::hammerspoon;
 use crate::project::Project;
 use crate::util::info;
 
@@ -42,11 +41,6 @@ pub fn open(project: &Project) -> Result<(), String> {
         .unwrap()
     });
     Ok(())
-}
-
-pub fn focus() {
-    info("focusing tmux");
-    hammerspoon::focus_alacritty()
 }
 
 fn get_window(name: &str) -> Option<Window> {

@@ -47,7 +47,7 @@ pub fn open_project(project: &Project, window_action: &WindowAction) -> Result<(
 pub fn open_path(path: &ProjectPath, window_action: WindowAction) -> Result<(), String> {
     info(&format!("editor::open_path({path:?}, {window_action:?})"));
     open_project(&path.project, &window_action)?;
-    if matches!(window_action, WindowAction::Focus) && path.relative_path.is_some() {
+    if path.relative_path.is_some() {
         open_editor_application_at_path(path)?
     }
     Ok(())

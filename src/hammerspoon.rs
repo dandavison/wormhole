@@ -58,10 +58,15 @@ pub fn select_editor_workspace(
     let stdout = hammerspoon(&format!(
         r#"
     print('Searching for application "{}" window matching "{}"')
+
+    function string:endswith(s)
+        return self:sub(-#s) == s
+    end
+
     local function is_requested_workspace(window)
         if window:application():title() == '{}' then
             print('window:title() = '  .. window:title())
-            return string.find(window:title(), '{}', 1, true)
+            return window:title():endswith('{}')
         end
     end
 

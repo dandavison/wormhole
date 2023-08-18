@@ -4,7 +4,7 @@ use std::str;
 use crate::editor::Editor;
 use crate::project::Project;
 use crate::util::{error, info, warn};
-use crate::{Application, WindowAction};
+use crate::wormhole::{Application, WindowAction};
 
 impl WindowAction {
     fn lua(&self) -> &'static str {

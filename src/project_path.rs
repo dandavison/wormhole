@@ -1,10 +1,12 @@
 use std::path::{Path, PathBuf};
 use std::thread;
 
+use regex::Regex;
+
 use crate::hammerspoon::current_application;
 use crate::util::{info, warn};
+use crate::wormhole::{Application, WindowAction};
 use crate::{config, editor, project::Project};
-use crate::{Application, WindowAction};
 
 #[derive(Clone, Debug)]
 pub struct ProjectPath {
@@ -13,7 +15,7 @@ pub struct ProjectPath {
 }
 
 impl ProjectPath {
-    pub fn open(&self, land_in: Option<Application>) -> Result<bool, String> {
+    pub fn open(&self, land_in: Option<Application>) {
         info(&format!("ProjectPath({self:?}).open({land_in:?})"));
         let project = self.project.clone();
         let terminal_thread = thread::spawn(move || {
@@ -46,7 +48,6 @@ impl ProjectPath {
             config::TERMINAL.focus()
         }
         self.project.move_to_front();
-        Ok(true)
     }
 
     pub fn from_absolute_path(path: &Path) -> Option<Self> {
@@ -60,6 +61,34 @@ impl ProjectPath {
                 "Path doesn't correspond to a known project: {}",
                 path.to_string_lossy()
             ));
+            None
+        }
+    }
+
+    pub fn from_github_url(path: &str, line: Option<usize>) -> Option<Self> {
+        let re = Regex::new(r"/([^/]+)/([^/]+)/blob/([^/]+)/([^?]*)").unwrap();
+        if let Some(captures) = re.captures(path) {
+            info("Handling as github URL");
+            let path = PathBuf::from(captures.get(4).unwrap().as_str());
+            let repo = captures.get(2).unwrap().as_str();
+
+            info(&format!(
+                "path: {} line: {:?} repo: {}",
+                path.to_string_lossy(),
+                line,
+                repo
+            ));
+            if let Some(project) = Project::by_repo_name(repo) {
+                Some(ProjectPath {
+                    project,
+                    relative_path: Some((path, line)),
+                })
+            } else {
+                warn(&format!("No such repo: {}", repo));
+                None
+            }
+        } else {
+            warn(&format!("Not a github URL: {}", path));
             None
         }
     }

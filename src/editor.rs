@@ -5,7 +5,7 @@ use crate::{
     project::Project,
     project_path::ProjectPath,
     util::{info, warn},
-    WindowAction,
+    wormhole::WindowAction,
 };
 
 #[allow(dead_code)]

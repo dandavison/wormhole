@@ -9,8 +9,6 @@ use lazy_static::lazy_static;
 
 use crate::config;
 use crate::project_path::ProjectPath;
-use crate::util::info;
-use crate::Application;
 
 lazy_static! {
     static ref PROJECTS: Mutex<IndexMap<String, Project>> = Mutex::new(IndexMap::new());
@@ -23,14 +21,7 @@ pub struct Project {
 }
 
 impl Project {
-    pub fn open(&self, land_in: Option<Application>) -> Result<bool, String> {
-        info(&format!("Project({}).open({land_in:?})", self.name));
-        self.as_project_path().open(land_in)?;
-        Ok(true)
-    }
-
-    #[allow(dead_code)]
-    fn as_project_path(&self) -> ProjectPath {
+    pub fn as_project_path(&self) -> ProjectPath {
         ProjectPath {
             project: (*self).clone(),
             relative_path: None,
@@ -38,7 +29,7 @@ impl Project {
     }
 
     #[allow(dead_code)]
-    fn root(&self) -> ProjectPath {
+    pub fn root(&self) -> ProjectPath {
         ProjectPath {
             project: (*self).clone(),
             relative_path: Some(("".into(), None)),

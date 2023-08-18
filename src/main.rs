@@ -55,6 +55,14 @@ async fn wormhole_spawner(req: Request<Body>) -> Result<Response<Body>, Infallib
     } else if let Some(name) = path.strip_prefix("/remove-project/") {
         Ok(endpoints::remove_project(&name))
     } else {
+        // wormhole uses the `hs` client to make a call to the hammerspoon
+        // service. But one might also want to use hammerspoon to configure a
+        // key binding to make a call to the wormhole service. In practice I
+        // found that hammerspoon did not support this concurrency: it was
+        // unable to handle the `hs` call from wormhole when it was still
+        // waiting for its originating HTTP request to return. Instead the `hs`
+        // call blocked until the HTTP request timed out. So, wormhole returns
+        // immediately, performing its actions asynchronously.
         thread::spawn(|| wormhole(path, params));
         Ok(Response::new(Body::from("Sent into wormhole.")))
     }

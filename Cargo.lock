@@ -629,16 +629,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a9aace74cb666635c918e9c12bc0d348266037aa8eb599b5cba565709a8dff00"
 dependencies = [
  "openssl-probe",
- "rustls-pemfile 1.0.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rustls-pemfile",
  "schannel",
  "security-framework",
-]
-
-[[package]]
-name = "rustls-pemfile"
-version = "1.0.3"
-dependencies = [
- "base64",
 ]
 
 [[package]]
@@ -1098,7 +1091,7 @@ dependencies = [
  "lazy_static",
  "regex",
  "rustls",
- "rustls-pemfile 1.0.3",
+ "rustls-pemfile",
  "tokio",
  "url",
 ]

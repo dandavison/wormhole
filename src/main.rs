@@ -10,8 +10,9 @@ mod util;
 mod wormhole;
 
 use std::convert::Infallible;
+use std::fs;
+use std::io::{self, Write};
 use std::net::SocketAddr;
-use std::{fs, io};
 
 use hyper::server::conn::AddrIncoming;
 use hyper::service::{make_service_fn, service_fn};
@@ -29,7 +30,7 @@ async fn main() {
 
 async fn serve_http() {
     project::read_projects();
-    let addr = SocketAddr::from(([127, 0, 0, 1], 80));
+    let addr = SocketAddr::from(([127, 0, 0, 2], 80));
 
     let make_service =
         make_service_fn(|_conn| async { Ok::<_, Infallible>(service_fn(wormhole::service)) });
@@ -43,11 +44,15 @@ async fn serve_http() {
 }
 
 async fn serve_https() {
-    let addr = SocketAddr::from(([127, 0, 0, 1], 443));
+    let addr = SocketAddr::from(([127, 0, 0, 2], 443));
     let incoming = AddrIncoming::bind(&addr).unwrap();
 
+    writeln!(std::io::stderr(), "Reading cert.pem").unwrap();
     let certs = load_certs("/Users/dan/src/wormhole/cert/cert.pem").unwrap();
+    writeln!(std::io::stderr(), "Reading key.pem").unwrap();
     let key = load_private_key("/Users/dan/src/wormhole/cert/key.pem").unwrap();
+    writeln!(std::io::stderr(), "done").unwrap();
+
     let acceptor = TlsAcceptor::builder()
         .with_single_cert(certs, key)
         .map_err(|e| error(&format!("{}", e)))

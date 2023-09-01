@@ -22,3 +22,9 @@ Example workflows:
 Wormhole URLs open the code in your editor/IDE at the correct line, while
 ensuring that your editor/IDE selects the correct project workspace for the
 file, and also switch your terminal emulator to that project.
+
+## Usage
+
+### Create requestly rule:
+
+URL RegEx `/https://github.com/([^#]+)#L(\d+).*/` Redirect to URL `http://wormhole/$1?line=$2`

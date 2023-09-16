@@ -65,7 +65,7 @@ fn list_windows() -> Vec<Window> {
         .collect()
 }
 
-fn tmux(args: Iter<&str>) -> String {
+pub fn tmux(args: Iter<&str>) -> String {
     // TODO: once
     // E.g. TMUX=/private/tmp/tmux-501/default,89323,0
     let socket_path = std::env::var("TMUX")

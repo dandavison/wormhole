@@ -4,7 +4,8 @@ use crate::{
     config, hammerspoon,
     project::Project,
     project_path::ProjectPath,
-    util::{info, warn},
+    tmux,
+    util::{error, info, warn},
     wormhole::WindowAction,
 };
 
@@ -40,13 +41,38 @@ impl Editor {
     }
 }
 
-pub fn open_project(project: &Project, window_action: &WindowAction) -> Result<(), String> {
+fn open_project(project: &Project) -> Result<(), String> {
+    let executable = match config::EDITOR {
+        VSCode | VSCodeInsiders => "code",
+        PyCharm => "pycharm",
+        IntelliJ => "idea",
+    };
+    tmux::tmux(
+        [
+            "send-keys",
+            "-t",
+            &project.name,
+            &format!("{executable} ."),
+            "Enter",
+        ]
+        .iter(),
+    );
+    Ok(())
+}
+
+fn select_project(project: &Project, window_action: &WindowAction) -> bool {
     hammerspoon::select_editor_workspace(config::EDITOR, project, window_action)
 }
 
 pub fn open_path(path: &ProjectPath, window_action: WindowAction) -> Result<(), String> {
     info(&format!("editor::open_path({path:?}, {window_action:?})"));
-    open_project(&path.project, &window_action)?;
+    if !select_project(&path.project, &window_action) {
+        info("Failed to select project; trying to open workspace");
+        open_project(&path.project)?;
+        if !select_project(&path.project, &window_action) {
+            error("Failed to find editor workspace after opening editor in project directory")
+        }
+    }
     if path.relative_path.is_some() {
         open_editor_application_at_path(path)?
     }

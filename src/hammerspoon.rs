@@ -47,14 +47,11 @@ pub fn current_application() -> Application {
     app
 }
 
-pub fn select_editor_workspace(
-    editor: Editor,
-    project: &Project,
-    action: &WindowAction,
-) -> Result<(), String> {
+pub fn select_editor_workspace(editor: Editor, project: &Project, action: &WindowAction) -> bool {
     info(&format!(
         "hammerspoon::select_editor_workspace({editor:?}, {project:?} {action:?})"
     ));
+    let success_marker = "Found matching window";
     let stdout = hammerspoon(&format!(
         r#"
     print('Searching for application "{}" window matching "{}"')
@@ -73,9 +70,8 @@ pub fn select_editor_workspace(
     for _, window in pairs(hs.window.allWindows()) do
         if is_requested_workspace(window) then
             print('Found matching application: ' .. window:application():title())
-            print('Found matching window: ' .. window:title())
+            print('{}: ' .. window:title())
             window:{}()
-            break
         end
     end
     "#,
@@ -83,13 +79,16 @@ pub fn select_editor_workspace(
         project.name,
         editor.application_name(),
         project.name,
+        success_marker,
         action.lua(),
     ));
 
+    let mut success = false;
     for line in str::from_utf8(&stdout).unwrap().split_terminator("\n") {
         info(line);
+        success |= line.contains(success_marker);
     }
-    Ok(())
+    success
 }
 
 pub fn launch_or_focus(application_name: &str) {

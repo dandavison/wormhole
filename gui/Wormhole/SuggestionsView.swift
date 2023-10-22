@@ -19,13 +19,6 @@ struct ProjectView<V: Equatable>: View {
                     .border(model.selectedProject == project ? Color.green : Color.clear)
                 }
             )
-            .onHover(perform: { hovering in
-                if hovering {
-                    model.chooseProject(project)
-                } else if model.selectedProject == project {
-                    model.chooseProject(nil)
-                }
-            })
             .onTapGesture {
                 model.confirmProject(project, modifier: true)
             }

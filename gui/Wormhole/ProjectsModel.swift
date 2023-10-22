@@ -11,7 +11,7 @@ final class ProjectsModel: ObservableObject {
     private var cancellables: Set<AnyCancellable> = []
 
     func fetchProjects() async throws -> [String] {
-        let url = URL(string: "http://o/list-projects/")!
+        let url = URL(string: "http://wormhole/list-projects/")!
         let (data, _) = try await URLSession.shared.data(from: url)
         let str = String(data: data, encoding: .utf8)
         let projects = str?.components(separatedBy: "\n") ?? []

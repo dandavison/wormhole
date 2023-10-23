@@ -1,2 +1,2 @@
 #!/bin/bash
-curl http://o/list-projects/
+curl http://wormhole/list-projects/

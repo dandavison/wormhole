@@ -63,6 +63,27 @@ impl Project {
         let name = path.file_name().unwrap().to_str().unwrap().to_string();
         Self { name, path }
     }
+
+    fn parse(line: &str) -> Self {
+        let parts: Vec<&str> = line.split("->").collect();
+        let path = PathBuf::from(expand_user(parts[0].trim()));
+        let name = if parts.len() > 1 {
+            parts[1].trim().to_string()
+        } else {
+            path.file_name()
+                .map(|name| name.to_string_lossy().to_string())
+                .unwrap()
+        };
+        Self { name, path }
+    }
+
+    fn format(&self) -> String {
+        let mut s = contract_user(self.path.to_str().unwrap());
+        if self.name != self.path.file_name().unwrap().to_str().unwrap() {
+            s += &format!(" -> {}", self.name);
+        }
+        s
+    }
 }
 
 pub fn read_projects() {
@@ -70,12 +91,8 @@ pub fn read_projects() {
         fs::read_to_string(projects_file())
             .unwrap_or_else(|_| panic!("Couldn't read projects file: {}", config::PROJECTS_FILE))
             .lines()
-            .map(|path| PathBuf::from(expand_user(path)))
-            .filter_map(|path| {
-                path.file_name()
-                    .map(|name| name.to_string_lossy().to_string())
-                    .map(|name| (name.clone(), Project { name, path }))
-            }),
+            .map(Project::parse)
+            .map(|proj| (proj.name.clone(), proj)),
     )
 }
 
@@ -102,7 +119,7 @@ pub fn write_projects() -> Result<(), std::io::Error> {
             .lock()
             .unwrap()
             .values()
-            .map(|p| contract_user(p.path.to_str().unwrap()))
+            .map(|p| p.format())
             .join("\n"),
     )
 }

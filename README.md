@@ -23,8 +23,21 @@ Wormhole URLs open the code in your editor/IDE at the correct line, while
 ensuring that your editor/IDE selects the correct project workspace for the
 file, and also switch your terminal emulator to that project.
 
-## Usage
+## Installation
 
-### Create requestly rule:
+Wormhole is currently implemented for MacOS only since it uses hammerspoon to work with your window manager.
 
-URL RegEx `/https://github.com/([^#]+)#L(\d+).*/` Redirect to URL `http://wormhole/$1?line=$2`
+TODO: Wormhole currently binds to port 80 by default and hence the server requires `sudo`.
+
+1. Clone this repo
+2. Check that the editor and other settings in `src/config.rs` are appropriate for your environment
+3. Download hammerspoon and ensure that the `hs` executable is on your `$PATH`
+   E.g.
+   ```
+   brew install hammerspoon
+   ln -s /Applications/Hammerspoon.app/Contents/Frameworks/hs/hs ~/bin
+   ```
+4. Start the server with `sudo make serve`
+5. Optional: install the MacOS [project-switcher UI](https://github.com/dandavison/wormhole-gui)
+6. Optional: install the [requestly](https://chrome.google.com/webstore/detail/requestly-open-source-htt/mdnleldcmiljblolnjhpnblkcekpdkpa) chrome extension and create a rule like:
+   URL RegEx `/https://github.com/([^#]+)#L(\d+).*/` Redirect to URL `http://localhost/$1?line=$2`

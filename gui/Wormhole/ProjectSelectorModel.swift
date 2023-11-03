@@ -104,7 +104,7 @@ internal final class ProjectSelectorModel<V: Equatable>: ObservableObject {
     }
 
     internal func openProject(name: String, landInTerminal: Bool) async throws {
-        var url = "http://wormhole/project/" + name
+        var url = "http://localhost:7117/project/" + name
         url = url + (landInTerminal ? "?land-in=terminal" : "?land-in=editor")
         let _ = try await URLSession.shared.data(from: URL(string: url)!)
     }

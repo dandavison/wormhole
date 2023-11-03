@@ -63,7 +63,7 @@ pub fn select_editor_workspace(editor: Editor, project: &Project, action: &Windo
     local function is_requested_workspace(window)
         if window:application():title() == '{}' then
             print('window:title() = '  .. window:title())
-            return window:title():endswith('{}')
+            return window:title():endswith('{}') or window:title():endswith('{} (Workspace)')
         end
     end
 
@@ -78,6 +78,7 @@ pub fn select_editor_workspace(editor: Editor, project: &Project, action: &Windo
         editor.application_name(),
         project.name,
         editor.application_name(),
+        project.name,
         project.name,
         success_marker,
         action.lua(),

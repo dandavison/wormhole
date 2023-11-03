@@ -1,7 +1,7 @@
 use crate::editor::Editor;
 use crate::terminal::Terminal;
 
-pub const EDITOR: Editor = Editor::VSCodeInsiders;
+pub const EDITOR: Editor = Editor::VSCode;
 pub const TERMINAL: Terminal = Terminal::Alacritty { tmux: true };
 
 pub const PROJECTS_FILE: &'static str = "~/.config/wormhole/wormhole-projects.txt";

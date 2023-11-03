@@ -6,6 +6,7 @@ use std::{process::Command, slice::Iter};
 use crate::config;
 use crate::project::Project;
 use crate::util::info;
+use crate::util::warn;
 
 struct Window {
     id: String,
@@ -30,15 +31,22 @@ pub fn open(project: &Project) -> Result<(), String> {
     }
     let project = project.clone();
     thread::spawn(move || {
-        fs::write(
-            config::ENV_FILE,
-            format!(
-                "export WORMHOLE_PROJECT_NAME={} WORMHOLE_PROJECT_DIR={}",
-                &project.name,
-                project.path.as_path().to_str().unwrap()
-            ),
-        )
-        .unwrap()
+        if let Some(env_file) = config::ENV_FILE {
+            fs::write(
+                env_file,
+                format!(
+                    "export WORMHOLE_PROJECT_NAME={} WORMHOLE_PROJECT_DIR={}",
+                    &project.name,
+                    project.path.as_path().to_str().unwrap()
+                ),
+            )
+            .unwrap_or_else(|_| {
+                warn(&format!(
+                    "Failed to write to config::ENV_FILE at {}",
+                    env_file
+                ))
+            })
+        }
     });
     Ok(())
 }

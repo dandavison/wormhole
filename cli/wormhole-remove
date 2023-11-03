@@ -1,3 +1,3 @@
 #!/bin/bash
 name="$1"
-curl -s http://wormhole/remove-project/$name
+curl -s http://wormhole:7117/remove-project/$name

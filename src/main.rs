@@ -27,7 +27,7 @@ async fn main() {
 
 async fn serve_http() {
     project::read_projects();
-    let addr = SocketAddr::from(([127, 0, 0, 1], 80));
+    let addr = SocketAddr::from(([127, 0, 0, 1], config::WORMHOLE_PORT));
 
     let make_service =
         make_service_fn(|_conn| async { Ok::<_, Infallible>(service_fn(wormhole::service)) });

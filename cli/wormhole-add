@@ -6,4 +6,4 @@ die() {
 
 path="$1"
 [ -d "$path" ] || die "Not a directory: $path"
-curl -s http://wormhole/add-project/$path
+curl -s http://wormhole:7117/add-project/$path

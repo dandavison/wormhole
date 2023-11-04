@@ -58,7 +58,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
 
 fn switch_project(url_path: String, line: Option<usize>, land_in: Option<Application>) {
     let project_path = if url_path == "/previous-project/" {
-        projects::previous_project().map(|p| p.as_project_path())
+        projects::previous().map(|p| p.as_project_path())
     } else if let Some(name) = url_path.strip_prefix("/project/") {
         Project::by_name(name).map(|p| p.as_project_path())
     } else if let Some(absolute_path) = url_path.strip_prefix("/file/") {

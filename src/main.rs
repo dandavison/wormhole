@@ -22,12 +22,12 @@ use util::warn;
 
 #[tokio::main]
 async fn main() {
-    projects::read_projects();
+    projects::read();
     tokio::join!(serve_http());
 }
 
 async fn serve_http() {
-    projects::read_projects();
+    projects::read();
     let addr = SocketAddr::from(([127, 0, 0, 1], config::WORMHOLE_PORT));
 
     let make_service =

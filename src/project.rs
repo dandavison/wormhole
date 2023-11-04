@@ -46,7 +46,7 @@ impl Project {
     pub fn move_to_front(&self) {
         let idx = projects().get_index_of(&self.name).unwrap();
         projects().move_index(idx, 0);
-        thread::spawn(projects::write_projects);
+        thread::spawn(projects::write);
     }
 
     pub fn from_directory_path(path: PathBuf) -> Self {

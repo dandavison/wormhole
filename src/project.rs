@@ -9,6 +9,7 @@ use lazy_static::lazy_static;
 
 use crate::config;
 use crate::project_path::ProjectPath;
+use crate::util::{contract_user, expand_user};
 
 lazy_static! {
     static ref PROJECTS: Mutex<IndexMap<String, Project>> = Mutex::new(IndexMap::new());
@@ -98,18 +99,6 @@ pub fn read_projects() {
 
 fn projects_file() -> String {
     expand_user(config::PROJECTS_FILE)
-}
-
-fn expand_user(path: &str) -> String {
-    path.replacen("~", &home_dir().to_str().unwrap(), 1)
-}
-
-fn contract_user(path: &str) -> String {
-    path.replacen(&home_dir().to_str().unwrap(), "~", 1)
-}
-
-fn home_dir() -> PathBuf {
-    dirs::home_dir().unwrap_or_else(|| panic!("Cannot determine home directory"))
 }
 
 pub fn write_projects() -> Result<(), std::io::Error> {

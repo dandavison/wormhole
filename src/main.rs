@@ -4,6 +4,7 @@ mod endpoints;
 mod hammerspoon;
 mod project;
 mod project_path;
+mod projects;
 mod terminal;
 mod tmux;
 mod util;
@@ -21,12 +22,12 @@ use util::warn;
 
 #[tokio::main]
 async fn main() {
-    project::read_projects();
+    projects::read_projects();
     tokio::join!(serve_http());
 }
 
 async fn serve_http() {
-    project::read_projects();
+    projects::read_projects();
     let addr = SocketAddr::from(([127, 0, 0, 1], config::WORMHOLE_PORT));
 
     let make_service =

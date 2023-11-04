@@ -1,11 +1,11 @@
 use hyper::{Body, Response};
 use itertools::Itertools;
 
-use crate::project;
+use crate::projects;
 
 pub fn list_projects() -> Response<Body> {
     Response::new(Body::from(
-        project::list_project_names()
+        projects::list_project_names()
             .iter()
             .map(|s| s.as_str())
             .join("\n"),
@@ -13,11 +13,11 @@ pub fn list_projects() -> Response<Body> {
 }
 
 pub fn add_project(path: &str) -> Response<Body> {
-    project::add_project(path);
+    projects::add_project(path);
     Response::new(Body::from(format!("Added project: {}", path)))
 }
 
 pub fn remove_project(name: &str) -> Response<Body> {
-    project::remove_project(name);
+    projects::remove_project(name);
     Response::new(Body::from(format!("removed project: {}", name)))
 }

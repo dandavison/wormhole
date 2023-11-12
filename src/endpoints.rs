@@ -9,9 +9,9 @@ pub fn list_projects() -> Response<Body> {
     ))
 }
 
-pub fn add_project(path: &str) -> Response<Body> {
-    projects::add(path);
-    Response::new(Body::from(format!("Added project: {}", path)))
+pub fn add_project(path: &str, name: Option<&str>) -> Response<Body> {
+    let name = projects::add(path, name);
+    Response::new(Body::from(format!("{} -> {}", name, path)))
 }
 
 pub fn remove_project(name: &str) -> Response<Body> {

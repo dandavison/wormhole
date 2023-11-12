@@ -25,6 +25,7 @@ pub enum WindowAction {
 pub struct QueryParams {
     pub land_in: Option<Application>,
     pub line: Option<usize>,
+    pub name: Option<String>,
 }
 
 pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
@@ -39,7 +40,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         Ok(endpoints::list_projects())
     } else if let Some(path) = path.strip_prefix("/add-project/") {
         // An absolute path must have a double slash: /add-project//Users/me/file.rs
-        Ok(endpoints::add_project(&path))
+        Ok(endpoints::add_project(&path, params.name.as_deref()))
     } else if let Some(name) = path.strip_prefix("/remove-project/") {
         Ok(endpoints::remove_project(&name))
     } else {
@@ -77,6 +78,7 @@ impl QueryParams {
         let mut params = QueryParams {
             land_in: None,
             line: None,
+            name: None,
         };
         if let Some(query) = query {
             for (key, val) in
@@ -90,6 +92,8 @@ impl QueryParams {
                     }
                 } else if key == "line" {
                     params.line = val.parse::<usize>().ok();
+                } else if key == "name" {
+                    params.name = Some(val.to_string());
                 }
             }
         }

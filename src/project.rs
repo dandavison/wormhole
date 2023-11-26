@@ -8,6 +8,7 @@ use std::thread;
 pub struct Project {
     pub name: String,
     pub path: PathBuf,
+    pub aliases: Vec<String>,
 }
 
 impl Project {
@@ -36,7 +37,17 @@ impl Project {
     }
 
     pub fn by_name(name: &str) -> Option<Self> {
-        projects().get(name).cloned()
+        let projects = projects();
+        if let Some(project) = projects.get(name) {
+            Some(project.clone())
+        } else {
+            for project in projects.values() {
+                if project.aliases.iter().find(|&a| a == name).is_some() {
+                    return Some(project.clone());
+                }
+            }
+            None
+        }
     }
 
     pub fn by_repo_name(repo_name: &str) -> Option<Self> {
@@ -49,28 +60,30 @@ impl Project {
         thread::spawn(projects::write);
     }
 
-    pub fn from_directory_path(path: PathBuf) -> Self {
-        let name = path.file_name().unwrap().to_str().unwrap().to_string();
-        Self { name, path }
-    }
-
     pub fn parse(line: &str) -> Self {
         let parts: Vec<&str> = line.split("->").collect();
         let path = PathBuf::from(expand_user(parts[0].trim()));
-        let name = if parts.len() > 1 {
-            parts[1].trim().to_string()
+        let (name, aliases) = if parts.len() > 1 {
+            let names: Vec<String> = parts[1].split(",").map(|s| s.trim().to_string()).collect();
+            (names[0].clone(), names)
         } else {
-            path.file_name()
+            let name = path
+                .file_name()
                 .map(|name| name.to_string_lossy().to_string())
-                .unwrap()
+                .unwrap();
+            (name, vec![])
         };
-        Self { name, path }
+        Self {
+            name,
+            path,
+            aliases,
+        }
     }
 
     pub fn format(&self) -> String {
         let mut s = contract_user(self.path.to_str().unwrap());
-        if self.name != self.path.file_name().unwrap().to_str().unwrap() {
-            s += &format!(" -> {}", self.name);
+        if !self.aliases.is_empty() {
+            s += &format!(" -> {}", self.aliases.join(", "));
         }
         s
     }

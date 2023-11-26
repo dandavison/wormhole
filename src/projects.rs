@@ -46,12 +46,23 @@ pub fn list_names() -> Vec<String> {
     names.into()
 }
 
-pub fn add(path: &str, name: Option<&str>) -> String {
-    let project = Project::from_directory_path(PathBuf::from(path.to_string()));
-    let name = name.unwrap_or_else(|| &project.name).to_string();
-    projects().insert(name.clone(), project);
+pub fn add(path: &str, names: Vec<String>) {
+    let path = PathBuf::from(path.to_string());
+    let name = if !names.is_empty() {
+        names[0].clone()
+    } else {
+        path.file_name().unwrap().to_str().unwrap().to_string()
+    };
+
+    projects().insert(
+        name.clone(),
+        Project {
+            name,
+            path,
+            aliases: names,
+        },
+    );
     thread::spawn(write);
-    name
 }
 
 pub fn remove(name: &str) {

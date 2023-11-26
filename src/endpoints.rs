@@ -9,9 +9,10 @@ pub fn list_projects() -> Response<Body> {
     ))
 }
 
-pub fn add_project(path: &str, name: Option<&str>) -> Response<Body> {
-    let name = projects::add(path, name);
-    Response::new(Body::from(format!("{} -> {}", name, path)))
+pub fn add_project(path: &str, names: Vec<String>) -> Response<Body> {
+    let resp = format!("{} -> {}", path, names.join(", "));
+    projects::add(path, names);
+    Response::new(Body::from(resp))
 }
 
 pub fn remove_project(name: &str) -> Response<Body> {

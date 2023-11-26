@@ -72,6 +72,7 @@ pub fn select_editor_workspace(editor: Editor, project: &Project, action: &Windo
             print('Found matching application: ' .. window:application():title())
             print('{}: ' .. window:title())
             window:{}()
+            break
         end
     end
     "#,

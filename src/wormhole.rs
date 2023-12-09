@@ -40,9 +40,9 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         Ok(endpoints::list_projects())
     } else if let Some(path) = path.strip_prefix("/add-project/") {
         // An absolute path must have a double slash: /add-project//Users/me/file.rs
-        Ok(endpoints::add_project(&path, params.names))
+        Ok(endpoints::add_project(&path.trim(), params.names))
     } else if let Some(name) = path.strip_prefix("/remove-project/") {
-        Ok(endpoints::remove_project(&name))
+        Ok(endpoints::remove_project(&name.trim()))
     } else {
         // wormhole uses the `hs` client to make a call to the hammerspoon
         // service. But one might also want to use hammerspoon to configure a

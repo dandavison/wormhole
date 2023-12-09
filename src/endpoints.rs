@@ -10,7 +10,10 @@ pub fn list_projects() -> Response<Body> {
 }
 
 pub fn add_project(path: &str, names: Vec<String>) -> Response<Body> {
-    let resp = format!("{} -> {}", path, names.join(", "));
+    let mut resp = path.to_string();
+    if !names.is_empty() {
+        resp = format!("{} -> {}", resp, names.join(", "));
+    }
     projects::add(path, names);
     Response::new(Body::from(resp))
 }

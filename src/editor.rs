@@ -86,7 +86,7 @@ fn open_editor_application_at_path(path: &ProjectPath) -> Result<(), String> {
         .and_then(|(_, line)| line.to_owned());
     let uri = config::EDITOR.open_file_uri(&path.absolute_path(), line);
 
-    warn(&format!("open_editor_application_at_path({uri})"));
+    info(&format!("open_editor_application_at_path({uri})"));
     if let Err(err) = Command::new("open").arg(&uri).spawn() {
         Err(format!("Failed to open URI: {}: {}", uri, err))
     } else {

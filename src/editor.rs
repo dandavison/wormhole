@@ -5,7 +5,7 @@ use crate::{
     project::Project,
     project_path::ProjectPath,
     tmux,
-    util::{error, info, warn},
+    util::{error, info},
     wormhole::WindowAction,
 };
 

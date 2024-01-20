@@ -87,4 +87,8 @@ impl Project {
         }
         s
     }
+
+    pub fn is_terminal_only(&self) -> bool {
+        self.name == "services"
+    }
 }

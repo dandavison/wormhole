@@ -23,6 +23,12 @@ impl ProjectPath {
                 warn(&format!("Error opening {} in tmux: {}", &project.name, err))
             })
         });
+        if self.project.is_terminal_only() {
+            terminal_thread.join().unwrap();
+            config::TERMINAL.focus();
+            self.project.move_to_front();
+            return;
+        }
         let project_path = self.clone();
         let editor_window_action = match &land_in {
             Some(Application::Editor) => WindowAction::Focus,

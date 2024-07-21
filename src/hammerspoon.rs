@@ -9,9 +9,10 @@ use crate::wormhole::{Application, WindowAction};
 impl WindowAction {
     fn lua(&self) -> &'static str {
         match self {
-            WindowAction::Focus => "focus",
-            WindowAction::Raise => "raise",
-            WindowAction::Close => "close",
+            WindowAction::Focus => "focus()",
+            WindowAction::Raise => "raise()",
+            WindowAction::Close => "close()",
+            WindowAction::ExitFullScreen => "setFullScreen(false)",
         }
     }
 }
@@ -72,7 +73,7 @@ pub fn select_editor_workspace(editor: Editor, project: &Project, action: &Windo
         if is_requested_workspace(window) then
             print('Found matching application: ' .. window:application():title())
             print('{}: ' .. window:title())
-            window:{}()
+            window:{}
             break
         end
     end

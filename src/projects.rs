@@ -68,6 +68,11 @@ pub fn add(path: &str, names: Vec<String>) {
 
 pub fn remove(name: &str) {
     if let Some(project) = projects().get(name) {
+        hammerspoon::select_editor_workspace(
+            config::EDITOR,
+            project,
+            &WindowAction::ExitFullScreen,
+        );
         hammerspoon::select_editor_workspace(config::EDITOR, project, &WindowAction::Close);
     }
     projects().remove(name);

@@ -21,6 +21,7 @@ pub enum WindowAction {
     Focus,
     Raise,
     Close,
+    ExitFullScreen,
 }
 
 pub struct QueryParams {

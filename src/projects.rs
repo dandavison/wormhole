@@ -7,9 +7,10 @@ use indexmap::IndexMap;
 use itertools::Itertools;
 use lazy_static::lazy_static;
 
-use crate::config;
 use crate::project::Project;
 use crate::util::expand_user;
+use crate::wormhole::WindowAction;
+use crate::{config, hammerspoon};
 
 lazy_static! {
     static ref PROJECTS: Mutex<IndexMap<String, Project>> = Mutex::new(IndexMap::new());
@@ -66,6 +67,9 @@ pub fn add(path: &str, names: Vec<String>) {
 }
 
 pub fn remove(name: &str) {
+    if let Some(project) = projects().get(name) {
+        hammerspoon::select_editor_workspace(config::EDITOR, project, &WindowAction::Close);
+    }
     projects().remove(name);
     thread::spawn(write);
 }

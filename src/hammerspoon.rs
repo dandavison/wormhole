@@ -11,6 +11,7 @@ impl WindowAction {
         match self {
             WindowAction::Focus => "focus",
             WindowAction::Raise => "raise",
+            WindowAction::Close => "close",
         }
     }
 }

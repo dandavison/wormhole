@@ -20,6 +20,7 @@ pub enum Application {
 pub enum WindowAction {
     Focus,
     Raise,
+    Close,
 }
 
 pub struct QueryParams {

@@ -77,3 +77,9 @@ pub fn remove(name: &str) {
 pub fn previous() -> Option<Project> {
     projects().values().nth(1).cloned()
 }
+
+pub fn clean_up() {
+    for name in projects().keys().skip(5) {
+        remove(name)
+    }
+}

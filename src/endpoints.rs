@@ -22,3 +22,8 @@ pub fn remove_project(name: &str) -> Response<Body> {
     projects::remove(name);
     Response::new(Body::from(format!("removed project: {}", name)))
 }
+
+pub fn clean_up_projects() -> Response<Body> {
+    projects::clean_up();
+    Response::new(Body::from(format!("cleaned up projects")))
+}

@@ -1,10 +1,14 @@
-use std::{path::Path, process::Command};
+use std::{
+    path::Path,
+    process::Command,
+    thread::{self, sleep},
+    time::Duration,
+};
 
 use crate::{
-    config, hammerspoon,
+    config,
     project::Project,
     project_path::ProjectPath,
-    tmux,
     util::{error, info},
     wormhole::WindowAction,
 };
@@ -42,26 +46,27 @@ impl Editor {
 }
 
 fn open_project(project: &Project) -> Result<(), String> {
-    let executable = match config::EDITOR {
-        VSCode | VSCodeInsiders => "code",
-        PyCharm => "pycharm",
-        IntelliJ => "idea",
-    };
-    tmux::tmux(
-        [
-            "send-keys",
-            "-t",
-            &project.name,
-            &format!("{executable} ."),
-            "Enter",
-        ]
-        .iter(),
-    );
-    Ok(())
+    open_editor_application_at_path(&project.root())
 }
 
 fn select_project(project: &Project, window_action: &WindowAction) -> bool {
-    hammerspoon::select_editor_workspace(config::EDITOR, project, window_action)
+    let ok = open_editor_application_at_path(&project.root())
+        .ok()
+        .is_some();
+    if false {
+        match window_action {
+            // HACK: We open the editor using a URL like vscode://file/... which focuses the editor. If
+            // that's not what we wanted then focus the terminal afterwards.
+            WindowAction::Focus => {
+                thread::spawn(|| {
+                    sleep(Duration::from_millis(1000));
+                    config::TERMINAL.focus()
+                });
+            }
+            _ => {}
+        };
+    }
+    ok
 }
 
 pub fn open_path(path: &ProjectPath, window_action: WindowAction) -> Result<(), String> {

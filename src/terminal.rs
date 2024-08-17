@@ -1,4 +1,11 @@
-use crate::{hammerspoon, project::Project, tmux, util::info};
+use std::fs;
+
+use crate::{
+    config, hammerspoon,
+    project::Project,
+    tmux,
+    util::{info, warn},
+};
 
 pub enum Terminal {
     Alacritty { tmux: bool },
@@ -22,5 +29,24 @@ impl Terminal {
         match self {
             Alacritty { tmux: _ } => "Alacritty",
         }
+    }
+}
+
+pub fn write_wormhole_env_vars(project: &Project) {
+    if let Some(env_file) = config::ENV_FILE {
+        fs::write(
+            env_file,
+            format!(
+                "export WORMHOLE_PROJECT_NAME={} WORMHOLE_PROJECT_DIR={}",
+                &project.name,
+                project.path.as_path().to_str().unwrap()
+            ),
+        )
+        .unwrap_or_else(|_| {
+            warn(&format!(
+                "Failed to write to config::ENV_FILE at {}",
+                env_file
+            ))
+        })
     }
 }

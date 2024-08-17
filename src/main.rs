@@ -8,7 +8,11 @@ mod projects;
 mod terminal;
 mod tmux;
 mod util;
+mod wezterm;
 mod wormhole;
+#[macro_use]
+pub mod pst;
+pub use pst::*;
 
 use std::convert::Infallible;
 use std::net::SocketAddr;

@@ -29,7 +29,7 @@ impl Terminal {
         hammerspoon::launch_or_focus(self.application_name())
     }
 
-    fn application_name(&self) -> &'static str {
+    pub fn application_name(&self) -> &'static str {
         match self {
             Wezterm => "Wezterm",
             Alacritty { tmux: _ } => "Alacritty",

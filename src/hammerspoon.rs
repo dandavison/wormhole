@@ -3,7 +3,7 @@ use std::str;
 
 use crate::editor::Editor;
 use crate::project::Project;
-use crate::util::{error, info, warn};
+use crate::util::{error, info, panic, warn};
 use crate::wormhole::{Application, WindowAction};
 
 impl WindowAction {
@@ -106,7 +106,7 @@ fn hammerspoon(lua: &str) -> Vec<u8> {
         .arg("-c")
         .arg(lua)
         .output()
-        .unwrap_or_else(|_| panic!("Failed to execute hammerspoon"));
+        .unwrap_or_else(|_| panic("Failed to execute hammerspoon"));
     for line in str::from_utf8(&output.stderr)
         .unwrap()
         .split_terminator("\n")

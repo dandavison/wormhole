@@ -1,6 +1,6 @@
 use crate::project_path::ProjectPath;
 use crate::projects::{self, projects};
-use crate::util::{contract_user, expand_user};
+use crate::util::{contract_user, expand_user, panic};
 use std::path::{Path, PathBuf};
 use std::thread;
 
@@ -70,7 +70,7 @@ impl Project {
             let name = path
                 .file_name()
                 .map(|name| name.to_string_lossy().to_string())
-                .unwrap_or_else(|| panic!("invalid path: {}", path.display()));
+                .unwrap_or_else(|| panic(&format!("invalid path: {}", path.display())));
             (name, vec![])
         };
         Self {

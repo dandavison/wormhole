@@ -20,7 +20,10 @@ impl ProjectPath {
         let project = self.project.clone();
         let terminal_thread = thread::spawn(move || {
             config::TERMINAL.open(&project).unwrap_or_else(|err| {
-                warn(&format!("Error opening {} in tmux: {}", &project.name, err))
+                warn(&format!(
+                    "Error opening {} in terminal: {}",
+                    &project.name, err
+                ))
             })
         });
         if self.project.is_terminal_only() {

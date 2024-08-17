@@ -1,13 +1,18 @@
-use crate::{hammerspoon, project::Project, tmux, util::info};
+use crate::{hammerspoon, project::Project, tmux, util::info, wezterm};
 
 pub enum Terminal {
-    Alacritty { tmux: bool },
+    Wezterm,
+    #[allow(dead_code)]
+    Alacritty {
+        tmux: bool,
+    },
 }
 use Terminal::*;
 
 impl Terminal {
     pub fn open(&self, project: &Project) -> Result<(), String> {
         match self {
+            Wezterm => wezterm::open(project),
             Alacritty { tmux: true } => tmux::open(project),
             _ => unimplemented!(),
         }
@@ -20,6 +25,7 @@ impl Terminal {
 
     fn application_name(&self) -> &'static str {
         match self {
+            Wezterm => "Wezterm",
             Alacritty { tmux: _ } => "Alacritty",
         }
     }

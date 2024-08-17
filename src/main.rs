@@ -8,6 +8,7 @@ mod projects;
 mod terminal;
 mod tmux;
 mod util;
+mod wezterm;
 mod wormhole;
 
 use std::convert::Infallible;

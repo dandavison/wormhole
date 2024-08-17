@@ -1,9 +1,9 @@
+use core::{panic, str};
 use std::{
     ffi::OsStr,
     fmt::Display,
     path::{Path, PathBuf},
     process::Command,
-    str,
 };
 
 pub fn info(msg: &str) {
@@ -41,16 +41,18 @@ pub fn home_dir() -> PathBuf {
 }
 
 pub fn notify(msg: &str) {
-    Command::new("terminal-notifier")
-        .args(&["-message", msg, "-title", "wormhole"])
-        .output()
-        .unwrap_or_else(|_| panic!("failed to execute terminal-notifier"));
+    execute_command(
+        "terminal-notifier",
+        ["-message", msg, "-title", "wormhole"],
+        "/tmp",
+    );
 }
 
 pub fn execute_command<I, S, P>(program: S, args: I, current_dir: P) -> String
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
+    S: Copy,
     S: Display,
     P: AsRef<Path>,
 {
@@ -58,11 +60,17 @@ where
         .args(args)
         .current_dir(current_dir)
         .output()
-        .unwrap_or_else(|_| panic(&format!("failed to execute")));
+        .unwrap_or_else(|_| panic(&format!("failed to execute {program}")));
     let stdout = str::from_utf8(&output.stdout)
-        .unwrap_or_else(|_| panic("failed to parse stdout"))
+        .unwrap_or_else(|err| panic(&format!("failed to parse stdout from {program}: {err}")))
         .trim_end()
         .to_string();
-    assert!(output.stderr.is_empty());
+    if !output.stderr.is_empty() {
+        let stderr = str::from_utf8(&output.stderr)
+            .unwrap_or_else(|err| panic(&format!("failed to parse stderr from {program}: {err}")));
+        panic(&format!(
+            "program {program} produced output on stderr: {stderr}"
+        ));
+    }
     stdout
 }

@@ -1,11 +1,9 @@
 use serde::Deserialize;
-use std::ffi::OsStr;
-use std::process::Command;
 use std::{str, thread};
 
 use crate::project::Project;
 use crate::terminal::write_wormhole_env_vars;
-use crate::util::{info, panic, warn};
+use crate::util::{execute_command, info, panic, warn};
 
 #[allow(dead_code)]
 #[derive(Deserialize)]
@@ -44,14 +42,18 @@ pub fn open(project: &Project) -> Result<(), String> {
     info(&format!("wezterm::open({project:?})"));
     let pane = Pane::get_first_by_tab_title(&project.name)
         .unwrap_or_else(|| new_tab(&project.name, &project.path.to_str().unwrap()));
-    wezterm(["cli", "activate-tab", "--tab-id", &pane.tab_id.to_string()]);
+    execute_command(
+        "wezterm",
+        ["cli", "activate-tab", "--tab-id", &pane.tab_id.to_string()],
+        &project.path,
+    );
     let project = project.clone();
     thread::spawn(move || write_wormhole_env_vars(&project));
     Ok(())
 }
 
 fn new_tab(title: &str, cwd: &str) -> Pane {
-    let pane_id: u32 = wezterm(["cli", "spawn", "--cwd", cwd])
+    let pane_id: u32 = execute_command("wezterm", ["cli", "spawn", "--cwd", cwd], cwd)
         .parse()
         .unwrap_or_else(|_| panic("failed to parse `wezterm cli spawn` output"));
     let pane = Pane::get_by_id(pane_id).unwrap_or_else(|| {
@@ -59,25 +61,27 @@ fn new_tab(title: &str, cwd: &str) -> Pane {
             "wezterm pane returned by spawn not found: {pane_id}"
         ))
     });
-    wezterm([
-        "cli",
-        "set-tab-title",
-        "--pane-id",
-        &pane_id.to_string(),
-        title,
-    ]);
+    execute_command(
+        "wezterm",
+        [
+            "cli",
+            "set-tab-title",
+            "--pane-id",
+            &pane_id.to_string(),
+            title,
+        ],
+        cwd,
+    );
     pane
 }
 
 fn list_panes() -> Vec<Pane> {
-    let output = Command::new("wezterm")
-        .args(&["cli", "list", "--format", "json"])
-        .output()
-        .unwrap_or_else(|err| panic(&format!("Failed to execute wezterm command: {err}")));
-
-    let json_output = String::from_utf8_lossy(&output.stdout);
-    serde_json::from_str(&json_output)
-        .unwrap_or_else(|err| (panic(&format!("Failed to parse JSON: {err}\n{json_output}"))))
+    let output = execute_command("wezterm", ["cli", "list", "--format", "json"], "/tmp");
+    serde_json::from_str(&output).unwrap_or_else(|err| {
+        panic(&format!(
+            "Failed to parse `wezterm cli list` output: {err}\n{output}"
+        ))
+    })
 }
 
 impl Pane {
@@ -100,21 +104,4 @@ impl Pane {
         warn(&format!("did not find pane with tab title: {title}"));
         None
     }
-}
-
-pub fn wezterm<I, S>(args: I) -> String
-where
-    I: IntoIterator<Item = S>,
-    S: AsRef<OsStr>,
-{
-    let output = Command::new("wezterm")
-        .args(args)
-        .output()
-        .unwrap_or_else(|_| panic("failed to execute wezterm"));
-    let stdout = str::from_utf8(&output.stdout)
-        .unwrap_or_else(|_| panic("failed to parse stdout"))
-        .trim_end()
-        .to_string();
-    assert!(output.stderr.is_empty());
-    stdout
 }

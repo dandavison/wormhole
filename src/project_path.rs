@@ -4,6 +4,7 @@ use std::thread;
 use regex::Regex;
 
 use crate::hammerspoon::current_application;
+use crate::ps;
 use crate::util::{info, warn};
 use crate::wormhole::{Application, WindowAction};
 use crate::{config, editor, project::Project};
@@ -16,7 +17,7 @@ pub struct ProjectPath {
 
 impl ProjectPath {
     pub fn open(&self, land_in: Option<Application>) {
-        info(&format!("ProjectPath({self:?}).open({land_in:?})"));
+        ps!("ProjectPath({self:?}).open({land_in:?})");
         let project = self.project.clone();
         let terminal_thread = thread::spawn(move || {
             config::TERMINAL.open(&project).unwrap_or_else(|err| {
@@ -34,11 +35,17 @@ impl ProjectPath {
         }
         let project_path = self.clone();
         let editor_window_action = match &land_in {
-            Some(Application::Editor) => WindowAction::Focus,
-            Some(Application::Terminal) => WindowAction::Raise,
+            Some(Application::Editor) => WindowAction::Raise,
+            Some(Application::Terminal) => WindowAction::Focus,
             _ => match current_application() {
-                Application::Editor => WindowAction::Focus,
-                _ => WindowAction::Raise,
+                Application::Editor => {
+                    info("current_application is Editor => raise Editor");
+                    WindowAction::Raise
+                }
+                _ => {
+                    info("current_application is Other => don't raise Editor");
+                    WindowAction::Focus
+                }
             },
         };
         let editor_thread = thread::spawn(move || {
@@ -77,16 +84,16 @@ impl ProjectPath {
     pub fn from_github_url(path: &str, line: Option<usize>) -> Option<Self> {
         let re = Regex::new(r"/([^/]+)/([^/]+)/blob/([^/]+)/([^?]*)").unwrap();
         if let Some(captures) = re.captures(path) {
-            info("Handling as github URL");
+            ps!("Handling as github URL");
             let path = PathBuf::from(captures.get(4).unwrap().as_str());
             let repo = captures.get(2).unwrap().as_str();
 
-            info(&format!(
+            ps!(
                 "path: {} line: {:?} repo: {}",
                 path.to_string_lossy(),
                 line,
                 repo
-            ));
+            );
             if let Some(project) = Project::by_repo_name(repo) {
                 Some(ProjectPath {
                     project,

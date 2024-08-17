@@ -1,22 +1,11 @@
 use std::process::Command;
 use std::str;
 
-use crate::editor::Editor;
-use crate::project::Project;
-use crate::util::{error, info, panic, warn};
-use crate::wormhole::{Application, WindowAction};
-
-impl WindowAction {
-    fn lua(&self) -> &'static str {
-        match self {
-            WindowAction::Focus => "focus",
-            WindowAction::Raise => "raise",
-        }
-    }
-}
+use crate::config;
+use crate::util::{error, panic, warn};
+use crate::wormhole::Application;
 
 pub fn current_application() -> Application {
-    let mut app = Application::Other;
     match str::from_utf8(&hammerspoon(
         r#"
         local focusedWindow = hs.window.focusedWindow()
@@ -24,73 +13,23 @@ pub fn current_application() -> Application {
             print(focusedWindow:application():title())
         end
     "#,
-    )) {
+    ))
+    .map(str::trim)
+    {
         Ok(app_title) => {
-            let app_title = app_title.trim();
-            if app_title == "Alacritty" {
-                app = Application::Terminal;
+            if app_title == config::TERMINAL.application_name() {
+                Application::Terminal
+            } else if app_title == config::EDITOR.application_name() {
+                Application::Editor
             } else {
-                for editor in [
-                    Editor::VSCodeInsiders,
-                    Editor::VSCode,
-                    Editor::PyCharm,
-                    Editor::IntelliJ,
-                ] {
-                    if app_title == editor.application_name() {
-                        app = Application::Editor;
-                    }
-                }
+                Application::Other
             }
         }
-        Err(err) => warn(&format!("current_application() ERROR: {err}")),
+        Err(err) => {
+            warn(&format!("current_application() ERROR: {err}"));
+            Application::Other
+        }
     }
-    app
-}
-
-pub fn select_editor_workspace(editor: Editor, project: &Project, action: &WindowAction) -> bool {
-    info(&format!(
-        "hammerspoon::select_editor_workspace({editor:?}, {project:?} {action:?})"
-    ));
-    let success_marker = "Found matching window";
-    let stdout = hammerspoon(&format!(
-        r#"
-    print('Searching for application "{}" window matching "{}"')
-
-    function string:endswith(s)
-        return self:sub(-#s) == s
-    end
-
-    local function is_requested_workspace(window)
-        if window:application():title() == '{}' then
-            print('window:title() = '  .. window:title())
-            return window:title():endswith('{}') or window:title():endswith('{} (Workspace)')
-        end
-    end
-
-    for _, window in pairs(hs.window.allWindows()) do
-        if is_requested_workspace(window) then
-            print('Found matching application: ' .. window:application():title())
-            print('{}: ' .. window:title())
-            window:{}()
-            break
-        end
-    end
-    "#,
-        editor.application_name(),
-        project.name,
-        editor.application_name(),
-        project.name,
-        project.name,
-        success_marker,
-        action.lua(),
-    ));
-
-    let mut success = false;
-    for line in str::from_utf8(&stdout).unwrap().split_terminator("\n") {
-        info(line);
-        success |= line.contains(success_marker);
-    }
-    success
 }
 
 pub fn launch_or_focus(application_name: &str) {

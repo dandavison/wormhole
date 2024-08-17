@@ -4,7 +4,6 @@ use std::{process::Command, slice::Iter};
 
 use crate::project::Project;
 use crate::terminal::write_wormhole_env_vars;
-use crate::util::info;
 use crate::util::panic;
 
 struct Window {
@@ -13,7 +12,7 @@ struct Window {
 }
 
 pub fn open(project: &Project) -> Result<(), String> {
-    info(&format!("tmux::open({project:?})"));
+    println!("tmux::open({project:?})");
     if let Some(window) = get_window(&project.name) {
         tmux(["select-window", "-t", &window.id].iter());
     } else {

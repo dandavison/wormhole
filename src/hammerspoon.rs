@@ -106,7 +106,7 @@ fn hammerspoon(lua: &str) -> Vec<u8> {
         .arg("-c")
         .arg(lua)
         .output()
-        .expect("Failed to execute hammerspoon");
+        .unwrap_or_else(|_| panic!("Failed to execute hammerspoon"));
     for line in str::from_utf8(&output.stderr)
         .unwrap()
         .split_terminator("\n")

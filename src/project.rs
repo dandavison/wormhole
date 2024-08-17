@@ -70,7 +70,7 @@ impl Project {
             let name = path
                 .file_name()
                 .map(|name| name.to_string_lossy().to_string())
-                .unwrap();
+                .unwrap_or_else(|| panic!("invalid path: {}", path.display()));
             (name, vec![])
         };
         Self {

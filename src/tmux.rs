@@ -86,7 +86,7 @@ pub fn tmux(args: Iter<&str>) -> String {
         .args(["-S", &socket_path])
         .args(args)
         .output()
-        .expect("Failed to execute command");
+        .unwrap_or_else(|_| panic!("Failed to execute command"));
     let stdout = str::from_utf8(&output.stdout).unwrap().to_string();
     assert!(output.stderr.is_empty());
     stdout

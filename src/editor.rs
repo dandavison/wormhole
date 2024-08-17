@@ -4,8 +4,7 @@ use crate::{
     config, hammerspoon,
     project::Project,
     project_path::ProjectPath,
-    tmux,
-    util::{error, info},
+    util::{error, execute_command, info},
     wormhole::WindowAction,
 };
 
@@ -41,29 +40,6 @@ impl Editor {
     }
 }
 
-fn open_project(project: &Project) -> Result<(), String> {
-    let executable = match config::EDITOR {
-        VSCode | VSCodeInsiders => "code",
-        PyCharm => "pycharm",
-        IntelliJ => "idea",
-    };
-    tmux::tmux(
-        [
-            "send-keys",
-            "-t",
-            &project.name,
-            &format!("{executable} ."),
-            "Enter",
-        ]
-        .iter(),
-    );
-    Ok(())
-}
-
-fn select_project(project: &Project, window_action: &WindowAction) -> bool {
-    hammerspoon::select_editor_workspace(config::EDITOR, project, window_action)
-}
-
 pub fn open_path(path: &ProjectPath, window_action: WindowAction) -> Result<(), String> {
     info(&format!("editor::open_path({path:?}, {window_action:?})"));
     if !select_project(&path.project, &window_action) {
@@ -77,6 +53,20 @@ pub fn open_path(path: &ProjectPath, window_action: WindowAction) -> Result<(), 
         open_editor_application_at_path(path)?
     }
     Ok(())
+}
+
+fn open_project(project: &Project) -> Result<(), String> {
+    let executable = match config::EDITOR {
+        VSCode | VSCodeInsiders => "code",
+        PyCharm => "pycharm",
+        IntelliJ => "idea",
+    };
+    execute_command(executable, [], &project.path);
+    Ok(())
+}
+
+fn select_project(project: &Project, window_action: &WindowAction) -> bool {
+    hammerspoon::select_editor_workspace(config::EDITOR, project, window_action)
 }
 
 fn open_editor_application_at_path(path: &ProjectPath) -> Result<(), String> {

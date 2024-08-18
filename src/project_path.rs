@@ -4,8 +4,9 @@ use std::thread;
 use regex::Regex;
 
 use crate::hammerspoon::current_application;
+use crate::projects::{Mutation, Projects};
 use crate::ps;
-use crate::util::{info, warn};
+use crate::util::warn;
 use crate::wormhole::{Application, WindowAction};
 use crate::{config, editor, project::Project};
 
@@ -16,8 +17,7 @@ pub struct ProjectPath {
 }
 
 impl ProjectPath {
-    pub fn open(&self, land_in: Option<Application>) {
-        ps!("ProjectPath({self:?}).open({land_in:?})");
+    pub fn open(&self, mutation: Mutation, land_in: Option<Application>, projects: &mut Projects) {
         let project = self.project.clone();
         let terminal_thread = thread::spawn(move || {
             config::TERMINAL.open(&project).unwrap_or_else(|err| {
@@ -30,7 +30,7 @@ impl ProjectPath {
         if self.project.is_terminal_only() {
             terminal_thread.join().unwrap();
             config::TERMINAL.focus();
-            self.project.move_to_front();
+            projects.insert_right(&self.project.name);
             return;
         }
         let project_path = self.clone();
@@ -38,14 +38,8 @@ impl ProjectPath {
             Some(Application::Editor) => WindowAction::Raise,
             Some(Application::Terminal) => WindowAction::Focus,
             _ => match current_application() {
-                Application::Editor => {
-                    info("current_application is Editor => raise Editor");
-                    WindowAction::Raise
-                }
-                _ => {
-                    info("current_application is Other => don't raise Editor");
-                    WindowAction::Focus
-                }
+                Application::Editor => WindowAction::Raise,
+                _ => WindowAction::Focus,
             },
         };
         let editor_thread = thread::spawn(move || {
@@ -63,11 +57,11 @@ impl ProjectPath {
         if flip_keybinding ^ land_in_terminal {
             config::TERMINAL.focus()
         }
-        self.project.move_to_front();
+        projects.apply(mutation, &self.project.name);
     }
 
-    pub fn from_absolute_path(path: &Path) -> Option<Self> {
-        if let Some(project) = Project::by_path(&path) {
+    pub fn from_absolute_path(path: &Path, projects: &Projects) -> Option<Self> {
+        if let Some(project) = projects.by_path(path) {
             Some(ProjectPath {
                 project: project.clone(),
                 relative_path: Some((path.strip_prefix(&project.path).unwrap().into(), None)),
@@ -81,7 +75,7 @@ impl ProjectPath {
         }
     }
 
-    pub fn from_github_url(path: &str, line: Option<usize>) -> Option<Self> {
+    pub fn from_github_url(path: &str, line: Option<usize>, projects: &Projects) -> Option<Self> {
         let re = Regex::new(r"/([^/]+)/([^/]+)/blob/([^/]+)/([^?]*)").unwrap();
         if let Some(captures) = re.captures(path) {
             ps!("Handling as github URL");
@@ -94,7 +88,7 @@ impl ProjectPath {
                 line,
                 repo
             );
-            if let Some(project) = Project::by_repo_name(repo) {
+            if let Some(project) = projects.by_name(repo) {
                 Some(ProjectPath {
                     project,
                     relative_path: Some((path, line)),

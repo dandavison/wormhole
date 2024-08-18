@@ -3,9 +3,9 @@ use std::path::PathBuf;
 use std::thread;
 
 use crate::endpoints;
-use crate::project::Project;
 use crate::project_path::ProjectPath;
 use crate::projects;
+use crate::projects::Mutation;
 use crate::ps;
 use hyper::{Body, Request, Response};
 use url::form_urlencoded;
@@ -37,7 +37,9 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         return Ok(Response::new(Body::from("")));
     }
     let params = QueryParams::from_query(uri.query());
-    ps!("\nRequest: {} {:?}", uri, params);
+    if &path != "/list-projects/" {
+        ps!("\nRequest: {} {:?}", uri, params);
+    }
     if &path == "/list-projects/" {
         Ok(endpoints::list_projects())
     } else if let Some(path) = path.strip_prefix("/add-project/") {
@@ -60,24 +62,30 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
 }
 
 fn switch_project(url_path: String, line: Option<usize>, mut land_in: Option<Application>) {
-    let project_path = if url_path == "/previous-project/" {
-        projects::previous().map(|p| p.as_project_path())
+    // FIXME: projects mutex should be held for duration of this function
+    let mut projects = projects::lock();
+    let operation = if url_path == "/previous-project/" {
+        let p = projects.previous().map(|p| p.as_project_path());
+        Some((p, Mutation::RotateRight))
     } else if url_path == "/next-project/" {
-        // TODO
-        projects::previous().map(|p| p.as_project_path())
+        let p = projects.next().map(|p| p.as_project_path());
+        Some((p, Mutation::RotateLeft))
     } else if let Some(name) = url_path.strip_prefix("/project/") {
-        Project::by_name(name).map(|p| p.as_project_path())
+        let p = projects.by_name(name).map(|p| p.as_project_path());
+        Some((p, Mutation::Insert))
     } else if let Some(absolute_path) = url_path.strip_prefix("/file/") {
-        ProjectPath::from_absolute_path(&PathBuf::from(absolute_path))
-    } else if let Some(project_path) = ProjectPath::from_github_url(&url_path, line) {
+        let p = ProjectPath::from_absolute_path(&PathBuf::from(absolute_path), &projects);
+        Some((p, Mutation::Insert))
+    } else if let Some(project_path) = ProjectPath::from_github_url(&url_path, line, &projects) {
         land_in = Some(Application::Editor);
-        Some(project_path)
+        Some((Some(project_path), Mutation::Insert))
     } else {
         None
     };
-    if let Some(project_path) = project_path {
-        project_path.open(land_in)
+    if let Some((Some(project_path), mutation)) = operation {
+        project_path.open(mutation, land_in, &mut projects)
     }
+    projects.print();
 }
 
 impl QueryParams {

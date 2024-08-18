@@ -5,7 +5,11 @@ use crate::projects;
 
 pub fn list_projects() -> Response<Body> {
     Response::new(Body::from(
-        projects::list_names().iter().map(|s| s.as_str()).join("\n"),
+        projects::lock()
+            .names()
+            .iter()
+            .map(|s| s.as_str())
+            .join("\n"),
     ))
 }
 
@@ -14,11 +18,15 @@ pub fn add_project(path: &str, names: Vec<String>) -> Response<Body> {
     if !names.is_empty() {
         resp = format!("{} -> {}", resp, names.join(", "));
     }
-    projects::add(path, names);
+    let mut projects = projects::lock();
+    projects.add(path, names);
+    projects.print();
     Response::new(Body::from(resp))
 }
 
 pub fn remove_project(name: &str) -> Response<Body> {
-    projects::remove(name);
+    let mut projects = projects::lock();
+    projects.remove(name);
+    projects.print();
     Response::new(Body::from(format!("removed project: {}", name)))
 }

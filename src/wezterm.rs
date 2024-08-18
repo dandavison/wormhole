@@ -2,8 +2,9 @@ use serde::Deserialize;
 use std::{str, thread};
 
 use crate::project::Project;
+use crate::ps;
 use crate::terminal::write_wormhole_env_vars;
-use crate::util::{execute_command, info, panic, warn};
+use crate::util::{execute_command, panic};
 
 #[allow(dead_code)]
 #[derive(Deserialize)]
@@ -39,7 +40,7 @@ struct Pane {
 }
 
 pub fn open(project: &Project) -> Result<(), String> {
-    info(&format!("wezterm::open({project:?})"));
+    ps!("wezterm::open({project:?})");
     let pane = Pane::get_first_by_tab_title(&project.name)
         .unwrap_or_else(|| new_tab(&project.name, &project.path.to_str().unwrap()));
     execute_command(
@@ -96,12 +97,10 @@ impl Pane {
 
     fn get_first_by_tab_title(title: &str) -> Option<Pane> {
         for p in list_panes() {
-            eprintln!("looking for __{title}__, see __{}__", p.tab_title);
             if p.tab_title == title {
                 return Some(p);
             }
         }
-        warn(&format!("did not find pane with tab title: {title}"));
         None
     }
 }

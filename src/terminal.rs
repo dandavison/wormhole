@@ -1,12 +1,7 @@
 use std::fs;
 
-use crate::{
-    config, hammerspoon,
-    project::Project,
-    tmux,
-    util::{info, warn},
-    wezterm,
-};
+use crate::ps;
+use crate::{config, hammerspoon, project::Project, tmux, util::warn, wezterm};
 
 #[allow(dead_code)]
 pub enum Terminal {
@@ -25,7 +20,7 @@ impl Terminal {
     }
 
     pub fn focus(&self) {
-        info("Focusing terminal");
+        ps!("Focusing terminal");
         hammerspoon::launch_or_focus(self.application_name())
     }
 

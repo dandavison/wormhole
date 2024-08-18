@@ -6,6 +6,7 @@ use crate::endpoints;
 use crate::project::Project;
 use crate::project_path::ProjectPath;
 use crate::projects;
+use crate::ps;
 use hyper::{Body, Request, Response};
 use url::form_urlencoded;
 
@@ -22,6 +23,7 @@ pub enum WindowAction {
     Raise,
 }
 
+#[derive(Debug)]
 pub struct QueryParams {
     pub land_in: Option<Application>,
     pub line: Option<usize>,
@@ -30,12 +32,12 @@ pub struct QueryParams {
 
 pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
     let uri = req.uri();
-    println!("\nRequest: {}", uri);
     let path = uri.path().to_string();
     if &path == "/favicon.ico" {
         return Ok(Response::new(Body::from("")));
     }
     let params = QueryParams::from_query(uri.query());
+    ps!("\nRequest: {} {:?}", uri, params);
     if &path == "/list-projects/" {
         Ok(endpoints::list_projects())
     } else if let Some(path) = path.strip_prefix("/add-project/") {

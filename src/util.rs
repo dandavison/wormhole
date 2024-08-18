@@ -7,24 +7,25 @@ use std::{
 };
 
 pub fn info(msg: &str) {
-    println!("    {}", msg)
+    let msg = format!("INFO: {}", msg);
+    eprintln!("{}", msg);
 }
 
 pub fn warn(msg: &str) {
-    let msg = format!("    WARNING: {}", msg);
-    notify(&msg);
+    let msg = format!("WARNING: {}", msg);
+    desktop_notification(&msg);
     eprintln!("{}", msg);
 }
 
 pub fn error(msg: &str) {
-    let msg = format!("    ERROR: {}", msg);
-    notify(&msg);
+    let msg = format!("ERROR: {}", msg);
+    desktop_notification(&msg);
     eprintln!("{}", msg)
 }
 
 pub fn panic(msg: &str) -> ! {
-    let msg = format!("    PANIC: {}", msg);
-    notify(&msg);
+    let msg = format!("PANIC: {}", msg);
+    desktop_notification(&msg);
     panic!("{}", msg)
 }
 
@@ -40,7 +41,7 @@ pub fn home_dir() -> PathBuf {
     dirs::home_dir().unwrap_or_else(|| panic("Cannot determine home directory"))
 }
 
-pub fn notify(msg: &str) {
+pub fn desktop_notification(msg: &str) {
     execute_command(
         "terminal-notifier",
         ["-message", msg, "-title", "wormhole"],

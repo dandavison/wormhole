@@ -59,7 +59,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
     }
 }
 
-fn switch_project(url_path: String, line: Option<usize>, land_in: Option<Application>) {
+fn switch_project(url_path: String, line: Option<usize>, mut land_in: Option<Application>) {
     let project_path = if url_path == "/previous-project/" {
         projects::previous().map(|p| p.as_project_path())
     } else if url_path == "/next-project/" {
@@ -69,10 +69,12 @@ fn switch_project(url_path: String, line: Option<usize>, land_in: Option<Applica
         Project::by_name(name).map(|p| p.as_project_path())
     } else if let Some(absolute_path) = url_path.strip_prefix("/file/") {
         ProjectPath::from_absolute_path(&PathBuf::from(absolute_path))
+    } else if let Some(project_path) = ProjectPath::from_github_url(&url_path, line) {
+        land_in = Some(Application::Editor);
+        Some(project_path)
     } else {
-        ProjectPath::from_github_url(&url_path, line)
+        None
     };
-
     if let Some(project_path) = project_path {
         project_path.open(land_in)
     }

@@ -27,6 +27,12 @@ pub fn lock<'a>() -> Projects<'a> {
     Projects(PROJECTS.lock().unwrap())
 }
 
+pub enum Mutation {
+    RotateLeft,
+    RotateRight,
+    Insert,
+}
+
 impl<'a> Projects<'a> {
     pub fn previous(&self) -> Option<Project> {
         self.0.back().cloned()
@@ -38,6 +44,14 @@ impl<'a> Projects<'a> {
 
     pub fn next(&self) -> Option<Project> {
         self.0.get(1).cloned()
+    }
+
+    pub fn apply(&mut self, mutation: Mutation, name: &str) {
+        match mutation {
+            Mutation::Insert => self.move_to_front(name),
+            Mutation::RotateLeft => self.0.rotate_left(1),
+            Mutation::RotateRight => self.0.rotate_right(1),
+        };
     }
 
     pub fn names(&self) -> Vec<String> {

@@ -5,6 +5,7 @@ use std::thread;
 use crate::endpoints;
 use crate::project_path::ProjectPath;
 use crate::projects;
+use crate::projects::Mutation;
 use crate::ps;
 use hyper::{Body, Request, Response};
 use url::form_urlencoded;
@@ -63,22 +64,26 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
 fn switch_project(url_path: String, line: Option<usize>, mut land_in: Option<Application>) {
     // FIXME: projects mutex should be held for duration of this function
     let mut projects = projects::lock();
-    let project_path = if url_path == "/previous-project/" {
-        projects.previous().map(|p| p.as_project_path())
+    let operation = if url_path == "/previous-project/" {
+        let p = projects.previous().map(|p| p.as_project_path());
+        Some((p, Mutation::RotateRight))
     } else if url_path == "/next-project/" {
-        projects.next().map(|p| p.as_project_path())
+        let p = projects.next().map(|p| p.as_project_path());
+        Some((p, Mutation::RotateLeft))
     } else if let Some(name) = url_path.strip_prefix("/project/") {
-        projects.by_name(name).map(|p| p.as_project_path())
+        let p = projects.by_name(name).map(|p| p.as_project_path());
+        Some((p, Mutation::Insert))
     } else if let Some(absolute_path) = url_path.strip_prefix("/file/") {
-        ProjectPath::from_absolute_path(&PathBuf::from(absolute_path), &projects)
+        let p = ProjectPath::from_absolute_path(&PathBuf::from(absolute_path), &projects);
+        Some((p, Mutation::Insert))
     } else if let Some(project_path) = ProjectPath::from_github_url(&url_path, line, &projects) {
         land_in = Some(Application::Editor);
-        Some(project_path)
+        Some((Some(project_path), Mutation::Insert))
     } else {
         None
     };
-    if let Some(project_path) = project_path {
-        project_path.open(&mut projects, land_in)
+    if let Some((Some(project_path), mutation)) = operation {
+        project_path.open(mutation, land_in, &mut projects)
     }
     projects.print();
 }

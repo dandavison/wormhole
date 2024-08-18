@@ -4,7 +4,7 @@ use std::thread;
 use regex::Regex;
 
 use crate::hammerspoon::current_application;
-use crate::projects::Projects;
+use crate::projects::{Mutation, Projects};
 use crate::ps;
 use crate::util::warn;
 use crate::wormhole::{Application, WindowAction};
@@ -17,7 +17,7 @@ pub struct ProjectPath {
 }
 
 impl ProjectPath {
-    pub fn open(&self, projects: &mut Projects, land_in: Option<Application>) {
+    pub fn open(&self, mutation: Mutation, land_in: Option<Application>, projects: &mut Projects) {
         let project = self.project.clone();
         let terminal_thread = thread::spawn(move || {
             config::TERMINAL.open(&project).unwrap_or_else(|err| {
@@ -57,7 +57,7 @@ impl ProjectPath {
         if flip_keybinding ^ land_in_terminal {
             config::TERMINAL.focus()
         }
-        projects.move_to_front(&self.project.name);
+        projects.apply(mutation, &self.project.name);
     }
 
     pub fn from_absolute_path(path: &Path, projects: &Projects) -> Option<Self> {

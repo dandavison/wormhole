@@ -26,6 +26,7 @@ use util::warn;
 
 #[tokio::main]
 async fn main() {
+    projects::read();
     tokio::join!(serve_http());
 }
 

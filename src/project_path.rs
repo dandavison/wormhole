@@ -4,10 +4,11 @@ use std::thread;
 use regex::Regex;
 
 use crate::hammerspoon::current_application;
+use crate::projects::Projects;
+use crate::ps;
 use crate::util::{info, warn};
 use crate::wormhole::{Application, WindowAction};
 use crate::{config, editor, project::Project};
-use crate::{projects, ps};
 
 #[derive(Clone, Debug)]
 pub struct ProjectPath {
@@ -16,7 +17,7 @@ pub struct ProjectPath {
 }
 
 impl ProjectPath {
-    pub fn open(&self, land_in: Option<Application>) {
+    pub fn open(&self, projects: &mut Projects, land_in: Option<Application>) {
         ps!("ProjectPath({self:?}).open({land_in:?})");
         let project = self.project.clone();
         let terminal_thread = thread::spawn(move || {
@@ -30,7 +31,7 @@ impl ProjectPath {
         if self.project.is_terminal_only() {
             terminal_thread.join().unwrap();
             config::TERMINAL.focus();
-            projects::move_to_front(&self.project);
+            projects.move_to_front(&self.project.name);
             return;
         }
         let project_path = self.clone();
@@ -63,11 +64,11 @@ impl ProjectPath {
         if flip_keybinding ^ land_in_terminal {
             config::TERMINAL.focus()
         }
-        projects::move_to_front(&self.project);
+        projects.move_to_front(&self.project.name);
     }
 
-    pub fn from_absolute_path(path: &Path) -> Option<Self> {
-        if let Some(project) = projects::by_path(&path) {
+    pub fn from_absolute_path(path: &Path, projects: &Projects) -> Option<Self> {
+        if let Some(project) = projects.by_path(path) {
             Some(ProjectPath {
                 project: project.clone(),
                 relative_path: Some((path.strip_prefix(&project.path).unwrap().into(), None)),
@@ -81,7 +82,7 @@ impl ProjectPath {
         }
     }
 
-    pub fn from_github_url(path: &str, line: Option<usize>) -> Option<Self> {
+    pub fn from_github_url(path: &str, line: Option<usize>, projects: &Projects) -> Option<Self> {
         let re = Regex::new(r"/([^/]+)/([^/]+)/blob/([^/]+)/([^?]*)").unwrap();
         if let Some(captures) = re.captures(path) {
             ps!("Handling as github URL");
@@ -94,7 +95,7 @@ impl ProjectPath {
                 line,
                 repo
             );
-            if let Some(project) = projects::by_name(repo) {
+            if let Some(project) = projects.by_name(repo) {
                 Some(ProjectPath {
                     project,
                     relative_path: Some((path, line)),

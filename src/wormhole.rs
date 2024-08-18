@@ -59,23 +59,24 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
 }
 
 fn switch_project(url_path: String, line: Option<usize>, mut land_in: Option<Application>) {
+    // FIXME: projects mutex should be held for duration of this function
+    let mut projects = projects::lock();
     let project_path = if url_path == "/previous-project/" {
-        projects::previous().map(|p| p.as_project_path())
+        projects.previous().map(|p| p.as_project_path())
     } else if url_path == "/next-project/" {
-        // TODO
-        projects::previous().map(|p| p.as_project_path())
+        projects.next().map(|p| p.as_project_path())
     } else if let Some(name) = url_path.strip_prefix("/project/") {
-        projects::by_name(name).map(|p| p.as_project_path())
+        projects.by_name(name).map(|p| p.as_project_path())
     } else if let Some(absolute_path) = url_path.strip_prefix("/file/") {
-        ProjectPath::from_absolute_path(&PathBuf::from(absolute_path))
-    } else if let Some(project_path) = ProjectPath::from_github_url(&url_path, line) {
+        ProjectPath::from_absolute_path(&PathBuf::from(absolute_path), &projects)
+    } else if let Some(project_path) = ProjectPath::from_github_url(&url_path, line, &projects) {
         land_in = Some(Application::Editor);
         Some(project_path)
     } else {
         None
     };
     if let Some(project_path) = project_path {
-        project_path.open(land_in)
+        project_path.open(&mut projects, land_in)
     }
 }
 

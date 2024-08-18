@@ -30,7 +30,7 @@ async fn main() {
 }
 
 async fn serve_http() {
-    projects::read();
+    projects::load();
     let addr = SocketAddr::from(([127, 0, 0, 1], config::WORMHOLE_PORT));
 
     let make_service =

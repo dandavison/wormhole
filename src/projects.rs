@@ -3,87 +3,135 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
 use std::{fs, thread};
 
-use indexmap::IndexMap;
 use itertools::Itertools;
 use lazy_static::lazy_static;
 
-use crate::config;
 use crate::project::Project;
 use crate::util::{expand_user, panic};
+use crate::{config, ps};
+
+/*
+    Projects are held in a ring.
+    The currently active project is at index 0.
+    When switching to a project, we insert it to the right of the current project, i.e. at index 1.
+    Write to disk asynchronously after every mutation.
+*/
 
 lazy_static! {
-    static ref PROJECTS: Mutex<IndexMap<String, Project>> = Mutex::new(IndexMap::new());
+    static ref PROJECTS: Mutex<VecDeque<Project>> = Mutex::new(VecDeque::new());
 }
 
-fn projects() -> MutexGuard<'static, IndexMap<String, Project>> {
-    PROJECTS.lock().unwrap()
+pub struct Projects<'a>(MutexGuard<'a, VecDeque<Project>>);
+
+pub fn lock<'a>() -> Projects<'a> {
+    Projects(PROJECTS.lock().unwrap())
 }
 
-pub fn names() -> Vec<String> {
-    let mut names: VecDeque<_> = projects().keys().cloned().collect();
-    names.rotate_left(1);
-    names.into()
-}
+impl<'a> Projects<'a> {
+    pub fn previous(&self) -> Option<Project> {
+        self.0.back().cloned()
+    }
 
-pub fn add(path: &str, names: Vec<String>) {
-    let path = PathBuf::from(path.to_string());
-    let name = if !names.is_empty() {
-        names[0].clone()
-    } else {
-        path.file_name().unwrap().to_str().unwrap().to_string()
-    };
+    pub fn current(&self) -> Option<Project> {
+        self.0.get(0).cloned()
+    }
 
-    projects().insert(
-        name.clone(),
-        Project {
-            name,
-            path,
-            aliases: names,
-        },
-    );
-    thread::spawn(write);
-}
+    pub fn next(&self) -> Option<Project> {
+        self.0.get(1).cloned()
+    }
 
-pub fn remove(name: &str) {
-    projects().remove(name);
-    thread::spawn(write);
-}
+    pub fn names(&self) -> Vec<String> {
+        let mut names: VecDeque<_> = self.0.iter().map(|p| p.name.clone()).collect();
+        if !names.is_empty() {
+            names.rotate_left(1);
+        }
+        names.into()
+    }
 
-pub fn previous() -> Option<Project> {
-    projects().values().nth(1).cloned()
-}
-
-pub fn move_to_front(project: &Project) {
-    let idx = projects().get_index_of(&project.name).unwrap();
-    projects().move_index(idx, 0);
-    thread::spawn(write);
-}
-
-pub fn by_path(query_path: &Path) -> Option<Project> {
-    for project in projects().values() {
-        if query_path.starts_with(&project.path) {
-            return Some(project.clone());
+    pub fn add(&mut self, path: &str, names: Vec<String>) {
+        let path = PathBuf::from(path.to_string());
+        let name = if !names.is_empty() {
+            names[0].clone()
+        } else {
+            path.file_name().unwrap().to_str().unwrap().to_string()
+        };
+        if !self.contains(&name) {
+            self.print();
+            ps!("projects::add");
+            self.print();
+            self.0.push_back(Project {
+                name,
+                path,
+                aliases: names,
+            });
+            self.print();
+            thread::spawn(write);
         }
     }
-    None
-}
 
-pub fn by_name(name: &str) -> Option<Project> {
-    let projects = projects();
-    if let Some(project) = projects.get(name) {
-        Some(project.clone())
-    } else {
-        for project in projects.values() {
-            if project.aliases.iter().find(|&a| a == name).is_some() {
-                return Some(project.clone());
+    pub fn remove(&mut self, name: &str) {
+        self.index_by_name(name).map(|i| {
+            self.0.remove(i);
+            thread::spawn(write);
+        });
+    }
+
+    pub fn move_to_front(&mut self, name: &str) {
+        self.index_by_name(&name).map(|i| {
+            self.0.remove(i).map(|p| {
+                self.0.insert(1, p);
+                thread::spawn(write);
+            });
+        });
+    }
+
+    pub fn by_path(&self, query_path: &Path) -> Option<Project> {
+        self.0.iter().find_map(|p| {
+            // TODO: why starts_with?
+            if query_path.starts_with(&p.path) {
+                Some(p.clone())
+            } else {
+                None
             }
-        }
-        None
+        })
+    }
+
+    pub fn by_name(&self, name: &str) -> Option<Project> {
+        self.0.iter().find_map(|p| {
+            if p.name == name {
+                Some(p.clone())
+            } else {
+                None
+            }
+        })
+    }
+
+    fn contains(&self, name: &str) -> bool {
+        self.0.iter().any(|p| p.name == name)
+    }
+
+    fn index_by_name(&self, name: &str) -> Option<usize> {
+        self.0
+            .iter()
+            .enumerate()
+            .find_map(|(i, p)| if p.name == name { Some(i) } else { None })
+    }
+
+    pub fn print(&self) {
+        let n = self.0.len();
+        ps!("Read {} projects.", n);
+        ps!(
+            "..., {}, {}*, {}, ...",
+            self.previous().map(|p| p.name).unwrap_or("none".into()),
+            self.current().map(|p| p.name).unwrap_or("none".into()),
+            self.next().map(|p| p.name).unwrap_or("none".into())
+        );
     }
 }
 
-pub fn read() {
-    projects().extend(
+pub fn load() {
+    let mut projects = lock();
+    projects.0.extend(
         fs::read_to_string(projects_file())
             .unwrap_or_else(|_| {
                 panic(&format!(
@@ -92,15 +140,15 @@ pub fn read() {
                 ))
             })
             .lines()
-            .map(Project::parse)
-            .map(|proj| (proj.name.clone(), proj)),
-    )
+            .map(Project::parse),
+    );
+    projects.print();
 }
 
 pub fn write() -> Result<(), std::io::Error> {
     fs::write(
         projects_file(),
-        projects().values().map(|p| p.format()).join("\n"),
+        lock().0.iter().map(|p| p.format()).join("\n"),
     )
 }
 

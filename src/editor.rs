@@ -37,18 +37,26 @@ impl Editor {
 pub fn open_path(path: &ProjectPath, window_action: WindowAction) -> Result<(), String> {
     ps!("editor::open_path({path:?}, {window_action:?})");
     let project_path = path.absolute_path();
-    let args = [
-        "-a",
-        config::EDITOR.macos_application_bundle_name(),
-        project_path.to_str().unwrap(),
-    ]
-    .into_iter();
     match window_action {
         WindowAction::Raise => {
-            execute_command("open", args, &path.project.path);
+            execute_command(
+                config::EDITOR.application_name(),
+                // HACK: VSCode-specific
+                ["-g", project_path.to_str().unwrap()],
+                &path.project.path,
+            );
         }
         WindowAction::Focus => {
-            execute_command("open", ["-g"].into_iter().chain(args), &path.project.path);
+            execute_command(
+                "open",
+                [
+                    "-g",
+                    "-a",
+                    config::EDITOR.macos_application_bundle_name(),
+                    project_path.to_str().unwrap(),
+                ],
+                &path.project.path,
+            );
         }
     }
     Ok(())

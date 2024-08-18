@@ -11,10 +11,22 @@ use crate::util::{expand_user, panic};
 use crate::{config, ps};
 
 /*
-    Projects are held in a ring.
-    The currently active project is at index 0.
-    When switching to a project, we insert it to the right of the current project, i.e. at index 1.
-    Write to disk asynchronously after every mutation.
+    - Projects are held in a ring.
+
+    - The currently active project is at index 0.
+
+    - When adding a new project, we insert it to the right of the current project,
+      i.e. at index 1 (if there is a current project).
+
+    - When jumping to a project, we remove it and insert it to the right of the
+      current project.
+
+    - When switching to the previous project, we rotate right.
+
+    - When switching to the next project, or selecting one we just added, or are jumping to,
+      we rotate left.
+
+    - Write to disk asynchronously after every mutation.
 */
 
 lazy_static! {
@@ -71,11 +83,15 @@ impl<'a> Projects<'a> {
         };
         if !self.contains(&name) {
             ps!("projects::add");
-            self.0.push_back(Project {
-                name,
-                path,
-                aliases: names,
-            });
+            let index = if self.0.is_empty() { 0 } else { 1 };
+            self.0.insert(
+                index,
+                Project {
+                    name,
+                    path,
+                    aliases: names,
+                },
+            );
             thread::spawn(write);
         }
     }

@@ -52,9 +52,14 @@ pub fn open(project: &Project) -> Result<(), String> {
 }
 
 fn new_tab(title: &str, cwd: &str) -> Pane {
-    let pane_id: u32 = execute_command("wezterm", ["cli", "spawn", "--cwd", cwd], cwd)
-        .parse()
-        .unwrap_or_else(|_| panic("failed to parse `wezterm cli spawn` output"));
+    // TODO: determine the window ID of the current project instead of assuming it's 0.
+    let pane_id: u32 = execute_command(
+        "wezterm",
+        ["cli", "spawn", "--window-id", "0", "--cwd", cwd],
+        cwd,
+    )
+    .parse()
+    .unwrap_or_else(|_| panic("failed to parse `wezterm cli spawn` output"));
     let pane = Pane::get_by_id(pane_id).unwrap_or_else(|| {
         panic(&format!(
             "wezterm pane returned by spawn not found: {pane_id}"

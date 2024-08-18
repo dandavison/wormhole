@@ -9,7 +9,7 @@ use lazy_static::lazy_static;
 
 use crate::config;
 use crate::project::Project;
-use crate::util::expand_user;
+use crate::util::{expand_user, panic};
 
 lazy_static! {
     static ref PROJECTS: Mutex<IndexMap<String, Project>> = Mutex::new(IndexMap::new());
@@ -22,7 +22,12 @@ pub fn projects() -> MutexGuard<'static, IndexMap<String, Project>> {
 pub fn read() {
     projects().extend(
         fs::read_to_string(projects_file())
-            .unwrap_or_else(|_| panic!("Couldn't read projects file: {}", config::PROJECTS_FILE))
+            .unwrap_or_else(|_| {
+                panic(&format!(
+                    "Couldn't read projects file: {}",
+                    config::PROJECTS_FILE
+                ))
+            })
             .lines()
             .map(Project::parse)
             .map(|proj| (proj.name.clone(), proj)),

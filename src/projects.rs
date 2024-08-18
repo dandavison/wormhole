@@ -56,15 +56,12 @@ impl<'a> Projects<'a> {
             path.file_name().unwrap().to_str().unwrap().to_string()
         };
         if !self.contains(&name) {
-            self.print();
             ps!("projects::add");
-            self.print();
             self.0.push_back(Project {
                 name,
                 path,
                 aliases: names,
             });
-            self.print();
             thread::spawn(write);
         }
     }
@@ -79,7 +76,7 @@ impl<'a> Projects<'a> {
     pub fn move_to_front(&mut self, name: &str) {
         self.index_by_name(&name).map(|i| {
             self.0.remove(i).map(|p| {
-                self.0.insert(1, p);
+                self.0.insert(0, p);
                 thread::spawn(write);
             });
         });
@@ -118,13 +115,12 @@ impl<'a> Projects<'a> {
     }
 
     pub fn print(&self) {
-        let n = self.0.len();
-        ps!("Read {} projects.", n);
         ps!(
-            "..., {}, {}*, {}, ...",
+            "..., {}, {}*, {}, ... ({})",
             self.previous().map(|p| p.name).unwrap_or("none".into()),
             self.current().map(|p| p.name).unwrap_or("none".into()),
-            self.next().map(|p| p.name).unwrap_or("none".into())
+            self.next().map(|p| p.name).unwrap_or("none".into()),
+            self.0.len(),
         );
     }
 }

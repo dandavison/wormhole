@@ -36,7 +36,9 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         return Ok(Response::new(Body::from("")));
     }
     let params = QueryParams::from_query(uri.query());
-    ps!("\nRequest: {} {:?}", uri, params);
+    if &path != "/list-projects/" {
+        ps!("\nRequest: {} {:?}", uri, params);
+    }
     if &path == "/list-projects/" {
         Ok(endpoints::list_projects())
     } else if let Some(path) = path.strip_prefix("/add-project/") {
@@ -78,6 +80,7 @@ fn switch_project(url_path: String, line: Option<usize>, mut land_in: Option<App
     if let Some(project_path) = project_path {
         project_path.open(&mut projects, land_in)
     }
+    projects.print();
 }
 
 impl QueryParams {

@@ -6,7 +6,7 @@ use regex::Regex;
 use crate::hammerspoon::current_application;
 use crate::projects::Projects;
 use crate::ps;
-use crate::util::{info, warn};
+use crate::util::warn;
 use crate::wormhole::{Application, WindowAction};
 use crate::{config, editor, project::Project};
 
@@ -18,7 +18,6 @@ pub struct ProjectPath {
 
 impl ProjectPath {
     pub fn open(&self, projects: &mut Projects, land_in: Option<Application>) {
-        ps!("ProjectPath({self:?}).open({land_in:?})");
         let project = self.project.clone();
         let terminal_thread = thread::spawn(move || {
             config::TERMINAL.open(&project).unwrap_or_else(|err| {
@@ -39,14 +38,8 @@ impl ProjectPath {
             Some(Application::Editor) => WindowAction::Raise,
             Some(Application::Terminal) => WindowAction::Focus,
             _ => match current_application() {
-                Application::Editor => {
-                    info("current_application is Editor => raise Editor");
-                    WindowAction::Raise
-                }
-                _ => {
-                    info("current_application is Other => don't raise Editor");
-                    WindowAction::Focus
-                }
+                Application::Editor => WindowAction::Raise,
+                _ => WindowAction::Focus,
             },
         };
         let editor_thread = thread::spawn(move || {

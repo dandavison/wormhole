@@ -2,7 +2,6 @@ use serde::Deserialize;
 use std::{str, thread};
 
 use crate::project::Project;
-use crate::ps;
 use crate::terminal::write_wormhole_env_vars;
 use crate::util::{execute_command, panic};
 
@@ -40,7 +39,6 @@ struct Pane {
 }
 
 pub fn open(project: &Project) -> Result<(), String> {
-    ps!("wezterm::open({project:?})");
     let pane = Pane::get_first_by_tab_title(&project.name)
         .unwrap_or_else(|| new_tab(&project.name, &project.path.to_str().unwrap()));
     execute_command(

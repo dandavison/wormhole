@@ -6,11 +6,6 @@ use std::{
     process::Command,
 };
 
-pub fn info(msg: &str) {
-    let msg = format!("INFO: {}", msg);
-    eprintln!("{}", msg);
-}
-
 pub fn warn(msg: &str) {
     let msg = format!("WARNING: {}", msg);
     desktop_notification(&msg);

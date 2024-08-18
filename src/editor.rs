@@ -1,7 +1,5 @@
 use crate::{config, project_path::ProjectPath, util::execute_command, wormhole::WindowAction};
 
-use crate::ps;
-
 #[allow(dead_code)]
 #[derive(Debug)]
 pub enum Editor {
@@ -35,7 +33,6 @@ impl Editor {
 }
 
 pub fn open_path(path: &ProjectPath, window_action: WindowAction) -> Result<(), String> {
-    ps!("editor::open_path({path:?}, {window_action:?})");
     let project_path = path.absolute_path();
     match window_action {
         WindowAction::Raise => {

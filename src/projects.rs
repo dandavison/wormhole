@@ -19,32 +19,6 @@ fn projects() -> MutexGuard<'static, IndexMap<String, Project>> {
     PROJECTS.lock().unwrap()
 }
 
-pub fn read() {
-    projects().extend(
-        fs::read_to_string(projects_file())
-            .unwrap_or_else(|_| {
-                panic(&format!(
-                    "Couldn't read projects file: {}",
-                    config::PROJECTS_FILE
-                ))
-            })
-            .lines()
-            .map(Project::parse)
-            .map(|proj| (proj.name.clone(), proj)),
-    )
-}
-
-fn projects_file() -> String {
-    expand_user(config::PROJECTS_FILE)
-}
-
-pub fn write() -> Result<(), std::io::Error> {
-    fs::write(
-        projects_file(),
-        projects().values().map(|p| p.format()).join("\n"),
-    )
-}
-
 pub fn names() -> Vec<String> {
     let mut names: VecDeque<_> = projects().keys().cloned().collect();
     names.rotate_left(1);
@@ -106,4 +80,30 @@ pub fn by_name(name: &str) -> Option<Project> {
         }
         None
     }
+}
+
+pub fn read() {
+    projects().extend(
+        fs::read_to_string(projects_file())
+            .unwrap_or_else(|_| {
+                panic(&format!(
+                    "Couldn't read projects file: {}",
+                    config::PROJECTS_FILE
+                ))
+            })
+            .lines()
+            .map(Project::parse)
+            .map(|proj| (proj.name.clone(), proj)),
+    )
+}
+
+pub fn write() -> Result<(), std::io::Error> {
+    fs::write(
+        projects_file(),
+        projects().values().map(|p| p.format()).join("\n"),
+    )
+}
+
+fn projects_file() -> String {
+    expand_user(config::PROJECTS_FILE)
 }

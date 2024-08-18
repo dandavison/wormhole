@@ -1,8 +1,6 @@
 use crate::project_path::ProjectPath;
-use crate::projects::{self, projects};
 use crate::util::{contract_user, expand_user, panic};
-use std::path::{Path, PathBuf};
-use std::thread;
+use std::path::PathBuf;
 
 #[derive(Clone, Debug)]
 pub struct Project {
@@ -25,39 +23,6 @@ impl Project {
             project: (*self).clone(),
             relative_path: Some(("".into(), None)),
         }
-    }
-
-    pub fn by_path(query_path: &Path) -> Option<Self> {
-        for project in projects().values() {
-            if query_path.starts_with(&project.path) {
-                return Some(project.clone());
-            }
-        }
-        None
-    }
-
-    pub fn by_name(name: &str) -> Option<Self> {
-        let projects = projects();
-        if let Some(project) = projects.get(name) {
-            Some(project.clone())
-        } else {
-            for project in projects.values() {
-                if project.aliases.iter().find(|&a| a == name).is_some() {
-                    return Some(project.clone());
-                }
-            }
-            None
-        }
-    }
-
-    pub fn by_repo_name(repo_name: &str) -> Option<Self> {
-        Self::by_name(repo_name)
-    }
-
-    pub fn move_to_front(&self) {
-        let idx = projects().get_index_of(&self.name).unwrap();
-        projects().move_index(idx, 0);
-        thread::spawn(projects::write);
     }
 
     pub fn parse(line: &str) -> Self {

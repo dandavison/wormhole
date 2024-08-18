@@ -3,7 +3,6 @@ use std::path::PathBuf;
 use std::thread;
 
 use crate::endpoints;
-use crate::project::Project;
 use crate::project_path::ProjectPath;
 use crate::projects;
 use crate::ps;
@@ -66,7 +65,7 @@ fn switch_project(url_path: String, line: Option<usize>, mut land_in: Option<App
         // TODO
         projects::previous().map(|p| p.as_project_path())
     } else if let Some(name) = url_path.strip_prefix("/project/") {
-        Project::by_name(name).map(|p| p.as_project_path())
+        projects::by_name(name).map(|p| p.as_project_path())
     } else if let Some(absolute_path) = url_path.strip_prefix("/file/") {
         ProjectPath::from_absolute_path(&PathBuf::from(absolute_path))
     } else if let Some(project_path) = ProjectPath::from_github_url(&url_path, line) {

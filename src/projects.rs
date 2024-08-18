@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
 use std::{fs, thread};
 
@@ -15,7 +15,7 @@ lazy_static! {
     static ref PROJECTS: Mutex<IndexMap<String, Project>> = Mutex::new(IndexMap::new());
 }
 
-pub fn projects() -> MutexGuard<'static, IndexMap<String, Project>> {
+fn projects() -> MutexGuard<'static, IndexMap<String, Project>> {
     PROJECTS.lock().unwrap()
 }
 
@@ -45,7 +45,7 @@ pub fn write() -> Result<(), std::io::Error> {
     )
 }
 
-pub fn list_names() -> Vec<String> {
+pub fn names() -> Vec<String> {
     let mut names: VecDeque<_> = projects().keys().cloned().collect();
     names.rotate_left(1);
     names.into()
@@ -77,4 +77,33 @@ pub fn remove(name: &str) {
 
 pub fn previous() -> Option<Project> {
     projects().values().nth(1).cloned()
+}
+
+pub fn move_to_front(project: &Project) {
+    let idx = projects().get_index_of(&project.name).unwrap();
+    projects().move_index(idx, 0);
+    thread::spawn(write);
+}
+
+pub fn by_path(query_path: &Path) -> Option<Project> {
+    for project in projects().values() {
+        if query_path.starts_with(&project.path) {
+            return Some(project.clone());
+        }
+    }
+    None
+}
+
+pub fn by_name(name: &str) -> Option<Project> {
+    let projects = projects();
+    if let Some(project) = projects.get(name) {
+        Some(project.clone())
+    } else {
+        for project in projects.values() {
+            if project.aliases.iter().find(|&a| a == name).is_some() {
+                return Some(project.clone());
+            }
+        }
+        None
+    }
 }

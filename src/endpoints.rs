@@ -5,7 +5,7 @@ use crate::projects;
 
 pub fn list_projects() -> Response<Body> {
     Response::new(Body::from(
-        projects::list_names().iter().map(|s| s.as_str()).join("\n"),
+        projects::names().iter().map(|s| s.as_str()).join("\n"),
     ))
 }
 

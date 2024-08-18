@@ -34,11 +34,11 @@ impl ProjectPath {
         }
         let project_path = self.clone();
         let editor_window_action = match &land_in {
-            Some(Application::Editor) => WindowAction::Focus,
-            Some(Application::Terminal) => WindowAction::Raise,
+            Some(Application::Editor) => WindowAction::Raise,
+            Some(Application::Terminal) => WindowAction::Focus,
             _ => match current_application() {
-                Application::Editor => WindowAction::Focus,
-                _ => WindowAction::Raise,
+                Application::Editor => WindowAction::Raise,
+                _ => WindowAction::Focus,
             },
         };
         let editor_thread = thread::spawn(move || {

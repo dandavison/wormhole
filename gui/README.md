@@ -1,4 +1,4 @@
-See [Wormhole.](https://github.com/dandavison/wormhole)
+See [Wormhole](https://github.com/dandavison/wormhole).
 
 ### To create MacOS application bundle in XCode
 

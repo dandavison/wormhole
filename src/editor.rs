@@ -9,6 +9,7 @@ pub enum Editor {
     PyCharm,
     PyCharmCE,
 }
+use crate::ps;
 use Editor::*;
 
 impl Editor {
@@ -33,6 +34,7 @@ impl Editor {
 }
 
 pub fn open_path(path: &ProjectPath, window_action: WindowAction) -> Result<(), String> {
+    ps!("Editor::open({path:?})");
     let project_path = path.absolute_path();
     match window_action {
         WindowAction::Raise => {

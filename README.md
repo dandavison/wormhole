@@ -1,4 +1,4 @@
-_This is a personal project under development, implemented only for MacOS (e.g. it uses hammerspoon in places, and the `open` command). It should work in a VSCode + Wezterm development environment, since that's what I use. It was written initially for VSCode + Alacritty/Tmux, and it could be made to work with Pycharm/IntelliJ with minor modifications._
+_This is a personal project under development, implemented only for MacOS (e.g. it uses hammerspoon in places, and the `open` command). VSCode is the only editor tested, but it could be made to work with others (e.g. JetBrains IDEs) with minor modifications. The terminal emulator must either be Wezterm, or Alacritty+Tmux. It could be made to work with non-Alacritty+Tmux with minor modifications._
 
 Wormhole is for people who:
 - work on multiple projects/repositories concurrently

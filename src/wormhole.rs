@@ -62,7 +62,6 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
 }
 
 fn switch_project(url_path: String, line: Option<usize>, mut land_in: Option<Application>) {
-    // FIXME: projects mutex should be held for duration of this function
     let mut projects = projects::lock();
     let operation = if url_path == "/previous-project/" {
         let p = projects.previous().map(|p| p.as_project_path());

@@ -3,6 +3,7 @@ use crate::{config, project_path::ProjectPath, util::execute_command, wormhole::
 #[allow(dead_code)]
 #[derive(Debug)]
 pub enum Editor {
+    Cursor,
     IntelliJ,
     VSCode,
     VSCodeInsiders,
@@ -15,6 +16,7 @@ use Editor::*;
 impl Editor {
     pub fn application_name(&self) -> &'static str {
         match self {
+            Cursor => "Cursor",
             VSCodeInsiders => "Code - Insiders",
             VSCode => "Code",
             PyCharm => "PyCharm",
@@ -24,6 +26,7 @@ impl Editor {
     }
     pub fn macos_application_bundle_name(&self) -> &'static str {
         match self {
+            Cursor => "Cursor",
             VSCodeInsiders => "Visual Studio Code - Insiders",
             VSCode => "Visual Studio Code",
             PyCharm => "PyCharm",

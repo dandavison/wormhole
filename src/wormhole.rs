@@ -96,11 +96,15 @@ fn determine_requested_operation(
         let p = ProjectPath::from_absolute_path(&PathBuf::from(absolute_path), &projects);
         Some((p, Mutation::Insert, land_in))
     } else if let Some(project_path) = ProjectPath::from_github_url(&url_path, line, &projects) {
-        Some((
-            Some(project_path),
-            Mutation::Insert,
-            Some(Application::Editor),
-        ))
+        if url_path.ends_with(".md") {
+            None
+        } else {
+            Some((
+                Some(project_path),
+                Mutation::Insert,
+                Some(Application::Editor),
+            ))
+        }
     } else {
         None
     }

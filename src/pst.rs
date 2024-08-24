@@ -36,7 +36,7 @@ macro_rules! print_hyperlinked {
 
 pub fn format_vscode_hyperlink(rel_path: &str, line: u32) -> String {
     let path = current_dir().unwrap().join(rel_path);
-    format!("vscode://file/{}:{}", path.display(), line)
+    format!("cursor://file/{}:{}", path.display(), line)
 }
 
 pub fn format_osc8_hyperlink(url: &str, text: &str) -> String {

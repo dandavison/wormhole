@@ -56,35 +56,44 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         // waiting for its originating HTTP request to return. Instead the `hs`
         // call blocked until the HTTP request timed out. So, wormhole returns
         // immediately, performing its actions asynchronously.
-        thread::spawn(move || switch_project(path, params.line, params.land_in));
-        Ok(Response::new(Body::from("Sent into wormhole.")))
+        if let Some((Some(project_path), mutation, land_in)) =
+            determine_requested_operation(&path, params.line, params.land_in)
+        {
+            thread::spawn(move || project_path.open(mutation, land_in));
+            Ok(Response::new(Body::from("Sent into wormhole.")))
+        } else {
+            Ok(Response::new(Body::from("Wormhole cannot handle this")))
+        }
     }
 }
 
-fn switch_project(url_path: String, line: Option<usize>, mut land_in: Option<Application>) {
-    let mut projects = projects::lock();
-    let operation = if url_path == "/previous-project/" {
+fn determine_requested_operation(
+    url_path: &str,
+    line: Option<usize>,
+    land_in: Option<Application>,
+) -> Option<(Option<ProjectPath>, Mutation, Option<Application>)> {
+    let projects = projects::lock();
+    if url_path == "/previous-project/" {
         let p = projects.previous().map(|p| p.as_project_path());
-        Some((p, Mutation::RotateRight))
+        Some((p, Mutation::RotateRight, land_in))
     } else if url_path == "/next-project/" {
         let p = projects.next().map(|p| p.as_project_path());
-        Some((p, Mutation::RotateLeft))
+        Some((p, Mutation::RotateLeft, land_in))
     } else if let Some(name) = url_path.strip_prefix("/project/") {
         let p = projects.by_name(name).map(|p| p.as_project_path());
-        Some((p, Mutation::Insert))
+        Some((p, Mutation::Insert, land_in))
     } else if let Some(absolute_path) = url_path.strip_prefix("/file/") {
         let p = ProjectPath::from_absolute_path(&PathBuf::from(absolute_path), &projects);
-        Some((p, Mutation::Insert))
+        Some((p, Mutation::Insert, land_in))
     } else if let Some(project_path) = ProjectPath::from_github_url(&url_path, line, &projects) {
-        land_in = Some(Application::Editor);
-        Some((Some(project_path), Mutation::Insert))
+        Some((
+            Some(project_path),
+            Mutation::Insert,
+            Some(Application::Editor),
+        ))
     } else {
         None
-    };
-    if let Some((Some(project_path), mutation)) = operation {
-        project_path.open(mutation, land_in, &mut projects)
     }
-    projects.print();
 }
 
 impl QueryParams {

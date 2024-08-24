@@ -1,0 +1,5 @@
+#!/bin/bash
+set -u
+url=http://wormhole:7117/file/"$(readlink -f "$1")?land-in=editor"
+echo "$url"
+curl -s "$url"

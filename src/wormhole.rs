@@ -7,7 +7,7 @@ use crate::project_path::ProjectPath;
 use crate::projects;
 use crate::projects::Mutation;
 use crate::ps;
-use hyper::{Body, Request, Response};
+use hyper::{header, Body, Request, Response, StatusCode};
 use url::form_urlencoded;
 
 #[derive(Debug)]
@@ -62,7 +62,17 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
             thread::spawn(move || project_path.open(mutation, land_in));
             Ok(Response::new(Body::from("Sent into wormhole.")))
         } else {
-            Ok(Response::new(Body::from("Wormhole cannot handle this")))
+            let redirect_to = format!(
+                "https://github.com{path}#L{}?wormhole=false",
+                params.line.unwrap_or(1)
+            );
+            ps!("Redirecting to: {}", redirect_to);
+            let response = Response::builder()
+                .status(StatusCode::FOUND)
+                .header(header::LOCATION, redirect_to)
+                .body(Body::empty())
+                .unwrap();
+            return Ok(response);
         }
     }
 }

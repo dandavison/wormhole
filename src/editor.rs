@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use crate::{config, project_path::ProjectPath, util::execute_command, wormhole::WindowAction};
 
 #[allow(dead_code)]
@@ -34,8 +36,22 @@ impl Editor {
             IntelliJ => "IntelliJ IDEA",
         }
     }
+
+    fn open_file_uri(&self, absolute_path: &Path, line: Option<usize>) -> String {
+        let path = absolute_path.to_str().unwrap();
+        let line = line.unwrap_or(1);
+        match self {
+            Cursor => format!("cursor://file/{path}:{line}"),
+            IntelliJ => format!("idea://open?file={path}&line={line}"),
+            PyCharm => format!("pycharm://open?file={path}&line={line}"),
+            PyCharmCE => format!("pycharm://open?file={path}&line={line}"),
+            VSCode => format!("vscode://file/{path}:{line}"),
+            VSCodeInsiders => format!("vscode-insiders://file/{path}:{line}"),
+        }
+    }
 }
 
+#[allow(dead_code)]
 pub fn open_path(path: &ProjectPath, window_action: WindowAction) -> Result<(), String> {
     ps!("Editor::open({path:?})");
     let project_path = path.absolute_path();
@@ -59,6 +75,24 @@ pub fn open_path(path: &ProjectPath, window_action: WindowAction) -> Result<(), 
                 ],
                 &path.project.path,
             );
+        }
+    }
+    Ok(())
+}
+
+pub fn open_path_via_uri(path: &ProjectPath, window_action: WindowAction) -> Result<(), String> {
+    ps!("Editor::open_path_via_uri({path:?})");
+    let line = path
+        .relative_path
+        .as_ref()
+        .and_then(|(_, line)| line.to_owned());
+    let uri = config::EDITOR.open_file_uri(&path.absolute_path(), line);
+    match window_action {
+        WindowAction::Raise => {
+            execute_command("open", [uri.as_str()], &path.project.path);
+        }
+        WindowAction::Focus => {
+            execute_command("open", ["-g", uri.as_str()], &path.project.path);
         }
     }
     Ok(())

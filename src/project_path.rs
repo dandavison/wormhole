@@ -44,7 +44,7 @@ impl ProjectPath {
             },
         };
         let editor_thread = thread::spawn(move || {
-            editor::open_path(&project_path, editor_window_action).unwrap_or_else(|err| {
+            editor::open_path_via_uri(&project_path, editor_window_action).unwrap_or_else(|err| {
                 warn(&format!(
                     "Error opening {:?} in editor: {}",
                     project_path.relative_path, err

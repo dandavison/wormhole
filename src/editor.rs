@@ -1,3 +1,6 @@
+use itertools::Itertools;
+use std::ffi::OsStr;
+use std::fmt::Display;
 use std::path::Path;
 
 use crate::{config, project_path::ProjectPath, util::execute_command, wormhole::WindowAction};
@@ -57,7 +60,7 @@ pub fn open_path(path: &ProjectPath, window_action: WindowAction) -> Result<(), 
     let project_path = path.absolute_path();
     match window_action {
         WindowAction::Raise => {
-            execute_command(
+            execute_command_with_current_dir(
                 config::EDITOR.application_name(),
                 // HACK: VSCode-specific
                 ["-g", project_path.to_str().unwrap()],
@@ -65,7 +68,7 @@ pub fn open_path(path: &ProjectPath, window_action: WindowAction) -> Result<(), 
             );
         }
         WindowAction::Focus => {
-            execute_command(
+            execute_command_with_current_dir(
                 "open",
                 [
                     "-g",
@@ -89,11 +92,39 @@ pub fn open_path_via_uri(path: &ProjectPath, window_action: WindowAction) -> Res
     let uri = config::EDITOR.open_file_uri(&path.absolute_path(), line);
     match window_action {
         WindowAction::Raise => {
-            execute_command("open", [uri.as_str()], &path.project.path);
+            execute_command_with_current_dir("open", [uri.as_str()], &path.project.path);
         }
         WindowAction::Focus => {
-            execute_command("open", ["-g", uri.as_str()], &path.project.path);
+            execute_command_with_current_dir("open", ["-g", uri.as_str()], &path.project.path);
         }
     }
     Ok(())
+}
+
+// TODO: why does it kill and restart a workspace when using execute_command directly.,
+// and when doing things like
+// env -i sh -c "cd /Users/dan/src/wormhole && open 'cursor://file//Users/dan/src/wormhole/:1'"
+// ?
+pub fn execute_command_with_current_dir<I, S, P>(program: S, args: I, dir: P) -> String
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+    S: Copy,
+    S: Display,
+    P: AsRef<Path>,
+{
+    let dir: &str = dir.as_ref().to_str().unwrap_or(".");
+    execute_command(
+        "sh",
+        [
+            "-c",
+            &format!(
+                "PWD={} cd {} && {program} {}",
+                dir,
+                dir,
+                args.into_iter().join(" ")
+            ),
+        ],
+        dir,
+    )
 }

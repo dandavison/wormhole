@@ -43,7 +43,7 @@ Here are some ideas.
 
   Use the [requestly](https://chrome.google.com/webstore/detail/requestly-open-source-htt/mdnleldcmiljblolnjhpnblkcekpdkpa) chrome extension to send GitHub links to wormhole via rules like:<br>
 
-  - URL RegEx `/^https://github.com/([^#]+/blob/[^#?]+)(?:#L(\d+))?$/` Redirect to URL `http://localhost:7117/$1?line=$2`
+  - URL RegEx `/^https://github.com/([^#]+/blob/[^#?]+)(?:#L(\d+))?(?:-L\d+)?$/` Redirect to URL `http://localhost:7117/$1?line=$2`
   - URL RegEx `/^https://github.com/([^#]+/blob/[^#]+\?line=\d+)$/` Redirect to URL `http://wormhole:7117/$1`
 
   Now GitHub URLs in Google Docs, Notion, Swimlanes.io, etc will open via Wormhole.

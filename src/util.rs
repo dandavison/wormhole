@@ -1,10 +1,12 @@
 use core::{panic, str};
 use std::{
     ffi::OsStr,
-    fmt::Display,
+    fmt::{Debug, Display},
     path::{Path, PathBuf},
     process::Command,
 };
+
+use crate::ps;
 
 pub fn warn(msg: &str) {
     let msg = format!("WARNING: {}", msg);
@@ -46,12 +48,15 @@ pub fn desktop_notification(msg: &str) {
 
 pub fn execute_command<S, I, P>(program: S, args: I, current_dir: P) -> String
 where
-    I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
+    I: IntoIterator<Item = S>,
+    P: AsRef<Path>,
     S: Copy,
     S: Display,
-    P: AsRef<Path>,
+    I: Debug,
+    P: Debug,
 {
+    ps!("execute_command({program}, {args:?}, {current_dir:?})");
     let output = Command::new(program)
         .args(args)
         .current_dir(current_dir)

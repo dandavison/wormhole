@@ -57,7 +57,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         // call blocked until the HTTP request timed out. So, wormhole returns
         // immediately, performing its actions asynchronously.
         if let Some((Some(project_path), mutation, land_in)) =
-            determine_requested_operation(&path, params.line, params.land_in)
+            determine_requested_operation(&path, params.line, Some(Application::Terminal))
         {
             thread::spawn(move || project_path.open(mutation, land_in));
             Ok(Response::new(Body::from("Sent into wormhole.")))

@@ -11,6 +11,10 @@ struct Window {
     name: String,
 }
 
+pub fn exists(project: &Project) -> bool {
+    get_window(&project.name).is_some()
+}
+
 pub fn open(project: &Project) -> Result<(), String> {
     println!("tmux::open({project:?})");
     if let Some(window) = get_window(&project.name) {

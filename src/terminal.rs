@@ -11,6 +11,13 @@ pub enum Terminal {
 use Terminal::*;
 
 impl Terminal {
+    pub fn exists(&self, project: &Project) -> bool {
+        match self {
+            Alacritty { tmux: true } => tmux::exists(project),
+            _ => unimplemented!(),
+        }
+    }
+
     pub fn open(&self, project: &Project) -> Result<(), String> {
         match self {
             Wezterm => wezterm::open(project),

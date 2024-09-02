@@ -1,3 +1,4 @@
+use crate::config;
 use crate::project_path::ProjectPath;
 use crate::util::{contract_user, expand_user, panic};
 use std::path::PathBuf;
@@ -10,6 +11,10 @@ pub struct Project {
 }
 
 impl Project {
+    pub fn is_open(&self) -> bool {
+        config::TERMINAL.exists(self)
+    }
+
     pub fn as_project_path(&self) -> ProjectPath {
         ProjectPath {
             project: (*self).clone(),
@@ -17,7 +22,6 @@ impl Project {
         }
     }
 
-    #[allow(dead_code)]
     pub fn root(&self) -> ProjectPath {
         ProjectPath {
             project: (*self).clone(),

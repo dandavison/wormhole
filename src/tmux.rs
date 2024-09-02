@@ -1,4 +1,5 @@
 use core::str;
+use std::collections::HashMap;
 use std::process::Command;
 use std::thread;
 
@@ -11,7 +12,36 @@ struct Window {
     name: String,
 }
 
-pub fn list_window_names() -> Vec<String> {
+/// Return a directory for each window based on the common prefix of the directories
+/// of its panes.
+// TODO: this effectively makes the terminal windows the point of truth for
+// 'current projects'. However, the current logic will break if:
+// - a window pane's directory lies outside the project root
+// - all panes of a window are not in non-root subdirectories of the project
+pub fn project_directories() -> Vec<String> {
+    let mut directories = HashMap::<String, String>::new();
+    tmux(["list-panes", "-a", "-F", "#W #{pane_current_path}"])
+        .split_terminator("\n")
+        .for_each(|line| {
+            let mut fields = line.split(" ");
+            let window_name = fields.next().unwrap().to_string();
+            let directory = fields.next().unwrap().to_string();
+            if let Some(existing_directory) = directories.get(&window_name) {
+                let common_prefix = existing_directory
+                    .chars()
+                    .zip(directory.chars())
+                    .take_while(|(a, b)| a == b)
+                    .map(|(a, _)| a)
+                    .collect();
+                directories.insert(window_name, common_prefix);
+            } else {
+                directories.insert(window_name, directory);
+            }
+        });
+    directories.into_values().collect()
+}
+
+pub fn window_names() -> Vec<String> {
     list_windows().into_iter().map(|w| w.name).collect()
 }
 

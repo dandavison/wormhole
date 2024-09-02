@@ -18,9 +18,16 @@ impl Terminal {
         }
     }
 
-    pub fn list_window_names(&self) -> Vec<String> {
+    pub fn project_directories(&self) -> Vec<String> {
         match self {
-            Alacritty { tmux: true } => tmux::list_window_names(),
+            Alacritty { tmux: true } => tmux::project_directories(),
+            _ => unimplemented!(),
+        }
+    }
+
+    pub fn window_names(&self) -> Vec<String> {
+        match self {
+            Alacritty { tmux: true } => tmux::window_names(),
             _ => unimplemented!(),
         }
     }

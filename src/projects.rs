@@ -1,10 +1,9 @@
+use crate::project::Project;
+use crate::{config, ps};
 use lazy_static::lazy_static;
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
-
-use crate::project::Project;
-use crate::{config, ps};
 
 /*
     - Projects are held in a ring.
@@ -68,7 +67,7 @@ impl<'a> Projects<'a> {
     }
 
     pub fn open(&self) -> Vec<Project> {
-        let terminal_windows = config::TERMINAL.list_window_names();
+        let terminal_windows = config::TERMINAL.window_names();
         self.0
             .iter()
             .filter(|p| terminal_windows.contains(&p.name))
@@ -153,4 +152,15 @@ impl<'a> Projects<'a> {
             self.0.len(),
         );
     }
+}
+
+pub fn load() {
+    let mut projects = lock();
+    projects.0.extend(
+        config::TERMINAL
+            .project_directories()
+            .iter()
+            .map(|p| Project::parse(p)),
+    );
+    projects.print();
 }

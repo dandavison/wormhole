@@ -18,6 +18,7 @@ pub struct ProjectPath {
 
 impl ProjectPath {
     pub fn open(&self, mutation: Mutation, land_in: Option<Application>) {
+        ps!("ProjectPath::open(mutation={mutation:?}, land_in={land_in:?})");
         let mut projects = projects::lock();
         let project = self.project.clone();
 
@@ -75,8 +76,9 @@ impl ProjectPath {
             })
         } else {
             warn(&format!(
-                "Path doesn't correspond to a known project: {}",
-                path.to_string_lossy()
+                "Path {} doesn't correspond to a project.\n Projects are {}",
+                path.to_string_lossy(),
+                projects.names().join(", ")
             ));
             None
         }

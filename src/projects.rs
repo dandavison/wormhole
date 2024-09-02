@@ -36,6 +36,7 @@ pub fn lock<'a>() -> Projects<'a> {
     Projects(PROJECTS.lock().unwrap())
 }
 
+#[derive(Debug)]
 pub enum Mutation {
     RotateLeft,
     RotateRight,
@@ -43,6 +44,10 @@ pub enum Mutation {
 }
 
 impl<'a> Projects<'a> {
+    pub fn names(&self) -> Vec<String> {
+        self.0.iter().map(|p| p.name.clone()).collect()
+    }
+
     pub fn previous(&self) -> Option<Project> {
         self.0.back().cloned()
     }
@@ -113,7 +118,7 @@ impl<'a> Projects<'a> {
 
     pub fn by_path(&self, query_path: &Path) -> Option<Project> {
         self.0.iter().find_map(|p| {
-            // TODO: why starts_with?
+            // The query path may have a `:line` suffix.
             if query_path.starts_with(&p.path) {
                 Some(p.clone())
             } else {

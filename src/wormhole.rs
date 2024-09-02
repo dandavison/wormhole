@@ -47,6 +47,8 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         Ok(endpoints::add_project(&path.trim(), params.names))
     } else if let Some(name) = path.strip_prefix("/remove-project/") {
         Ok(endpoints::remove_project(&name.trim()))
+    } else if let Some(name) = path.strip_prefix("/open-project/") {
+        Ok(endpoints::open_project(&name.trim()))
     } else if let Some(name) = path.strip_prefix("/close-project/") {
         Ok(endpoints::close_project(&name.trim()))
     } else {

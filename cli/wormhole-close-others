@@ -1,0 +1,5 @@
+#!/bin/bash
+
+tmux list-windows -F '#W' \
+| rg -v wormhole \
+| while read p; do wormhole-close "$p"; done

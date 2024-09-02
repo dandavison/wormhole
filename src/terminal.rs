@@ -19,6 +19,13 @@ impl Terminal {
         }
     }
 
+    pub fn close(&self, project: &Project) {
+        match self {
+            Alacritty { tmux: true } => tmux::close(project),
+            _ => unimplemented!(),
+        }
+    }
+
     pub fn focus(&self) {
         ps!("Focusing terminal");
         hammerspoon::launch_or_focus(self.application_name())

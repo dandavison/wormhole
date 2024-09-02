@@ -1,7 +1,7 @@
 use hyper::{Body, Response};
 use itertools::Itertools;
 
-use crate::projects;
+use crate::{config, projects};
 
 pub fn list_projects() -> Response<Body> {
     Response::new(Body::from(
@@ -26,7 +26,21 @@ pub fn add_project(path: &str, names: Vec<String>) -> Response<Body> {
 
 pub fn remove_project(name: &str) -> Response<Body> {
     let mut projects = projects::lock();
+    projects.by_name(name).map(|p| {
+        config::TERMINAL.close(&p);
+    });
     projects.remove(name);
+
     projects.print();
     Response::new(Body::from(format!("removed project: {}", name)))
+}
+
+pub fn close_project(name: &str) -> Response<Body> {
+    // TODO: close editor workspace
+    let projects = projects::lock();
+    projects.by_name(name).map(|p| {
+        config::TERMINAL.close(&p);
+    });
+    projects.print();
+    Response::new(Body::from(format!("closed project: {}", name)))
 }

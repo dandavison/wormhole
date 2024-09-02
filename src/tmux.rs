@@ -32,6 +32,12 @@ pub fn open(project: &Project) -> Result<(), String> {
     Ok(())
 }
 
+pub fn close(project: &Project) {
+    if let Some(window) = get_window(&project.name) {
+        tmux(["kill-window", "-t", &window.id].iter());
+    }
+}
+
 fn get_window(name: &str) -> Option<Window> {
     for w in list_windows() {
         if w.name == name {

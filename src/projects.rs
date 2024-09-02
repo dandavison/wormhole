@@ -1,13 +1,9 @@
+use lazy_static::lazy_static;
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
-use std::{fs, thread};
-
-use itertools::Itertools;
-use lazy_static::lazy_static;
 
 use crate::project::Project;
-use crate::util::{expand_user, panic};
 use crate::{config, ps};
 
 /*
@@ -94,14 +90,12 @@ impl<'a> Projects<'a> {
                 path,
                 aliases: names,
             });
-            thread::spawn(write);
         }
     }
 
     pub fn remove(&mut self, name: &str) {
         self.index_by_name(name).map(|i| {
             self.0.remove(i);
-            thread::spawn(write);
         });
     }
 
@@ -109,7 +103,6 @@ impl<'a> Projects<'a> {
         self.index_by_name(&name).map(|i| {
             self.0.remove(i).map(|p| {
                 self._insert_right(p);
-                thread::spawn(write);
             });
         });
     }
@@ -160,31 +153,4 @@ impl<'a> Projects<'a> {
             self.0.len(),
         );
     }
-}
-
-pub fn load() {
-    let mut projects = lock();
-    projects.0.extend(
-        fs::read_to_string(projects_file())
-            .unwrap_or_else(|_| {
-                panic(&format!(
-                    "Couldn't read projects file: {}",
-                    config::PROJECTS_FILE
-                ))
-            })
-            .lines()
-            .map(Project::parse),
-    );
-    projects.print();
-}
-
-pub fn write() -> Result<(), std::io::Error> {
-    fs::write(
-        projects_file(),
-        lock().0.iter().map(|p| p.format()).join("\n"),
-    )
-}
-
-fn projects_file() -> String {
-    expand_user(config::PROJECTS_FILE)
 }

@@ -20,6 +20,11 @@ impl ProjectPath {
     pub fn open(&self, mutation: Mutation, land_in: Option<Application>) {
         let mut projects = projects::lock();
         let project = self.project.clone();
+
+        if !project.is_open() {
+            editor::open_workspace(&project);
+        }
+
         let terminal_thread = thread::spawn(move || {
             config::TERMINAL.open(&project).unwrap_or_else(|err| {
                 warn(&format!(

@@ -1,10 +1,10 @@
-use std::str;
+use core::str;
+use std::process::Command;
 use std::thread;
-use std::{process::Command, slice::Iter};
 
 use crate::project::Project;
 use crate::terminal::write_wormhole_env_vars;
-use crate::util::panic;
+use crate::util::{get_stdout, panic};
 
 struct Window {
     id: String,
@@ -22,18 +22,15 @@ pub fn exists(project: &Project) -> bool {
 pub fn open(project: &Project) -> Result<(), String> {
     println!("tmux::open({project:?})");
     if let Some(window) = get_window(&project.name) {
-        tmux(["select-window", "-t", &window.id].iter());
+        tmux(["select-window", "-t", &window.id]);
     } else {
-        tmux(
-            [
-                "new-window",
-                "-n",
-                &project.name,
-                "-c",
-                project.path.to_str().unwrap(),
-            ]
-            .iter(),
-        );
+        tmux([
+            "new-window",
+            "-n",
+            &project.name,
+            "-c",
+            project.path.to_str().unwrap(),
+        ]);
     }
     let project = project.clone();
     thread::spawn(move || write_wormhole_env_vars(&project));
@@ -42,7 +39,7 @@ pub fn open(project: &Project) -> Result<(), String> {
 
 pub fn close(project: &Project) {
     if let Some(window) = get_window(&project.name) {
-        tmux(["kill-window", "-t", &window.id].iter());
+        tmux(["kill-window", "-t", &window.id]);
     }
 }
 
@@ -56,7 +53,7 @@ fn get_window(name: &str) -> Option<Window> {
 }
 
 fn list_windows() -> Vec<Window> {
-    tmux(["list-windows", "-F", "#I #W"].iter())
+    tmux(["list-windows", "-F", "#I #W"])
         .split_terminator("\n")
         .map(|line| {
             let mut fields = line.split(" ");
@@ -68,7 +65,10 @@ fn list_windows() -> Vec<Window> {
         .collect()
 }
 
-pub fn tmux(args: Iter<&str>) -> String {
+pub fn tmux<'a, I>(args: I) -> String
+where
+    I: IntoIterator<Item = &'a str>,
+{
     // TODO: once
     // E.g. TMUX=/private/tmp/tmux-501/default,89323,0
     let socket_path = std::env::var("TMUX")
@@ -77,12 +77,12 @@ pub fn tmux(args: Iter<&str>) -> String {
         .nth(0)
         .unwrap()
         .to_string();
-    let output = Command::new("tmux")
+
+    let program = "tmux";
+    let output = Command::new(program)
         .args(["-S", &socket_path])
         .args(args)
         .output()
         .unwrap_or_else(|_| panic("Failed to execute command"));
-    let stdout = str::from_utf8(&output.stdout).unwrap().to_string();
-    assert!(output.stderr.is_empty());
-    stdout
+    get_stdout(program, output)
 }

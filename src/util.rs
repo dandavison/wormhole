@@ -3,7 +3,7 @@ use std::{
     ffi::OsStr,
     fmt::{Debug, Display},
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Output},
 };
 
 use crate::ps;
@@ -62,6 +62,14 @@ where
         .current_dir(current_dir)
         .output()
         .unwrap_or_else(|_| panic(&format!("failed to execute {program}")));
+    get_stdout(program, output)
+}
+
+pub fn get_stdout<S>(program: S, output: Output) -> String
+where
+    S: AsRef<OsStr>,
+    S: Display,
+{
     let stdout = str::from_utf8(&output.stdout)
         .unwrap_or_else(|err| panic(&format!("failed to parse stdout from {program}: {err}")))
         .trim_end()

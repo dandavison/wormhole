@@ -4,7 +4,7 @@ die() {
     exit 1
 }
 
-path="$1"
+path="$(readlink -f "$1")"
 name="$2"
 [ -d "$path" ] || die "Not a directory: $path"
 url=http://wormhole:7117/add-project/$path

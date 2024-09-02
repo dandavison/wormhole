@@ -1,16 +1,22 @@
+use std::collections::VecDeque;
+
 use hyper::{Body, Response};
 use itertools::Itertools;
 
 use crate::{config, projects};
 
 pub fn list_projects() -> Response<Body> {
-    Response::new(Body::from(
-        projects::lock()
-            .names()
-            .iter()
-            .map(|s| s.as_str())
-            .join("\n"),
-    ))
+    let mut names: VecDeque<_> = projects::lock()
+        .open()
+        .into_iter()
+        .map(|p| p.name)
+        .collect();
+    if !names.is_empty() {
+        // These names will be used by selector UIs; rotate so that current
+        // project is last.
+        names.rotate_left(1);
+    }
+    Response::new(Body::from(names.iter().map(|s| s.as_str()).join("\n")))
 }
 
 pub fn add_project(path: &str, names: Vec<String>) -> Response<Body> {

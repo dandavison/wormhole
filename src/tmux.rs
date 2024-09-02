@@ -11,6 +11,10 @@ struct Window {
     name: String,
 }
 
+pub fn list_window_names() -> Vec<String> {
+    list_windows().into_iter().map(|w| w.name).collect()
+}
+
 pub fn exists(project: &Project) -> bool {
     get_window(&project.name).is_some()
 }

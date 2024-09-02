@@ -18,6 +18,13 @@ impl Terminal {
         }
     }
 
+    pub fn list_window_names(&self) -> Vec<String> {
+        match self {
+            Alacritty { tmux: true } => tmux::list_window_names(),
+            _ => unimplemented!(),
+        }
+    }
+
     pub fn open(&self, project: &Project) -> Result<(), String> {
         match self {
             Wezterm => wezterm::open(project),

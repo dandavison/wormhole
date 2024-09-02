@@ -71,12 +71,13 @@ impl<'a> Projects<'a> {
         };
     }
 
-    pub fn names(&self) -> Vec<String> {
-        let mut names: VecDeque<_> = self.0.iter().map(|p| p.name.clone()).collect();
-        if !names.is_empty() {
-            names.rotate_left(1);
-        }
-        names.into()
+    pub fn open(&self) -> Vec<Project> {
+        let terminal_windows = config::TERMINAL.list_window_names();
+        self.0
+            .iter()
+            .filter(|p| terminal_windows.contains(&p.name))
+            .cloned()
+            .collect()
     }
 
     pub fn add(&mut self, path: &str, names: Vec<String>) {

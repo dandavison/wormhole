@@ -29,6 +29,8 @@ use crate::{config, ps};
     - Write to disk asynchronously after every mutation.
 */
 
+// TODO: Wormhole doesn't need to support any concurrency; perhaps serialize
+// request processing and don't use a lock at all?
 lazy_static! {
     static ref PROJECTS: Mutex<VecDeque<Project>> = Mutex::new(VecDeque::new());
 }

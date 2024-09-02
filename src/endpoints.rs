@@ -35,6 +35,28 @@ pub fn remove_project(name: &str) -> Response<Body> {
     Response::new(Body::from(format!("removed project: {}", name)))
 }
 
+pub fn open_project(name: &str) -> Response<Body> {
+    // Look up project by name without continuing to hold lock.
+    let project = {
+        let projects = projects::lock();
+        projects.by_name(name)
+    };
+
+    if let Some(p) = project {
+        config::TERMINAL.open(&p).unwrap();
+        p.root().open(
+            projects::Mutation::Insert,
+            Some(crate::wormhole::Application::Terminal),
+        );
+        Response::new(Body::from(format!("opened project: {}", name)))
+    } else {
+        Response::builder()
+            .status(hyper::StatusCode::NOT_FOUND)
+            .body(Body::from(format!("project not found: {}", name)))
+            .unwrap()
+    }
+}
+
 pub fn close_project(name: &str) -> Response<Body> {
     // TODO: close editor workspace
     let projects = projects::lock();

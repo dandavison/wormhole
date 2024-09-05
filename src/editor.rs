@@ -128,13 +128,21 @@ pub fn open_path_via_uri(path: &ProjectPath, window_action: WindowAction) -> Res
         WindowAction::Raise => {
             execute_command("open", [dir_uri.as_str()], &root_abspath);
             if let Some(file_line_uri) = file_line_uri {
-                execute_command("open", [file_line_uri.as_str()], &root_abspath);
+                execute_command(
+                    "sh",
+                    ["-c", &format!("open -g {}", file_line_uri.as_str())],
+                    &root_abspath,
+                );
             }
         }
         WindowAction::Focus => {
             execute_command("open", ["-g", dir_uri.as_str()], &root_abspath);
             if let Some(file_line_uri) = file_line_uri {
-                execute_command("open", ["-g", file_line_uri.as_str()], &root_abspath);
+                execute_command(
+                    "sh",
+                    ["-c", &format!("open -g {}", file_line_uri.as_str())],
+                    &root_abspath,
+                );
             }
         }
     }

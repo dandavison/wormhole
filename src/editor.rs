@@ -87,9 +87,25 @@ impl Editor {
 
 pub fn open_workspace(project: &Project) {
     ps!("open_workspace({project:?})");
+    match config::EDITOR {
+        Cursor | VSCode | VSCodeInsiders => {
+            execute_command(
+                config::EDITOR.cli_executable_name(),
+                ["--new-window", "."],
+                project.root().absolute_path().to_str().unwrap(),
+            );
+        }
+        _ => {
+            execute_command(
+                config::EDITOR.cli_executable_name(),
+                ["."],
+                project.root().absolute_path().to_str().unwrap(),
+            );
+        }
+    }
     execute_command(
         config::EDITOR.cli_executable_name(),
-        ["."],
+        ["--new-window", "."],
         project.root().absolute_path().to_str().unwrap(),
     );
 }

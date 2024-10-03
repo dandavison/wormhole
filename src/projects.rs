@@ -63,7 +63,7 @@ impl<'a> Projects<'a> {
     pub fn apply(&mut self, mutation: Mutation, name: &str) {
         match mutation {
             Mutation::Insert => {
-                self.insert_right(name);
+                self.move_to_front(name);
                 self.0.rotate_left(1);
             }
             Mutation::RotateLeft => self.0.rotate_left(1),
@@ -89,7 +89,7 @@ impl<'a> Projects<'a> {
         };
         if !self.contains(&name) {
             ps!("projects::add");
-            self._insert_right(Project {
+            self.0.push_front(Project {
                 name,
                 path,
                 aliases: names,
@@ -103,10 +103,10 @@ impl<'a> Projects<'a> {
         });
     }
 
-    pub fn insert_right(&mut self, name: &str) {
+    pub fn move_to_front(&mut self, name: &str) {
         self.index_by_name(&name).map(|i| {
             self.0.remove(i).map(|p| {
-                self._insert_right(p);
+                self.0.push_front(p);
             });
         });
     }

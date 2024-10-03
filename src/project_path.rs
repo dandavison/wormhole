@@ -37,7 +37,7 @@ impl ProjectPath {
         if self.project.is_terminal_only() {
             terminal_thread.join().unwrap();
             config::TERMINAL.focus();
-            projects.insert_right(&self.project.name);
+            projects.move_to_front(&self.project.name);
             return;
         }
         let project_path = self.clone();

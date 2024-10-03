@@ -89,10 +89,10 @@ fn determine_requested_operation(
     let projects = projects::lock();
     if url_path == "/previous-project/" {
         let p = projects.previous().map(|p| p.as_project_path());
-        Some((p, Mutation::RotateRight, land_in))
+        Some((p, Mutation::RotateLeft, land_in))
     } else if url_path == "/next-project/" {
         let p = projects.next().map(|p| p.as_project_path());
-        Some((p, Mutation::RotateLeft, land_in))
+        Some((p, Mutation::RotateRight, land_in))
     } else if let Some(name) = url_path.strip_prefix("/project/") {
         let p = projects.by_name(name).map(|p| p.as_project_path());
         Some((p, Mutation::Insert, land_in))

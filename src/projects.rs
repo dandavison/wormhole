@@ -49,7 +49,7 @@ impl<'a> Projects<'a> {
     }
 
     pub fn previous(&self) -> Option<Project> {
-        self.0.back().cloned()
+        self.0.get(1).cloned()
     }
 
     pub fn current(&self) -> Option<Project> {
@@ -57,14 +57,14 @@ impl<'a> Projects<'a> {
     }
 
     pub fn next(&self) -> Option<Project> {
-        self.0.get(1).cloned()
+        self.0.back().cloned()
     }
 
     pub fn apply(&mut self, mutation: Mutation, name: &str) {
         match mutation {
             Mutation::Insert => {
-                self.move_to_front(name);
-                self.0.rotate_left(1);
+                self.move_to_back(name);
+                self.0.rotate_right(1);
             }
             Mutation::RotateLeft => self.0.rotate_left(1),
             Mutation::RotateRight => self.0.rotate_right(1),
@@ -107,6 +107,14 @@ impl<'a> Projects<'a> {
         self.index_by_name(&name).map(|i| {
             self.0.remove(i).map(|p| {
                 self.0.push_front(p);
+            });
+        });
+    }
+
+    pub fn move_to_back(&mut self, name: &str) {
+        self.index_by_name(&name).map(|i| {
+            self.0.remove(i).map(|p| {
+                self.0.push_back(p);
             });
         });
     }

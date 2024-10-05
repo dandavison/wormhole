@@ -17,10 +17,8 @@ pub use pst::*;
 use std::convert::Infallible;
 use std::net::SocketAddr;
 
-// use hyper::server::conn::AddrIncoming;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::Server;
-// use hyper_rustls::TlsAcceptor;
 
 use util::warn;
 

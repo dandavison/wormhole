@@ -132,32 +132,19 @@ pub fn open_path(path: &ProjectPath, window_action: WindowAction) -> Result<(), 
 
     // This is fast. But it can hijack windows.
     let dir_uri = config::EDITOR.open_directory_uri(&root_abspath);
+    execute_command("open", ["-g", dir_uri.as_str()], &root_abspath);
+
     let file_line_uri = if path.absolute_path().is_dir() {
         None
     } else {
         Some(config::EDITOR.open_file_uri(&path.absolute_path(), line))
     };
-    match window_action {
-        WindowAction::Raise => {
-            execute_command("open", [dir_uri.as_str()], &root_abspath);
-            if let Some(file_line_uri) = file_line_uri {
-                execute_command(
-                    "sh",
-                    ["-c", &format!("open -g {}", file_line_uri.as_str())],
-                    &root_abspath,
-                );
-            }
-        }
-        WindowAction::Focus => {
-            execute_command("open", ["-g", dir_uri.as_str()], &root_abspath);
-            if let Some(file_line_uri) = file_line_uri {
-                execute_command(
-                    "sh",
-                    ["-c", &format!("open -g {}", file_line_uri.as_str())],
-                    &root_abspath,
-                );
-            }
-        }
+    if let Some(file_line_uri) = file_line_uri {
+        execute_command(
+            "sh",
+            ["-c", &format!("open {}", file_line_uri.as_str())],
+            &root_abspath,
+        );
     }
     Ok(())
 }

@@ -1,9 +1,9 @@
 use std::process::Command;
 use std::str;
 
-use crate::config;
 use crate::util::{error, panic, warn};
 use crate::wormhole::Application;
+use crate::{config, ps};
 
 pub fn current_application() -> Application {
     match str::from_utf8(&hammerspoon(
@@ -33,6 +33,7 @@ pub fn current_application() -> Application {
 }
 
 pub fn launch_or_focus(application_name: &str) {
+    ps!("Focusing {}", application_name);
     hammerspoon(&format!(
         r#"
         hs.application.launchOrFocus("/Applications/{application_name}.app")

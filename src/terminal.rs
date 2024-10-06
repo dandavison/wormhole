@@ -1,6 +1,5 @@
 use std::fs;
 
-use crate::ps;
 use crate::{config, hammerspoon, project::Project, tmux, util::warn, wezterm};
 
 #[allow(dead_code)]
@@ -48,7 +47,6 @@ impl Terminal {
     }
 
     pub fn focus(&self) {
-        ps!("Focusing terminal");
         hammerspoon::launch_or_focus(self.application_name())
     }
 

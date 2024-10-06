@@ -105,8 +105,8 @@ pub fn open_workspace(project: &Project) {
     }
 }
 
-pub fn open_path_via_uri(path: &ProjectPath, window_action: WindowAction) -> Result<(), String> {
-    ps!("Editor::open_path_via_uri(path={path:?}, window_action={window_action:?})");
+pub fn open_path(path: &ProjectPath, window_action: WindowAction) -> Result<(), String> {
+    ps!("Editor::open_path(path={path:?}, window_action={window_action:?})");
     let line = path
         .relative_path
         .as_ref()

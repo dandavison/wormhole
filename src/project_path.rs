@@ -18,7 +18,6 @@ pub struct ProjectPath {
 
 impl ProjectPath {
     pub fn open(&self, mutation: Mutation, land_in: Option<Application>) {
-        ps!("ProjectPath::open(mutation={mutation:?}, land_in={land_in:?})");
         let mut projects = projects::lock();
         let project = self.project.clone();
 

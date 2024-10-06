@@ -4,7 +4,6 @@ use std::process::Command;
 use std::thread;
 
 use crate::project::Project;
-use crate::ps;
 use crate::terminal::write_wormhole_env_vars;
 use crate::util::{get_stdout, panic};
 
@@ -51,7 +50,6 @@ pub fn exists(project: &Project) -> bool {
 }
 
 pub fn open(project: &Project) -> Result<(), String> {
-    ps!("tmux::open({project:?})");
     if let Some(window) = get_window(&project.name) {
         tmux(["select-window", "-t", &window.id]);
     } else {

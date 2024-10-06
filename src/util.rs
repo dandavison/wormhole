@@ -65,6 +65,24 @@ where
     get_stdout(program, output)
 }
 
+pub fn execute_command_silent<S, I, P>(program: S, args: I, current_dir: P) -> String
+where
+    S: AsRef<OsStr>,
+    I: IntoIterator<Item = S>,
+    P: AsRef<Path>,
+    S: Copy,
+    S: Display,
+    I: Debug,
+    P: Debug,
+{
+    let output = Command::new(program)
+        .args(args)
+        .current_dir(current_dir)
+        .output()
+        .unwrap_or_else(|_| panic(&format!("failed to execute {program}")));
+    get_stdout(program, output)
+}
+
 pub fn get_stdout<S>(program: S, output: Output) -> String
 where
     S: AsRef<OsStr>,

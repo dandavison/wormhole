@@ -1,9 +1,12 @@
 use crate::project::Project;
+use crate::util::execute_command_silent;
 use crate::{config, ps};
 use lazy_static::lazy_static;
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
+use std::thread;
+use std::time::Duration;
 
 /*
     - Projects are held in a ring.
@@ -157,13 +160,17 @@ impl<'a> Projects<'a> {
     }
 
     pub fn print(&self) {
-        ps!(
-            "..., {}, {}*, {}, ... ({})",
-            self.previous().map(|p| p.name).unwrap_or("none".into()),
-            self.current().map(|p| p.name).unwrap_or("none".into()),
-            self.next().map(|p| p.name).unwrap_or("none".into()),
-            self.0.len(),
-        );
+        let previous = self.previous().map(|p| p.name).unwrap_or("none".into());
+        let current = self.current().map(|p| p.name).unwrap_or("none".into());
+        let next = self.next().map(|p| p.name).unwrap_or("none".into());
+        let len = self.0.len();
+
+        thread::spawn(move || {
+            thread::sleep(Duration::from_secs(2));
+            println!("{}", execute_command_silent("vscode-summary", [], "/tmp"));
+            println!("");
+            ps!("..., {}, {}*, {}, ... ({})", previous, current, next, len,);
+        });
     }
 }
 

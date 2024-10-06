@@ -106,6 +106,19 @@ pub fn open_workspace(project: &Project) {
 }
 
 pub fn open_path(path: &ProjectPath, window_action: WindowAction) -> Result<(), String> {
+    /*
+       - We do two calls: one to open the workspace (i.e. analogous to `code .`)
+         and one to open the path.
+
+       - Opening a VSCode/Cursor workspace is much faster via the URI (e.g.
+         vscode://file/my/project/root) than via `code .` with cwd set to the
+         directory.
+
+       - However, if the vscode window does not already exist, then
+         opening via URI hijacks an existing window.
+
+       - `open --new` with a URI doesn't actually open anything
+    */
     ps!("Editor::open_path(path={path:?}, window_action={window_action:?})");
     let line = path
         .relative_path
@@ -113,6 +126,11 @@ pub fn open_path(path: &ProjectPath, window_action: WindowAction) -> Result<(), 
         .and_then(|(_, line)| line.to_owned());
     let root = path.project.root();
     let root_abspath = root.absolute_path();
+
+    // This is slow.
+    // execute_command("cursor", ["."], &root_abspath);
+
+    // This is fast. But it can hijack windows.
     let dir_uri = config::EDITOR.open_directory_uri(&root_abspath);
     let file_line_uri = if path.absolute_path().is_dir() {
         None

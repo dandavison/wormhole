@@ -103,11 +103,6 @@ pub fn open_workspace(project: &Project) {
             );
         }
     }
-    execute_command(
-        config::EDITOR.cli_executable_name(),
-        ["--new-window", "."],
-        project.root().absolute_path().to_str().unwrap(),
-    );
 }
 
 pub fn open_path_via_uri(path: &ProjectPath, window_action: WindowAction) -> Result<(), String> {

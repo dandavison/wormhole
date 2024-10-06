@@ -140,11 +140,7 @@ pub fn open_path(path: &ProjectPath, window_action: WindowAction) -> Result<(), 
         Some(config::EDITOR.open_file_uri(&path.absolute_path(), line))
     };
     if let Some(file_line_uri) = file_line_uri {
-        execute_command(
-            "sh",
-            ["-c", &format!("open {}", file_line_uri.as_str())],
-            &root_abspath,
-        );
+        execute_command("open", [file_line_uri.as_str()], &root_abspath);
     }
     Ok(())
 }

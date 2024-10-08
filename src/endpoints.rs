@@ -51,7 +51,6 @@ pub fn open_project(name_or_path: &str) -> Response<Body> {
     };
 
     if let Some(p) = project {
-        config::TERMINAL.open(&p).unwrap();
         p.root().open(
             projects::Mutation::Insert,
             Some(crate::wormhole::Application::Terminal),

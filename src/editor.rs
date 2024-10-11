@@ -136,13 +136,24 @@ pub fn open_path(path: &ProjectPath, window_action: WindowAction) -> Result<(), 
     let dir_uri = editor.open_directory_uri(&root_abspath);
     execute_command("open", ["-g", dir_uri.as_str()], &root_abspath);
 
-    let file_line_uri = if path.absolute_path().is_dir() {
-        None
-    } else {
-        Some(editor.open_file_uri(&path.absolute_path(), line))
-    };
-    if let Some(file_line_uri) = file_line_uri {
-        execute_command("open", [file_line_uri.as_str()], &root_abspath);
+    match editor {
+        IntelliJ => {
+            execute_command(
+                editor.cli_executable_name(),
+                [path.absolute_path().to_str().unwrap()],
+                &root_abspath,
+            );
+        }
+        _ => {
+            let file_line_uri = if path.absolute_path().is_dir() {
+                None
+            } else {
+                Some(editor.open_file_uri(&path.absolute_path(), line))
+            };
+            if let Some(file_line_uri) = file_line_uri {
+                execute_command("open", [file_line_uri.as_str()], &root_abspath);
+            }
+        }
     }
     Ok(())
 }

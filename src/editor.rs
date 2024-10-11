@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use crate::project::Project;
-use crate::{config, project_path::ProjectPath, util::execute_command, wormhole::WindowAction};
+use crate::{project_path::ProjectPath, util::execute_command, wormhole::WindowAction};
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -87,19 +87,24 @@ impl Editor {
 
 pub fn open_workspace(project: &Project) {
     ps!("open_workspace({project:?})");
-    match config::EDITOR {
+    let editor = project.editor();
+    let project_dir = project.root().absolute_path();
+    match editor {
         Cursor | VSCode | VSCodeInsiders => {
             execute_command(
-                config::EDITOR.cli_executable_name(),
+                editor.cli_executable_name(),
                 ["--new-window", "."],
-                project.root().absolute_path().to_str().unwrap(),
+                project_dir,
             );
         }
         _ => {
             execute_command(
-                config::EDITOR.cli_executable_name(),
-                ["."],
-                project.root().absolute_path().to_str().unwrap(),
+                "bash",
+                [
+                    "-c",
+                    &format!("{} . >& /dev/null &", editor.cli_executable_name()),
+                ],
+                project_dir,
             );
         }
     }
@@ -131,13 +136,14 @@ pub fn open_path(path: &ProjectPath, window_action: WindowAction) -> Result<(), 
     // execute_command("cursor", ["."], &root_abspath);
 
     // This is fast. But it can hijack windows.
-    let dir_uri = config::EDITOR.open_directory_uri(&root_abspath);
+    let editor = path.project.editor();
+    let dir_uri = editor.open_directory_uri(&root_abspath);
     execute_command("open", ["-g", dir_uri.as_str()], &root_abspath);
 
     let file_line_uri = if path.absolute_path().is_dir() {
         None
     } else {
-        Some(config::EDITOR.open_file_uri(&path.absolute_path(), line))
+        Some(editor.open_file_uri(&path.absolute_path(), line))
     };
     if let Some(file_line_uri) = file_line_uri {
         execute_command("open", [file_line_uri.as_str()], &root_abspath);

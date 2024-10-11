@@ -1,4 +1,5 @@
 use crate::config;
+use crate::editor::Editor;
 use crate::project_path::ProjectPath;
 use crate::util::{contract_user, expand_user, panic};
 use std::path::PathBuf;
@@ -59,5 +60,13 @@ impl Project {
 
     pub fn is_terminal_only(&self) -> bool {
         self.name == "services"
+    }
+
+    pub fn editor(&self) -> Editor {
+        if self.name.to_lowercase().contains("java") {
+            Editor::IntelliJ
+        } else {
+            config::EDITOR
+        }
     }
 }

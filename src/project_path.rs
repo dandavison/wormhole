@@ -69,9 +69,15 @@ impl ProjectPath {
 
     pub fn from_absolute_path(path: &Path, projects: &Projects) -> Option<Self> {
         if let Some(project) = projects.by_path(path) {
+            let mut path: PathBuf = path.strip_prefix(&project.path).unwrap().into();
+            path = path
+                .to_str()
+                .and_then(|s| s.strip_suffix(":"))
+                .map(PathBuf::from)
+                .unwrap_or(path);
             Some(ProjectPath {
                 project: project.clone(),
-                relative_path: Some((path.strip_prefix(&project.path).unwrap().into(), None)),
+                relative_path: Some((path, None)),
             })
         } else {
             warn(&format!(

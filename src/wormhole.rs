@@ -96,7 +96,7 @@ fn determine_requested_operation(
         let p = projects.by_name(name).map(|p| p.as_project_path());
         Some((p, Mutation::Insert, land_in))
     } else if let Some(absolute_path) = url_path.strip_prefix("/file/") {
-        let p = ProjectPath::from_absolute_path(&PathBuf::from(absolute_path), &projects);
+        let p = ProjectPath::from_absolute_path(absolute_path, &projects);
         Some((p, Mutation::Insert, land_in))
     } else if let Some(project_path) = ProjectPath::from_github_url(&url_path, line, &projects) {
         if url_path.ends_with(".md") {

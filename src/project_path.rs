@@ -67,17 +67,18 @@ impl ProjectPath {
         projects.print();
     }
 
-    pub fn from_absolute_path(path: &Path, projects: &Projects) -> Option<Self> {
-        if let Some(project) = projects.by_path(path) {
-            let mut path: PathBuf = path.strip_prefix(&project.path).unwrap().into();
-            path = path
-                .to_str()
-                .and_then(|s| s.strip_suffix(":"))
-                .map(PathBuf::from)
-                .unwrap_or(path);
+    pub fn from_absolute_path(path: &str, projects: &Projects) -> Option<Self> {
+        let re = Regex::new(r"^(.*):([^:]*)$").unwrap();
+        let (path, line) = if let Some(captures) = re.captures(path) {
+            let line = captures.get(2).unwrap().as_str().parse::<usize>().ok();
+            (PathBuf::from(captures.get(1).unwrap().as_str()), line)
+        } else {
+            (PathBuf::from(path), None)
+        };
+        if let Some(project) = projects.by_path(&path) {
             Some(ProjectPath {
                 project: project.clone(),
-                relative_path: Some((path, None)),
+                relative_path: Some((path, line)),
             })
         } else {
             warn(&format!(

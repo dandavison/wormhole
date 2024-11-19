@@ -129,7 +129,6 @@ impl<'a> Projects<'a> {
 
     pub fn by_path(&self, query_path: &Path) -> Option<Project> {
         self.0.iter().find_map(|p| {
-            // The query path may have a `:line` suffix.
             if query_path.starts_with(&p.path) {
                 Some(p.clone())
             } else {

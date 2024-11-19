@@ -30,10 +30,6 @@ pub fn expand_user(path: &str) -> String {
     path.replacen("~", &home_dir().to_str().unwrap(), 1)
 }
 
-pub fn contract_user(path: &str) -> String {
-    path.replacen(&home_dir().to_str().unwrap(), "~", 1)
-}
-
 pub fn home_dir() -> PathBuf {
     dirs::home_dir().unwrap_or_else(|| panic("Cannot determine home directory"))
 }

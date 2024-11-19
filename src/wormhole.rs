@@ -1,5 +1,4 @@
 use std::convert::Infallible;
-use std::path::PathBuf;
 use std::thread;
 
 use crate::endpoints;

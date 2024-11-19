@@ -1,12 +1,13 @@
 use crate::config;
 use crate::project_path::ProjectPath;
-use crate::util::{contract_user, expand_user, panic};
+use crate::util::{expand_user, panic};
 use std::path::PathBuf;
 
 #[derive(Clone, Debug)]
 pub struct Project {
     pub name: String,
     pub path: PathBuf,
+    #[allow(unused)]
     pub aliases: Vec<String>,
 }
 
@@ -47,14 +48,6 @@ impl Project {
             path,
             aliases,
         }
-    }
-
-    pub fn format(&self) -> String {
-        let mut s = contract_user(self.path.to_str().unwrap());
-        if !self.aliases.is_empty() {
-            s += &format!(" -> {}", self.aliases.join(", "));
-        }
-        s
     }
 
     pub fn is_terminal_only(&self) -> bool {

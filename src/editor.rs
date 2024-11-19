@@ -4,7 +4,7 @@ use crate::project::Project;
 use crate::{project_path::ProjectPath, util::execute_command, wormhole::WindowAction};
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Editor {
     Cursor,
     IntelliJ,
@@ -133,8 +133,10 @@ pub fn open_path(path: &ProjectPath, window_action: WindowAction) -> Result<(), 
 
     // This is fast. But it can hijack windows.
     let editor = path.project.editor();
-    let dir_uri = editor.open_directory_uri(&root_abspath);
-    execute_command("open", ["-g", dir_uri.as_str()], &root_abspath);
+    if editor != IntelliJ {
+        let dir_uri = editor.open_directory_uri(&root_abspath);
+        execute_command("open", ["-g", dir_uri.as_str()], &root_abspath);
+    }
 
     let file_line_uri = if path.absolute_path().is_dir() {
         None

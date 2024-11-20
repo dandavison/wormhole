@@ -88,19 +88,23 @@ impl Editor {
 pub fn open_workspace(project: &Project) {
     ps!("open_workspace({project:?})");
     let editor = project.editor();
+    let project_dir = project.root().absolute_path();
     match editor {
         Cursor | VSCode | VSCodeInsiders => {
             execute_command(
                 editor.cli_executable_name(),
                 ["--new-window", "."],
-                project.root().absolute_path().to_str().unwrap(),
+                project_dir,
             );
         }
         _ => {
             execute_command(
-                editor.cli_executable_name(),
-                ["."],
-                project.root().absolute_path().to_str().unwrap(),
+                "bash",
+                [
+                    "-c",
+                    &format!("{} . >& /dev/null &", editor.cli_executable_name()),
+                ],
+                project_dir,
             );
         }
     }

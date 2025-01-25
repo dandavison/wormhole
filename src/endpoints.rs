@@ -10,6 +10,9 @@ pub fn list_projects() -> Response<Body> {
         .open()
         .into_iter()
         .map(|p| p.name)
+        // HACK: why is samples-java showing up twice? Something to do with the
+        // fact that it uses IntelliJ?
+        .unique()
         .collect();
     if !names.is_empty() {
         // These names will be used by selector UIs; rotate so that current

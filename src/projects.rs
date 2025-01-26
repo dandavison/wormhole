@@ -1,5 +1,5 @@
 use crate::project::Project;
-use crate::util::execute_command_silent;
+use crate::util::execute_command;
 use crate::{config, ps};
 use lazy_static::lazy_static;
 use std::collections::VecDeque;
@@ -166,7 +166,7 @@ impl<'a> Projects<'a> {
 
         thread::spawn(move || {
             thread::sleep(Duration::from_secs(2));
-            println!("{}", execute_command_silent("vscode-summary", [], "/tmp"));
+            println!("{}", execute_command("vscode-summary", [], "/tmp"));
             println!("");
             ps!("..., {}, {}*, {}, ... ({})", previous, current, next, len,);
         });

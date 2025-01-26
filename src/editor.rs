@@ -4,14 +4,15 @@ use crate::project::Project;
 use crate::{project_path::ProjectPath, util::execute_command, wormhole::WindowAction};
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Editor {
     Cursor,
+    Emacs,
     IntelliJ,
-    VSCode,
-    VSCodeInsiders,
     PyCharm,
     PyCharmCE,
+    VSCode,
+    VSCodeInsiders,
 }
 use crate::ps;
 use Editor::*;
@@ -40,6 +41,7 @@ impl Editor {
     pub fn application_name(&self) -> &'static str {
         match self {
             Cursor => "Cursor",
+            Emacs => "Emacs",
             VSCodeInsiders => "Code - Insiders",
             VSCode => "Code",
             PyCharm => "PyCharm",
@@ -51,6 +53,7 @@ impl Editor {
     pub fn cli_executable_name(&self) -> &'static str {
         match self {
             Cursor => "cursor",
+            Emacs => "emacsclient",
             VSCodeInsiders => "code-insiders",
             VSCode => "code",
             PyCharm => "pycharm",
@@ -63,6 +66,7 @@ impl Editor {
         let path = absolute_path.to_str().unwrap();
         match self {
             Cursor => format!("cursor://file/{path}"),
+            Emacs => panic!("Emacs does not support a URL for opening a directory"),
             IntelliJ => format!("idea://open?file={path}"),
             PyCharm => format!("pycharm://open?file={path}"),
             PyCharmCE => format!("pycharm://open?file={path}"),
@@ -76,6 +80,7 @@ impl Editor {
         let line = line.unwrap_or(1);
         match self {
             Cursor => format!("cursor://file/{path}:{line}"),
+            Emacs => panic!("Emacs does not support a URL for opening a file"),
             IntelliJ => format!("idea://open?file={path}&line={line}"),
             PyCharm => format!("pycharm://open?file={path}&line={line}"),
             PyCharmCE => format!("pycharm://open?file={path}&line={line}"),
@@ -96,6 +101,9 @@ pub fn open_workspace(project: &Project) {
                 ["--new-window", "."],
                 project_dir,
             );
+        }
+        Emacs => {
+            execute_command("emacsclient", ["-n", "."], project_dir);
         }
         _ => {
             execute_command(
@@ -132,11 +140,16 @@ pub fn open_path(path: &ProjectPath, window_action: WindowAction) -> Result<(), 
     let root = path.project.root();
     let root_abspath = root.absolute_path();
 
+    let editor = path.project.editor();
+    if editor == Emacs {
+        execute_command("emacsclient", ["-n", "."], &root_abspath);
+        return Ok(());
+    }
+
     // This is slow.
     // execute_command("cursor", ["."], &root_abspath);
 
     // This is fast. But it can hijack windows.
-    let editor = path.project.editor();
     let dir_uri = editor.open_directory_uri(&root_abspath);
     execute_command("open", ["-g", dir_uri.as_str()], &root_abspath);
 

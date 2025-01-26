@@ -35,11 +35,10 @@ pub fn home_dir() -> PathBuf {
 }
 
 pub fn desktop_notification(msg: &str) {
-    execute_command(
-        "terminal-notifier",
-        ["-message", msg, "-title", "wormhole"],
-        "/tmp",
-    );
+    Command::new("terminal-notifier")
+        .args(["-message", msg, "-title", "wormhole"])
+        .spawn()
+        .unwrap_or_else(|err| panic(&format!("failed to spawn terminal-notifier: {err}")));
 }
 
 pub fn execute_command<S, I, P>(program: S, args: I, current_dir: P) -> String

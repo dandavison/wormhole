@@ -62,8 +62,12 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         if let Some((Some(project_path), mutation, land_in)) =
             determine_requested_operation(&path, params.line, params.land_in)
         {
-            thread::spawn(move || project_path.open(mutation, land_in));
-            Ok(Response::new(Body::from("Sent into wormhole.")))
+            if project_path.project.name != "dan" {
+                thread::spawn(move || project_path.open(mutation, land_in));
+                Ok(Response::new(Body::from("Sent into wormhole.")))
+            } else {
+                Ok(Response::new(Body::from("Error: dan is not allowed.")))
+            }
         } else {
             let redirect_to = format!(
                 "https://github.com{path}#L{}?wormhole=false",

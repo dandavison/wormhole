@@ -69,6 +69,7 @@ pub fn close_project(name: &str) -> Response<Body> {
     let projects = projects::lock();
     projects.by_name(name).map(|p| {
         config::TERMINAL.close(&p);
+        config::EDITOR.close(&p);
     });
     projects.print();
     Response::new(Body::from(format!("closed project: {}", name)))

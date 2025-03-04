@@ -56,7 +56,7 @@ impl Project {
     }
 
     pub fn editor(&self) -> Editor {
-        if self.name.to_lowercase().contains("java") {
+        if false && self.name.to_lowercase().contains("java") {
             Editor::IntelliJ
         } else if self.name == "mathematics" {
             Editor::Emacs

@@ -47,6 +47,10 @@ pub enum Mutation {
 }
 
 impl<'a> Projects<'a> {
+    pub fn all(&self) -> &VecDeque<Project> {
+        &self.0
+    }
+    
     pub fn names(&self) -> Vec<String> {
         self.0.iter().map(|p| p.name.clone()).collect()
     }

@@ -41,6 +41,8 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
     }
     if &path == "/list-projects/" {
         Ok(endpoints::list_projects())
+    } else if &path == "/debug-projects/" {
+        Ok(endpoints::debug_projects())
     } else if let Some(path) = path.strip_prefix("/add-project/") {
         // An absolute path must have a double slash: /add-project//Users/me/file.rs
         Ok(endpoints::add_project(&path.trim(), params.names))

@@ -1,2 +1,2 @@
 #!/bin/bash
-curl -s http://wormhole:7117/close-project/"$1"
+curl -s http://wormhole:7117/close-project/"${1:-$WORMHOLE_PROJECT_NAME}"

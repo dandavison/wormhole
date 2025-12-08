@@ -27,18 +27,25 @@ pub fn project_directories() -> Vec<String> {
             let window_name = fields.next().unwrap().to_string();
             let directory = fields.next().unwrap().to_string();
             if let Some(existing_directory) = directories.get(&window_name) {
-                let common_prefix = existing_directory
+                let common_prefix: String = existing_directory
                     .chars()
                     .zip(directory.chars())
                     .take_while(|(a, b)| a == b)
                     .map(|(a, _)| a)
                     .collect();
-                directories.insert(window_name, common_prefix);
+                // If the common prefix is just "/", skip this window as it has
+                // disparate pane directories with no meaningful common root
+                if common_prefix != "/" {
+                    directories.insert(window_name, common_prefix);
+                }
             } else {
                 directories.insert(window_name, directory);
             }
         });
-    directories.into_values().collect()
+    directories
+        .into_values()
+        .filter(|dir| dir != "/") // Also filter out any remaining root directories
+        .collect()
 }
 
 pub fn window_names() -> Vec<String> {

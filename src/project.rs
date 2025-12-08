@@ -41,7 +41,14 @@ impl Project {
             let name = path
                 .file_name()
                 .map(|name| name.to_string_lossy().to_string())
-                .unwrap_or_else(|| panic(&format!("invalid path: {}", path.display())));
+                .unwrap_or_else(|| {
+                    // Handle special cases where path doesn't have a file name
+                    if path == PathBuf::from("/") {
+                        panic("Cannot use root directory '/' as a project path");
+                    } else {
+                        panic(&format!("Invalid project path (no file name): {}", path.display()))
+                    }
+                });
             (name, vec![])
         };
         Self {

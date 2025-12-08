@@ -95,12 +95,7 @@ impl ProjectPath {
         if let Some(captures) = re.captures(path) {
             ps!("Handling as github URL");
             let path = PathBuf::from(captures.get(4).unwrap().as_str());
-            let mut repo = captures.get(2).unwrap().as_str();
-
-            // Hardcoded remapping for temporal -> server
-            if repo == "temporal" {
-                repo = "server";
-            }
+            let repo = captures.get(2).unwrap().as_str();
 
             ps!(
                 "path: {} line: {:?} repo: {}",

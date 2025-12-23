@@ -1,9 +1,6 @@
-mod test_framework;
-
 use std::process::Command;
 use std::thread;
 use std::time::Duration;
-use test_framework::*;
 
 /// Integration test helper that manages a tmux session for testing
 struct TmuxTestSession {
@@ -84,6 +81,7 @@ impl TmuxTestSession {
         self.tmux_cmd(&["send-keys", "-t", &target, keys]);
     }
 
+    #[allow(dead_code)]
     fn socket_path(&self) -> String {
         // Return path that would be used with -S flag
         // This is for TMUX environment variable

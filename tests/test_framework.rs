@@ -17,6 +17,7 @@ pub struct CapturedCommand {
 
 pub struct TestServer {
     child: Option<Child>,
+    #[allow(dead_code)]
     port: u16,
     capture_file: String,
 }
@@ -163,6 +164,7 @@ impl TestServer {
         })
     }
 
+    #[allow(dead_code)]
     pub fn assert_no_commands(&self) {
         let commands = self.get_captured_commands();
         assert!(commands.is_empty(), "Expected no commands, but found: {:?}", commands);
@@ -183,6 +185,7 @@ impl Drop for TestServer {
 }
 
 // Test assertion helpers
+#[allow(dead_code)]
 pub fn assert_contains(haystack: &str, needle: &str) {
     assert!(
         haystack.contains(needle),

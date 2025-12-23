@@ -1,17 +1,11 @@
-use core::{panic, str};
+use core::panic;
 use std::{
-    env,
     ffi::OsStr,
     fmt::{Debug, Display},
     path::{Path, PathBuf},
-    process::Output,
 };
 
 use crate::command;
-
-pub fn debug() -> bool {
-    env::var("WORMHOLE_DEBUG").is_ok()
-}
 
 pub fn warn(msg: &str) {
     let msg = format!("WARNING: {}", msg);
@@ -51,23 +45,4 @@ where
 {
     // Delegate to the unified command execution layer
     command::execute_command(program, args, current_dir)
-}
-
-pub fn get_stdout<S>(program: S, output: Output) -> String
-where
-    S: AsRef<OsStr>,
-    S: Display,
-{
-    let stdout = str::from_utf8(&output.stdout)
-        .unwrap_or_else(|err| panic(&format!("failed to parse stdout from {program}: {err}")))
-        .trim_end()
-        .to_string();
-    if !output.stderr.is_empty() {
-        let stderr = str::from_utf8(&output.stderr)
-            .unwrap_or_else(|err| panic(&format!("failed to parse stderr from {program}: {err}")));
-        panic(&format!(
-            "program {program} produced output on stderr: {stderr}"
-        ));
-    }
-    stdout
 }

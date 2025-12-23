@@ -23,6 +23,7 @@ pub enum ExecutionMode {
 pub struct CommandResult {
     pub stdout: Vec<u8>,
     pub stderr: Vec<u8>,
+    #[allow(dead_code)]
     pub status: Option<i32>,
 }
 

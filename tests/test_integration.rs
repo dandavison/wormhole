@@ -144,10 +144,10 @@ fn test_wormhole_in_tmux_session() {
         );
     }
 
-    // Start wormhole with test mode to use TestEditor instead of real editor
-    // We still get real tmux but avoid spawning actual editor windows
+    // Start wormhole in integration test mode
+    // Real tmux commands execute, but editor commands are intercepted
     tmux.send_keys(
-        "WORMHOLE_PORT=8885 WORMHOLE_TEST_MODE=/tmp/test_capture_8885.json ./target/debug/wormhole",
+        "WORMHOLE_PORT=8885 WORMHOLE_INTEGRATION_TEST_MODE=1 ./target/debug/wormhole",
         None,
     );
     tmux.send_keys("Enter", None);
@@ -267,9 +267,9 @@ fn test_wormhole_project_navigation() {
     // Test that wormhole properly navigates between projects in tmux
     let tmux = TmuxTestSession::new("nav-test");
 
-    // Start wormhole with test mode to use TestEditor instead of real editor
+    // Start wormhole in integration test mode
     tmux.send_keys(
-        "WORMHOLE_PORT=8886 WORMHOLE_TEST_MODE=/tmp/test_capture_8886.json ./target/debug/wormhole",
+        "WORMHOLE_PORT=8886 WORMHOLE_INTEGRATION_TEST_MODE=1 ./target/debug/wormhole",
         None,
     );
     tmux.send_keys("Enter", None);

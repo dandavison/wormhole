@@ -50,25 +50,46 @@ where
         mode
     );
 
-    // Test mode: capture commands instead of executing (but let tmux through)
+    // Test mode: capture ALL commands instead of executing
     if let Ok(capture_file) = env::var("WORMHOLE_TEST_MODE") {
-        // Always execute tmux commands for real in test mode
-        if program.to_string() != "tmux" {
-            capture_command_for_test(
-                &program,
-                &args_vec,
-                current_dir.as_ref(),
-                &mode,
-                &capture_file,
+        capture_command_for_test(
+            &program,
+            &args_vec,
+            current_dir.as_ref(),
+            &mode,
+            &capture_file,
+        );
+        // Return mock successful result
+        return Some(CommandResult {
+            stdout: Vec::new(),
+            stderr: Vec::new(),
+            status: Some(0),
+        });
+    }
+
+    // Integration test mode: intercept editor commands only
+    if env::var("WORMHOLE_INTEGRATION_TEST_MODE").is_ok() {
+        // Replace editor-related commands with no-ops
+        let prog_str = program.to_string();
+        if prog_str == "open"
+            || prog_str == "test-editor"
+            || prog_str == "cursor"
+            || prog_str == "code"
+            || prog_str == "emacsclient"
+        {
+            // Log but don't execute editor commands
+            ps!(
+                "Integration test: skipping editor command: {} {:?}",
+                program,
+                args_vec
             );
-            // Return mock successful result for non-tmux commands
             return Some(CommandResult {
                 stdout: Vec::new(),
                 stderr: Vec::new(),
                 status: Some(0),
             });
         }
-        // For tmux, fall through to execute normally
+        // All other commands (including tmux) execute normally
     }
 
     let mut cmd = Command::new(program.as_ref());

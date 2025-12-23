@@ -1,11 +1,16 @@
 use core::panic;
 use std::{
+    env,
     ffi::OsStr,
     fmt::{Debug, Display},
     path::{Path, PathBuf},
 };
 
 use crate::command;
+
+pub fn debug() -> bool {
+    env::var("WORMHOLE_DEBUG").is_ok()
+}
 
 pub fn warn(msg: &str) {
     let msg = format!("WARNING: {}", msg);

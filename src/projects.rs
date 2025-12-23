@@ -175,8 +175,10 @@ impl<'a> Projects<'a> {
 
         thread::spawn(move || {
             thread::sleep(Duration::from_secs(2));
-            println!("{}", execute_command("vscode-summary", [], "/tmp"));
-            println!("");
+            if crate::util::debug() {
+                println!("{}", execute_command("vscode-summary", [], "/tmp"));
+                println!("");
+            }
             ps!("..., {}, {}*, {}, ... ({})", previous, current, next, len,);
         });
     }

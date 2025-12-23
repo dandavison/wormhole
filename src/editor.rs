@@ -14,7 +14,6 @@ pub enum Editor {
     VSCode,
     VSCodeInsiders,
 }
-use crate::ps;
 use Editor::*;
 
 /*
@@ -105,13 +104,14 @@ impl Editor {
             dir.to_string_lossy(),
             self.application_name()
         );
-        println!("cmd: {}", cmd);
+        if crate::util::debug() {
+            println!("cmd: {}", cmd);
+        }
         execute_command("bash", ["-c", &cmd], dir.as_path());
     }
 }
 
 pub fn open_workspace(project: &Project) {
-    ps!("open_workspace({project:?})");
     let editor = project.editor();
     let project_dir = project.root().absolute_path();
     match editor {
@@ -138,7 +138,7 @@ pub fn open_workspace(project: &Project) {
     }
 }
 
-pub fn open_path(path: &ProjectPath, window_action: WindowAction) -> Result<(), String> {
+pub fn open_path(path: &ProjectPath, _window_action: WindowAction) -> Result<(), String> {
     /*
        - We do two calls: one to open the workspace (i.e. analogous to `code .`)
          and one to open the path.
@@ -152,7 +152,6 @@ pub fn open_path(path: &ProjectPath, window_action: WindowAction) -> Result<(), 
 
        - `open --new` with a URI doesn't actually open anything
     */
-    ps!("Editor::open_path(path={path:?}, window_action={window_action:?})");
     let line = path
         .relative_path
         .as_ref()

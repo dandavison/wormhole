@@ -198,12 +198,19 @@ cargo test test_list_projects -- --test-threads=1
 
 ### Test Coverage
 
-The test suite currently covers:
-- Project listing endpoint behavior
-- Adding new projects
-- Command capture verification
+The test suite includes:
 
-Tests can be extended to cover additional scenarios as needed.
+**Unit/Mock Tests** (`test_basic.rs`, `test_wormhole_tmux.rs`):
+- HTTP endpoint behavior
+- Command capture and verification
+- Editor and tmux command generation
+
+**Integration Tests** (`test_integration.rs`):
+- Real tmux session management
+- Wormhole running inside tmux
+- Project window creation and navigation
+- Multi-project workflow testing
+- tmux capture-pane for output verification
 
 ### Writing New Tests
 

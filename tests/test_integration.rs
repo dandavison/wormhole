@@ -89,8 +89,15 @@ impl TmuxTestSession {
         } else {
             self.session_name.clone()
         };
-
-        self.tmux_cmd(&["send-keys", "-t", &target, keys]);
+        
+        // Handle special keys like Enter and C-c
+        if keys == "Enter" {
+            self.tmux_cmd(&["send-keys", "-t", &target, "Enter"]);
+        } else if keys == "C-c" {
+            self.tmux_cmd(&["send-keys", "-t", &target, "C-c"]);
+        } else {
+            self.tmux_cmd(&["send-keys", "-t", &target, keys]);
+        }
     }
 
     #[allow(dead_code)]
@@ -111,36 +118,137 @@ impl Drop for TmuxTestSession {
 }
 
 #[test]
-fn test_real_tmux_project_discovery() {
-    // Create a test tmux session with some windows
-    let tmux = TmuxTestSession::new("discovery");
-
-    // Create some test project directories
-    let _ = std::fs::create_dir_all("/tmp/test-project-1");
-    let _ = std::fs::create_dir_all("/tmp/test-project-2");
-
-    // Create tmux windows for these projects
-    tmux.create_window("project1", "/tmp/test-project-1");
-    tmux.create_window("project2", "/tmp/test-project-2");
-
-    // Verify tmux windows were created
+fn test_wormhole_in_tmux_session() {
+    // Create an isolated tmux session for testing
+    let tmux = TmuxTestSession::new("wormhole-test");
+    
+    // Create test project directories
+    let _ = std::fs::create_dir_all("/tmp/test-project-a");
+    let _ = std::fs::create_dir_all("/tmp/test-project-b");
+    
+    // Start wormhole inside the tmux session
+    // This ensures wormhole has the TMUX environment variable set correctly
+    let wormhole_path = std::env::current_dir()
+        .unwrap()
+        .join("target/debug/wormhole");
+    
+    if !wormhole_path.exists() {
+        panic!("Wormhole binary not found at {:?}. Run 'cargo build' first.", wormhole_path);
+    }
+    
+    // Change to project directory and start wormhole
+    let project_dir = std::env::current_dir().unwrap();
+    tmux.send_keys(&format!("cd {}", project_dir.display()), None);
+    tmux.send_keys("Enter", None);
+    thread::sleep(Duration::from_millis(100));
+    
+    tmux.send_keys("WORMHOLE_PORT=8885 ./target/debug/wormhole 2>&1", None);
+    tmux.send_keys("Enter", None);
+    
+    // Wait for wormhole to start
+    thread::sleep(Duration::from_millis(2000));
+    
+    // Verify wormhole is running by checking the pane
+    let pane_content = tmux.capture_pane(None);
+    println!("Wormhole output:\n{}", pane_content);
+    
+    // Make HTTP requests to wormhole
+    match ureq::post("http://localhost:8885/add-project/proj-a:/tmp/test-project-a").call() {
+        Ok(_) => println!("Successfully added proj-a"),
+        Err(e) => {
+            println!("Failed to add project: {}", e);
+            // Kill wormhole and fail test
+            tmux.send_keys("C-c", None);
+            panic!("Could not connect to wormhole");
+        }
+    }
+    
+    // Open the project - this should create a new tmux window
+    let _ = ureq::get("http://localhost:8885/open-project/proj-a").call();
+    thread::sleep(Duration::from_millis(500));
+    
+    // Check that a new window was created
+    let windows = tmux.list_windows();
+    println!("Windows after opening project: {:?}", windows);
+    assert!(
+        windows.iter().any(|w| w.contains("proj-a")),
+        "Expected proj-a window to be created"
+    );
+    
+    // Add and open another project
+    let _ = ureq::post("http://localhost:8885/add-project/proj-b:/tmp/test-project-b").call();
+    let _ = ureq::get("http://localhost:8885/open-project/proj-b").call();
+    thread::sleep(Duration::from_millis(500));
+    
     let windows = tmux.list_windows();
     assert!(
-        windows.contains(&"project1".to_string()),
-        "Expected project1 window"
+        windows.iter().any(|w| w.contains("proj-b")),
+        "Expected proj-b window to be created"
     );
+    
+    // Clean up: send Ctrl-C to stop wormhole
+    tmux.send_keys("C-c", None);
+    thread::sleep(Duration::from_millis(100));
+}
+
+#[test]
+fn test_wormhole_project_navigation() {
+    // Test that wormhole properly navigates between projects in tmux
+    let tmux = TmuxTestSession::new("nav-test");
+    
+    // Start wormhole in the tmux session
+    tmux.send_keys("WORMHOLE_PORT=8886 ./target/debug/wormhole 2>&1", None);
+    tmux.send_keys("Enter", None);
+    thread::sleep(Duration::from_millis(1000));
+    
+    // Verify wormhole started
+    let startup_output = tmux.capture_pane(None);
+    if startup_output.contains("error") || startup_output.contains("panic") {
+        panic!("Wormhole failed to start:\n{}", startup_output);
+    }
+    
+    // Add multiple projects
+    let _ = ureq::post("http://localhost:8886/add-project/alpha:/tmp/alpha").call();
+    let _ = ureq::post("http://localhost:8886/add-project/beta:/tmp/beta").call();
+    let _ = ureq::post("http://localhost:8886/add-project/gamma:/tmp/gamma").call();
+    
+    // Open projects in sequence
+    let _ = ureq::get("http://localhost:8886/open-project/alpha").call();
+    thread::sleep(Duration::from_millis(300));
+    
+    let _ = ureq::get("http://localhost:8886/open-project/beta").call();
+    thread::sleep(Duration::from_millis(300));
+    
+    let _ = ureq::get("http://localhost:8886/open-project/gamma").call();
+    thread::sleep(Duration::from_millis(300));
+    
+    // Verify all windows exist
+    let windows = tmux.list_windows();
+    println!("All windows: {:?}", windows);
+    assert!(windows.iter().any(|w| w.contains("alpha")), "alpha window should exist");
+    assert!(windows.iter().any(|w| w.contains("beta")), "beta window should exist");
+    assert!(windows.iter().any(|w| w.contains("gamma")), "gamma window should exist");
+    
+    // Test navigation endpoints
+    let _ = ureq::get("http://localhost:8886/previous-project/").call();
+    thread::sleep(Duration::from_millis(200));
+    
+    let _ = ureq::get("http://localhost:8886/next-project/").call();
+    thread::sleep(Duration::from_millis(200));
+    
+    // Close a project
+    let _ = ureq::post("http://localhost:8886/close-project/beta").call();
+    thread::sleep(Duration::from_millis(300));
+    
+    let windows_after_close = tmux.list_windows();
     assert!(
-        windows.contains(&"project2".to_string()),
-        "Expected project2 window"
+        !windows_after_close.iter().any(|w| w.contains("beta")),
+        "beta window should be closed"
     );
-
-    // Capture pane content to verify tmux is working
-    let pane_content = tmux.capture_pane(Some("project1"));
-    println!("Pane content for project1: {:?}", pane_content);
-
-    // Note: Testing wormhole's tmux integration would require running wormhole
-    // within the test tmux session, which is complex. For now, we verify
-    // the tmux test infrastructure works.
+    
+    // Clean up
+    tmux.send_keys("C-c", None);
+    thread::sleep(Duration::from_millis(100));
 }
 
 #[test]

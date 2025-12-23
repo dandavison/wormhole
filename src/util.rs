@@ -60,7 +60,6 @@ where
     get_stdout(program, output)
 }
 
-
 pub fn get_stdout<S>(program: S, output: Output) -> String
 where
     S: AsRef<OsStr>,

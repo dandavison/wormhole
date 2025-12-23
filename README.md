@@ -58,3 +58,82 @@ Here are some ideas.
   ```
 
 The fundamental point is that Wormhole opens code in your editor/IDE at the correct line, while ensuring that your editor/IDE selects the correct project workspace for the file, and also switches your terminal emulator to that project.
+
+## HTTP API Reference
+
+Wormhole runs as an HTTP server on port 7117 (configurable in `src/config.rs`).
+
+### Project Navigation
+
+#### `GET /open-project/<name_or_path>`
+Opens a project by name or path in both editor and terminal (always focuses terminal).
+- **Path**: Project name or absolute path
+- **Example**: `/open-project/myapp`
+
+#### `GET /project/<name>`
+Switches to a project by name.
+- **Path**: Project name
+- **Query Parameters**:
+  - `land-in` - Which application to focus: `terminal` or `editor`
+- **Example**: `/project/myapp?land-in=editor`
+
+#### `GET /previous-project/`
+Switches to the previous project in the rotation.
+- **Query Parameters**:
+  - `land-in` - Which application to focus: `terminal` or `editor`
+- **Example**: `/previous-project/?land-in=terminal`
+
+#### `GET /next-project/`
+Switches to the next project in the rotation.
+- **Query Parameters**:
+  - `land-in` - Which application to focus: `terminal` or `editor`
+- **Example**: `/next-project/`
+
+### File Opening
+
+#### `GET /file/<absolute_path>`
+Opens a specific file in the appropriate project.
+- **Path**: Absolute file path, optionally with line number using `:` separator
+- **Query Parameters**:
+  - `land-in` - Which application to focus: `terminal` or `editor`
+- **Examples**:
+  - `/file//Users/me/myapp/src/main.rs:42` - Opens main.rs at line 42
+  - `/file//Users/me/myapp/README.md?land-in=editor`
+- **Note**: Line numbers must be specified in the path with `:`, not as a query parameter
+
+### GitHub Integration
+
+#### `GET /<github_path>`
+Handles GitHub URLs for direct file opening (always focuses editor).
+- **Path**: GitHub blob path (e.g., `/owner/repo/blob/branch/path/to/file.rs`)
+- **Query Parameters**:
+  - `line` - Line number to jump to
+- **Example**: `/dandavison/delta/blob/main/src/main.rs?line=25`
+- **Note**: Always lands in editor. If the repository isn't recognized as a local project, redirects to GitHub.
+
+### Project Management
+
+#### `GET /list-projects/`
+Lists all currently open projects (one per line).
+- **Response**: Plain text list of project names (rotated so current project is last)
+
+#### `GET /debug-projects/`
+Returns detailed debug information about all known projects.
+- **Response**: Indexed list with project names, paths, and aliases
+
+#### `GET /add-project/<path>`
+Adds a new project to wormhole.
+- **Path**: Absolute path to the project directory (e.g., `/add-project//Users/me/myproject`)
+- **Query Parameters**:
+  - `name` - Optional project name and aliases (comma-separated)
+- **Example**: `/add-project//Users/me/repos/myapp?name=myapp,app`
+
+#### `GET /remove-project/<name>`
+Removes a project from wormhole.
+- **Path**: Project name to remove
+- **Example**: `/remove-project/myapp`
+
+#### `GET /close-project/<name>`
+Closes the editor and terminal windows for a project.
+- **Path**: Project name to close
+- **Example**: `/close-project/myapp`

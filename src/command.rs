@@ -46,7 +46,7 @@ where
 
     // Test mode: capture commands instead of executing
     if let Ok(capture_file) = env::var("WORMHOLE_TEST_MODE") {
-        capture_command_for_test(&program, &args_vec, Some(current_dir.as_ref()), &mode, &capture_file);
+        capture_command_for_test(&program, &args_vec, current_dir.as_ref(), &mode, &capture_file);
         // Return mock successful result
         return Some(CommandResult {
             stdout: Vec::new(),

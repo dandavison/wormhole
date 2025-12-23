@@ -45,8 +45,8 @@ where
     ps!("execute_raw({}, {:?}, {:?}, {:?})", program, args_vec, current_dir, mode);
 
     // Test mode: capture commands instead of executing
-    if env::var("WORMHOLE_TEST_MODE").as_deref() == Ok("capture") {
-        capture_command_for_test(&program, &args_vec, current_dir.as_ref(), &mode);
+    if let Ok(capture_file) = env::var("WORMHOLE_TEST_MODE") {
+        capture_command_for_test(&program, &args_vec, Some(current_dir.as_ref()), &mode, &capture_file);
         // Return mock successful result
         return Some(CommandResult {
             stdout: Vec::new(),
@@ -91,27 +91,25 @@ fn capture_command_for_test<S, P>(
     args: &[S],
     current_dir: Option<&P>,
     mode: &ExecutionMode,
+    capture_file: &str,
 ) where
     S: AsRef<OsStr> + Display + Debug,
     P: AsRef<Path> + Debug,
 {
-    let log_file = env::var("WORMHOLE_TEST_LOG").unwrap_or_else(|_| "/tmp/wormhole-test-commands.jsonl".to_string());
-
     let entry = serde_json::json!({
         "program": program.to_string(),
         "args": args.iter().map(|a| a.to_string()).collect::<Vec<_>>(),
-        "current_dir": current_dir.map(|d| format!("{:?}", d)),
-        "mode": format!("{:?}", mode),
-        "timestamp": std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis(),
+        "cwd": current_dir.map(|d| d.as_ref().display().to_string()).unwrap_or_else(|| "/tmp".to_string()),
+        "mode": match mode {
+            ExecutionMode::Output => "output",
+            ExecutionMode::Spawn => "spawn",
+        }
     });
 
     if let Ok(mut file) = OpenOptions::new()
         .create(true)
         .append(true)
-        .open(&log_file)
+        .open(capture_file)
     {
         writeln!(file, "{}", entry.to_string()).ok();
     }

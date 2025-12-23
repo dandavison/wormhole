@@ -2,6 +2,7 @@ use crate::config;
 use crate::editor::Editor;
 use crate::project_path::ProjectPath;
 use crate::util::{expand_user, panic};
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 #[derive(Clone, Debug)]
@@ -10,6 +11,7 @@ pub struct Project {
     pub path: PathBuf,
     #[allow(unused)]
     pub aliases: Vec<String>,
+    pub kv: HashMap<String, String>,
 }
 
 impl Project {
@@ -46,7 +48,10 @@ impl Project {
                     if path == PathBuf::from("/") {
                         panic("Cannot use root directory '/' as a project path");
                     } else {
-                        panic(&format!("Invalid project path (no file name): {}", path.display()))
+                        panic(&format!(
+                            "Invalid project path (no file name): {}",
+                            path.display()
+                        ))
                     }
                 });
             (name, vec![])
@@ -55,6 +60,7 @@ impl Project {
             name,
             path,
             aliases,
+            kv: HashMap::new(),
         }
     }
 

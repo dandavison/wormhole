@@ -36,13 +36,7 @@ pub fn launch_or_focus(application_name: &str) {
     ps!("Focusing {}", application_name);
     hammerspoon(&format!(
         r#"
-        local app = hs.application.find("{application_name}")
-        if app then
-            app:activate()
-            return "activated"
-        else
-            return hs.application.launchOrFocus("/Applications/{application_name}.app")
-        end
+        hs.application.launchOrFocus("/Applications/{application_name}.app")
     "#,
     ));
 }

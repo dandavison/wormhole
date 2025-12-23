@@ -55,7 +55,7 @@ pub fn add_project(path: &str, names: Vec<String>) -> Response<Body> {
 pub fn remove_project(name: &str) -> Response<Body> {
     let mut projects = projects::lock();
     projects.by_name(name).map(|p| {
-        config::TERMINAL.close(&p);
+        config::terminal().close(&p);
     });
     projects.remove(name);
 
@@ -90,8 +90,8 @@ pub fn close_project(name: &str) -> Response<Body> {
     // TODO: close editor workspace
     let projects = projects::lock();
     projects.by_name(name).map(|p| {
-        config::TERMINAL.close(&p);
-        config::EDITOR.close(&p);
+        config::terminal().close(&p);
+        config::editor().close(&p);
     });
     projects.print();
     Response::new(Body::from(format!("closed project: {}", name)))

@@ -36,7 +36,7 @@ impl ProjectPath {
         }
 
         let terminal_thread = thread::spawn(move || {
-            config::TERMINAL.open(&project).unwrap_or_else(|err| {
+            config::terminal().open(&project).unwrap_or_else(|err| {
                 warn(&format!(
                     "Error opening {} in terminal: {}",
                     &project.name, err
@@ -45,7 +45,7 @@ impl ProjectPath {
         });
         if self.project.is_terminal_only() {
             terminal_thread.join().unwrap();
-            config::TERMINAL.focus();
+            config::terminal().focus();
             projects.move_to_front(&self.project.name);
             return;
         }
@@ -73,7 +73,7 @@ impl ProjectPath {
         let land_in_editor = matches!(land_in, Some(Application::Editor));
 
         if flip_keybinding ^ land_in_terminal {
-            config::TERMINAL.focus()
+            config::terminal().focus()
         } else if land_in_editor {
             self.project.editor().focus()
         }

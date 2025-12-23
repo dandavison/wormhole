@@ -42,17 +42,54 @@ where
 {
     let args_vec: Vec<S> = args.into_iter().collect();
 
-    ps!("execute_raw({}, {:?}, {:?}, {:?})", program, args_vec, current_dir, mode);
+    ps!(
+        "execute_raw({}, {:?}, {:?}, {:?})",
+        program,
+        args_vec,
+        current_dir,
+        mode
+    );
 
-    // Test mode: capture commands instead of executing
-    if env::var("WORMHOLE_TEST_MODE").as_deref() == Ok("capture") {
-        capture_command_for_test(&program, &args_vec, current_dir.as_ref(), &mode);
+    // Test mode: capture ALL commands instead of executing
+    if let Ok(capture_file) = env::var("WORMHOLE_TEST_MODE") {
+        capture_command_for_test(
+            &program,
+            &args_vec,
+            current_dir.as_ref(),
+            &mode,
+            &capture_file,
+        );
         // Return mock successful result
         return Some(CommandResult {
             stdout: Vec::new(),
             stderr: Vec::new(),
             status: Some(0),
         });
+    }
+
+    // Integration test mode: intercept editor commands only
+    if env::var("WORMHOLE_INTEGRATION_TEST_MODE").is_ok() {
+        // Replace editor-related commands with no-ops
+        let prog_str = program.to_string();
+        if prog_str == "open"
+            || prog_str == "test-editor"
+            || prog_str == "cursor"
+            || prog_str == "code"
+            || prog_str == "emacsclient"
+        {
+            // Log but don't execute editor commands
+            ps!(
+                "Integration test: skipping editor command: {} {:?}",
+                program,
+                args_vec
+            );
+            return Some(CommandResult {
+                stdout: Vec::new(),
+                stderr: Vec::new(),
+                status: Some(0),
+            });
+        }
+        // All other commands (including tmux) execute normally
     }
 
     let mut cmd = Command::new(program.as_ref());
@@ -63,18 +100,16 @@ where
     }
 
     match mode {
-        ExecutionMode::Output => {
-            match cmd.output() {
-                Ok(output) => Some(CommandResult {
-                    stdout: output.stdout,
-                    stderr: output.stderr,
-                    status: output.status.code(),
-                }),
-                Err(e) => {
-                    crate::util::panic(&format!("Failed to execute {}: {}", program, e));
-                }
+        ExecutionMode::Output => match cmd.output() {
+            Ok(output) => Some(CommandResult {
+                stdout: output.stdout,
+                stderr: output.stderr,
+                status: output.status.code(),
+            }),
+            Err(e) => {
+                crate::util::panic(&format!("Failed to execute {}: {}", program, e));
             }
-        }
+        },
         ExecutionMode::Spawn => {
             match cmd.stdout(Stdio::null()).stderr(Stdio::null()).spawn() {
                 Ok(_) => None, // Fire and forget
@@ -91,27 +126,25 @@ fn capture_command_for_test<S, P>(
     args: &[S],
     current_dir: Option<&P>,
     mode: &ExecutionMode,
+    capture_file: &str,
 ) where
     S: AsRef<OsStr> + Display + Debug,
     P: AsRef<Path> + Debug,
 {
-    let log_file = env::var("WORMHOLE_TEST_LOG").unwrap_or_else(|_| "/tmp/wormhole-test-commands.jsonl".to_string());
-
     let entry = serde_json::json!({
         "program": program.to_string(),
         "args": args.iter().map(|a| a.to_string()).collect::<Vec<_>>(),
-        "current_dir": current_dir.map(|d| format!("{:?}", d)),
-        "mode": format!("{:?}", mode),
-        "timestamp": std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis(),
+        "cwd": current_dir.map(|d| d.as_ref().display().to_string()).unwrap_or_else(|| "/tmp".to_string()),
+        "mode": match mode {
+            ExecutionMode::Output => "output",
+            ExecutionMode::Spawn => "spawn",
+        }
     });
 
     if let Ok(mut file) = OpenOptions::new()
         .create(true)
         .append(true)
-        .open(&log_file)
+        .open(capture_file)
     {
         writeln!(file, "{}", entry.to_string()).ok();
     }
@@ -134,7 +167,9 @@ where
                 program, stderr
             ));
         }
-        String::from_utf8_lossy(&result.stdout).trim_end().to_string()
+        String::from_utf8_lossy(&result.stdout)
+            .trim_end()
+            .to_string()
     } else {
         String::new()
     }
@@ -146,12 +181,13 @@ where
     S: AsRef<OsStr> + Display + Debug + Copy,
     I: IntoIterator<Item = S> + Debug,
 {
-    execute_raw(program, args, None::<&Path>, ExecutionMode::Output)
-        .unwrap_or_else(|| CommandResult {
+    execute_raw(program, args, None::<&Path>, ExecutionMode::Output).unwrap_or_else(|| {
+        CommandResult {
             stdout: Vec::new(),
             stderr: Vec::new(),
             status: Some(1),
-        })
+        }
+    })
 }
 
 /// Spawn a command without waiting (for desktop notifications)

@@ -3,6 +3,7 @@ use std::fs;
 use crate::{config, hammerspoon, project::Project, tmux, util::warn, wezterm};
 
 #[allow(dead_code)]
+#[derive(Clone, Copy)]
 pub enum Terminal {
     Wezterm,
     Alacritty { tmux: bool },

@@ -42,8 +42,9 @@ pub fn project_directories() -> Vec<String> {
                 directories.insert(window_name, directory);
             }
         });
-    directories.into_values()
-        .filter(|dir| dir != "/")  // Also filter out any remaining root directories
+    directories
+        .into_values()
+        .filter(|dir| dir != "/") // Also filter out any remaining root directories
         .collect()
 }
 

@@ -121,19 +121,19 @@ Lists all currently open projects (one per line).
 Returns detailed debug information about all known projects.
 - **Response**: Indexed list with project names, paths, and aliases
 
-#### `GET /add-project/<path>`
+#### `POST /add-project/<path>`
 Adds a new project to wormhole.
 - **Path**: Absolute path to the project directory (e.g., `/add-project//Users/me/myproject`)
 - **Query Parameters**:
   - `name` - Optional project name and aliases (comma-separated)
 - **Example**: `/add-project//Users/me/repos/myapp?name=myapp,app`
 
-#### `GET /remove-project/<name>`
+#### `POST /remove-project/<name>`
 Removes a project from wormhole.
 - **Path**: Project name to remove
 - **Example**: `/remove-project/myapp`
 
-#### `GET /close-project/<name>`
+#### `POST /close-project/<name>`
 Closes the editor and terminal windows for a project.
 - **Path**: Project name to close
 - **Example**: `/close-project/myapp`

@@ -141,6 +141,10 @@ Retrieves all key-value pairs for all projects.
 - **Response**: JSON object with projects as keys and their KV pairs as values
 - **Example**: Returns `{"myproject": {"land-in": "terminal"}, "other": {"land-in": "editor"}}`
 
+**Special Keys:**
+- `land-in`: Controls focus behavior when opening a project. Values: `"terminal"` or `"editor"`
+  - When set, overrides the default focus behavior and URL parameters
+
 ### Project Management
 
 #### `GET /list-projects/`
@@ -167,3 +171,53 @@ Removes a project from wormhole.
 Closes the editor and terminal windows for a project.
 - **Path**: Project name to close
 - **Example**: `/close-project/myapp`
+
+## Testing
+
+Wormhole includes a functional test suite that verifies the HTTP API without actually executing system commands.
+
+### Test Infrastructure
+
+The test framework uses command interception to capture system calls instead of executing them:
+- Tests run wormhole on different ports (8877-8878) to avoid conflicts with production (7117)
+- When `WORMHOLE_TEST_MODE` is set, commands are logged to a JSON file instead of being executed
+- Tests verify the correct commands would be executed for each API operation
+
+### Running Tests
+
+```bash
+# Run all tests (single-threaded to avoid port conflicts)
+cargo test -- --test-threads=1
+
+# Run a specific test
+cargo test test_list_projects -- --test-threads=1
+
+# Use the test runner script
+./run_tests.sh
+```
+
+### Test Coverage
+
+The test suite includes:
+
+**Unit/Mock Tests** (`test_basic.rs`, `test_wormhole_tmux.rs`):
+- HTTP endpoint behavior
+- Command capture and verification
+- Editor and tmux command generation
+
+**Integration Tests** (`test_integration.rs`):
+- Real tmux session management
+- Wormhole running inside tmux
+- Project window creation and navigation
+- Multi-project workflow testing
+- tmux capture-pane for output verification
+
+### Writing New Tests
+
+Tests are located in `tests/test_basic.rs`. To add a new test:
+1. Start a test server on a unique port using `TestServer::start(port)`
+2. Make HTTP requests using `server.request(method, path, params, body)`
+3. Verify captured commands using `server.get_captured_commands()`
+4. Assert expected behavior using helper functions like `assert_command_with_arg()`
+
+The test framework handles server lifecycle automatically, cleaning up when tests complete.

@@ -1,12 +1,40 @@
 use crate::editor::Editor;
 use crate::terminal::Terminal;
+use std::sync::OnceLock;
 
-pub const EDITOR: Editor = Editor::Cursor;
-pub const TERMINAL: Terminal = Terminal::Alacritty { tmux: true };
+static EDITOR_CONFIG: OnceLock<Editor> = OnceLock::new();
+static TERMINAL_CONFIG: OnceLock<Terminal> = OnceLock::new();
+
+pub fn editor() -> &'static Editor {
+    EDITOR_CONFIG.get_or_init(|| {
+        #[cfg(test)]
+        if (std::env::var("WORMHOLE_TEST_MODE").is_ok()
+            || std::env::var("WORMHOLE_INTEGRATION_TEST_MODE").is_ok())
+            && std::env::var("WORMHOLE_REAL_EDITOR_TEST_MODE").is_err()
+        {
+            return Editor::TestEditor;
+        }
+        Editor::Cursor
+    })
+}
+
+pub fn terminal() -> &'static Terminal {
+    TERMINAL_CONFIG.get_or_init(|| Terminal::Alacritty { tmux: true })
+}
 
 // This port number is currently hardcoded in http clients such as the MacOS GUI
 // app and the CLI utilities under cli/.
-pub const WORMHOLE_PORT: u16 = 7117;
+// Can be overridden with WORMHOLE_PORT environment variable for testing
+static PORT: OnceLock<u16> = OnceLock::new();
+
+pub fn wormhole_port() -> u16 {
+    *PORT.get_or_init(|| {
+        std::env::var("WORMHOLE_PORT")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(7117)
+    })
+}
 
 // If you set this to Some(path) then project name and directory will be written
 // to that file whenever wormhole changes project. This can be used for shell

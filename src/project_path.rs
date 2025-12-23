@@ -5,7 +5,6 @@ use regex::Regex;
 
 use crate::hammerspoon::current_application;
 use crate::projects::{self, Mutation, Projects};
-use crate::ps;
 use crate::util::warn;
 use crate::wormhole::{Application, WindowAction};
 use crate::{config, editor, project::Project};
@@ -17,16 +16,37 @@ pub struct ProjectPath {
 }
 
 impl ProjectPath {
-    pub fn open(&self, mutation: Mutation, land_in: Option<Application>) {
+    pub fn open(&self, mutation: Mutation, mut land_in: Option<Application>) {
         let mut projects = projects::lock();
         let project = self.project.clone();
+
+        // For navigation operations, detect current app first (if not explicitly set)
+        if land_in.is_none() && matches!(mutation, Mutation::RotateLeft | Mutation::RotateRight) {
+            // Detect where we're navigating FROM
+            match current_application() {
+                Application::Terminal => land_in = Some(Application::Terminal),
+                Application::Editor => land_in = Some(Application::Editor),
+                Application::Other => {} // Fall through to KV check
+            }
+        }
+
+        // Use KV store value only if no request parameter was provided and not navigation
+        if land_in.is_none() {
+            if let Some(land_in_value) = project.kv.get("land-in") {
+                match land_in_value.as_str() {
+                    "terminal" => land_in = Some(Application::Terminal),
+                    "editor" => land_in = Some(Application::Editor),
+                    _ => {} // Invalid value, keep as None
+                }
+            }
+        }
 
         if !project.is_open() {
             editor::open_workspace(&project);
         }
 
         let terminal_thread = thread::spawn(move || {
-            config::TERMINAL.open(&project).unwrap_or_else(|err| {
+            config::terminal().open(&project).unwrap_or_else(|err| {
                 warn(&format!(
                     "Error opening {} in terminal: {}",
                     &project.name, err
@@ -35,7 +55,7 @@ impl ProjectPath {
         });
         if self.project.is_terminal_only() {
             terminal_thread.join().unwrap();
-            config::TERMINAL.focus();
+            config::terminal().focus();
             projects.move_to_front(&self.project.name);
             return;
         }
@@ -60,8 +80,12 @@ impl ProjectPath {
         editor_thread.join().unwrap();
         let flip_keybinding = Path::new("/tmp/wormhole-toggle").exists();
         let land_in_terminal = matches!(land_in, Some(Application::Terminal));
+        let land_in_editor = matches!(land_in, Some(Application::Editor));
+
         if flip_keybinding ^ land_in_terminal {
-            config::TERMINAL.focus()
+            config::terminal().focus()
+        } else if land_in_editor {
+            self.project.editor().focus()
         }
         projects.apply(mutation, &self.project.name);
         projects.print();
@@ -93,16 +117,9 @@ impl ProjectPath {
     pub fn from_github_url(path: &str, line: Option<usize>, projects: &Projects) -> Option<Self> {
         let re = Regex::new(r"/([^/]+)/([^/]+)/blob/([^/]+)/([^?]*)").unwrap();
         if let Some(captures) = re.captures(path) {
-            ps!("Handling as github URL");
             let path = PathBuf::from(captures.get(4).unwrap().as_str());
             let repo = captures.get(2).unwrap().as_str();
 
-            ps!(
-                "path: {} line: {:?} repo: {}",
-                path.to_string_lossy(),
-                line,
-                repo
-            );
             if let Some(project) = projects.by_name(repo) {
                 Some(ProjectPath {
                     project,

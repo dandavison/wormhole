@@ -31,9 +31,9 @@ fn test_add_project() {
     let server = TestServer::start(8878);
     server.clear_captured_commands();
 
-    // Add a new project
+    // Add a new project (using correct API format)
     server
-        .request("POST", "/add-project/test_project", None, None)
+        .request("POST", "/add-project//tmp/test_project", None, None)
         .unwrap();
 
     let commands = server.get_captured_commands();

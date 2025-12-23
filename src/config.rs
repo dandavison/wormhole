@@ -16,9 +16,7 @@ pub fn editor() -> &'static Editor {
 }
 
 pub fn terminal() -> &'static Terminal {
-    TERMINAL_CONFIG.get_or_init(|| {
-        Terminal::Alacritty { tmux: true }
-    })
+    TERMINAL_CONFIG.get_or_init(|| Terminal::Alacritty { tmux: true })
 }
 
 // This port number is currently hardcoded in http clients such as the MacOS GUI

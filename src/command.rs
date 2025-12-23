@@ -42,17 +42,33 @@ where
 {
     let args_vec: Vec<S> = args.into_iter().collect();
 
-    ps!("execute_raw({}, {:?}, {:?}, {:?})", program, args_vec, current_dir, mode);
+    ps!(
+        "execute_raw({}, {:?}, {:?}, {:?})",
+        program,
+        args_vec,
+        current_dir,
+        mode
+    );
 
-    // Test mode: capture commands instead of executing
+    // Test mode: capture commands instead of executing (but let tmux through)
     if let Ok(capture_file) = env::var("WORMHOLE_TEST_MODE") {
-        capture_command_for_test(&program, &args_vec, current_dir.as_ref(), &mode, &capture_file);
-        // Return mock successful result
-        return Some(CommandResult {
-            stdout: Vec::new(),
-            stderr: Vec::new(),
-            status: Some(0),
-        });
+        // Always execute tmux commands for real in test mode
+        if program.to_string() != "tmux" {
+            capture_command_for_test(
+                &program,
+                &args_vec,
+                current_dir.as_ref(),
+                &mode,
+                &capture_file,
+            );
+            // Return mock successful result for non-tmux commands
+            return Some(CommandResult {
+                stdout: Vec::new(),
+                stderr: Vec::new(),
+                status: Some(0),
+            });
+        }
+        // For tmux, fall through to execute normally
     }
 
     let mut cmd = Command::new(program.as_ref());
@@ -63,18 +79,16 @@ where
     }
 
     match mode {
-        ExecutionMode::Output => {
-            match cmd.output() {
-                Ok(output) => Some(CommandResult {
-                    stdout: output.stdout,
-                    stderr: output.stderr,
-                    status: output.status.code(),
-                }),
-                Err(e) => {
-                    crate::util::panic(&format!("Failed to execute {}: {}", program, e));
-                }
+        ExecutionMode::Output => match cmd.output() {
+            Ok(output) => Some(CommandResult {
+                stdout: output.stdout,
+                stderr: output.stderr,
+                status: output.status.code(),
+            }),
+            Err(e) => {
+                crate::util::panic(&format!("Failed to execute {}: {}", program, e));
             }
-        }
+        },
         ExecutionMode::Spawn => {
             match cmd.stdout(Stdio::null()).stderr(Stdio::null()).spawn() {
                 Ok(_) => None, // Fire and forget
@@ -132,7 +146,9 @@ where
                 program, stderr
             ));
         }
-        String::from_utf8_lossy(&result.stdout).trim_end().to_string()
+        String::from_utf8_lossy(&result.stdout)
+            .trim_end()
+            .to_string()
     } else {
         String::new()
     }
@@ -144,12 +160,13 @@ where
     S: AsRef<OsStr> + Display + Debug + Copy,
     I: IntoIterator<Item = S> + Debug,
 {
-    execute_raw(program, args, None::<&Path>, ExecutionMode::Output)
-        .unwrap_or_else(|| CommandResult {
+    execute_raw(program, args, None::<&Path>, ExecutionMode::Output).unwrap_or_else(|| {
+        CommandResult {
             stdout: Vec::new(),
             stderr: Vec::new(),
             status: Some(1),
-        })
+        }
+    })
 }
 
 /// Spawn a command without waiting (for desktop notifications)

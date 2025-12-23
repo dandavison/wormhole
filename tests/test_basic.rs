@@ -126,7 +126,7 @@ fn test_kv_operations() {
 
 #[test]
 fn test_github_url_redirect() {
-    let server = TestServer::start(7783);
+    let _server = TestServer::start(7783);
     
     // GitHub URL should redirect
     let response = ureq::get(&format!("http://localhost:7783/github.com/rust-lang/rust/blob/master/README.md"))

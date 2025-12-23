@@ -154,11 +154,11 @@ pub fn assert_contains(haystack: &str, needle: &str) {
     );
 }
 
-pub fn assert_command(commands: &[CapturedCommand], program: &str) -> Option<&CapturedCommand> {
+pub fn assert_command<'a>(commands: &'a [CapturedCommand], program: &str) -> Option<&'a CapturedCommand> {
     commands.iter().find(|cmd| cmd.program == program)
 }
 
-pub fn assert_command_with_arg(commands: &[CapturedCommand], program: &str, arg: &str) -> Option<&CapturedCommand> {
+pub fn assert_command_with_arg<'a>(commands: &'a [CapturedCommand], program: &str, arg: &str) -> Option<&'a CapturedCommand> {
     commands.iter().find(|cmd| {
         cmd.program == program && cmd.args.iter().any(|a| a.contains(arg))
     })

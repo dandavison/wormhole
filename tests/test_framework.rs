@@ -55,6 +55,41 @@ impl TestServer {
         }
     }
 
+    #[allow(dead_code)]
+    pub fn start_with_tmux(port: u16, tmux_socket: &str) -> Self {
+        let capture_file = format!("/tmp/wormhole_test_capture_{}.json", port);
+
+        // Clean up any previous capture file
+        let _ = fs::remove_file(&capture_file);
+
+        // Start wormhole with test mode and tmux socket
+        let child = Command::new("./target/debug/wormhole")
+            .env("WORMHOLE_TEST_MODE", &capture_file)
+            .env("WORMHOLE_PORT", port.to_string())
+            .env("TMUX", format!("{},1,1", tmux_socket))  // Set TMUX env var to use test socket
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("Failed to start test wormhole server");
+
+        // Wait for server to be ready
+        thread::sleep(Duration::from_millis(500));
+
+        // Verify server is responding
+        for _ in 0..10 {
+            if Self::health_check(port).is_ok() {
+                break;
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
+
+        TestServer {
+            child: Some(child),
+            port,
+            capture_file,
+        }
+    }
+
     fn health_check(port: u16) -> Result<(), Box<dyn std::error::Error>> {
         let response = ureq::get(&format!("http://localhost:{}/list-projects/", port))
             .timeout(Duration::from_secs(1))

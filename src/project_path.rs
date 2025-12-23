@@ -7,7 +7,7 @@ use crate::hammerspoon::current_application;
 use crate::projects::{self, Mutation, Projects};
 use crate::util::warn;
 use crate::wormhole::{Application, WindowAction};
-use crate::{config, editor, project::Project};
+use crate::{config, editor, project::Project, ps};
 
 #[derive(Clone, Debug)]
 pub struct ProjectPath {
@@ -73,8 +73,14 @@ impl ProjectPath {
         let land_in_editor = matches!(land_in, Some(Application::Editor));
 
         if flip_keybinding ^ land_in_terminal {
+            ps!(
+                "Focusing terminal due to flip={} land_in_terminal={}",
+                flip_keybinding,
+                land_in_terminal
+            );
             config::terminal().focus()
         } else if land_in_editor {
+            ps!("Focusing editor due to land_in_editor={}", land_in_editor);
             self.project.editor().focus()
         }
         projects.apply(mutation, &self.project.name);

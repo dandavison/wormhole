@@ -209,10 +209,40 @@ impl RealEditorTest {
     /// Wait for the focused application to be the expected one
     fn wait_for_focus(app_name: &str, timeout: Duration) -> bool {
         Self::wait_until(
-            || Self::get_focused_app() == app_name,
+            || {
+                let focused = Self::get_focused_app();
+                println!(
+                    "  Checking focus: current={}, expected={}",
+                    focused, app_name
+                );
+                focused == app_name
+            },
             timeout,
             Duration::from_millis(100),
         )
+    }
+
+    /// Focus a specific application using Hammerspoon
+    fn focus_app(app_name: &str) {
+        let _ = Command::new("hs")
+            .args(&[
+                "-c",
+                &format!(
+                    r#"
+                local app = hs.application.find('{}')
+                if app then
+                    app:activate()
+                    return true
+                else
+                    return false
+                end
+            "#,
+                    app_name
+                ),
+            ])
+            .output();
+        // Give the app time to actually get focus
+        thread::sleep(Duration::from_millis(200));
     }
 
     /// Wait for a Cursor window with the given title substring to exist
@@ -247,107 +277,170 @@ fn test_real_editor_focus_switching() {
 
     let test = RealEditorTest::new("focus", 8900);
 
-    // Add and open a project with editor focus (default)
+    // Add project
     test.add_project("test-project", "/tmp/real-editor-test-project");
 
-    println!("Opening project with editor focus...");
+    // Determine what terminal app is being used
+    let terminal_app = match Command::new("hs")
+        .args(&[
+            "-c",
+            r#"
+            local terminals = {'Alacritty', 'Terminal', 'iTerm2', 'kitty', 'WezTerm'}
+            for _, name in ipairs(terminals) do
+                local app = hs.application.find(name)
+                if app and app:isRunning() then
+                    return name
+                end
+            end
+            return 'Alacritty'  -- fallback
+        "#,
+        ])
+        .output()
+    {
+        Ok(output) => String::from_utf8_lossy(&output.stdout)
+            .trim()
+            .trim_matches('"')
+            .to_string(),
+        Err(_) => "Alacritty".to_string(),
+    };
+
+    println!("Detected terminal application: {}", terminal_app);
+
+    // TEST 1: Open with editor focus (should focus Cursor)
+    println!("\nTest 1: Opening project with land-in=editor...");
+
+    // Start from known state - focus terminal first
+    RealEditorTest::focus_app(&terminal_app);
+    assert_eq!(
+        RealEditorTest::get_focused_app(),
+        terminal_app,
+        "Should start with terminal focused"
+    );
+
     test.open_project("test-project", Some("editor"));
 
     // Wait for Cursor window to appear
-    println!("Waiting for Cursor window to appear...");
-    let window_appeared = RealEditorTest::wait_for_cursor_window_containing(
-        "real-editor-test-project",
-        Duration::from_secs(10),
-    );
-
-    let cursor_windows = RealEditorTest::get_cursor_windows();
-    println!("Current Cursor windows: {:?}", cursor_windows);
-
     assert!(
-        window_appeared,
-        "Cursor window for test-project should appear"
+        RealEditorTest::wait_for_cursor_window_containing(
+            "real-editor-test-project",
+            Duration::from_secs(10),
+        ),
+        "Cursor window should appear"
     );
 
-    // Give Cursor a moment to fully initialize
-    thread::sleep(Duration::from_millis(1000));
+    // Verify Cursor gets focus
+    assert!(
+        RealEditorTest::wait_for_focus("Cursor", Duration::from_secs(3)),
+        "Cursor should get focus when opening with land-in=editor"
+    );
+    println!("✓ Cursor correctly received focus with land-in=editor");
 
-    // Check what has focus
-    let current_focus = RealEditorTest::get_focused_app();
-    println!(
-        "Current focused app after opening with editor focus: {}",
-        current_focus
+    // TEST 2: Re-open with terminal focus (should focus terminal)
+    println!("\nTest 2: Re-opening project with land-in=terminal...");
+
+    // Ensure we start with Cursor focused this time
+    RealEditorTest::focus_app("Cursor");
+    assert_eq!(
+        RealEditorTest::get_focused_app(),
+        "Cursor",
+        "Should have Cursor focused before test"
     );
 
-    // For now, let's just verify the window opened
-    // Focus behavior may vary depending on system settings
-    println!("✓ Cursor window opened successfully");
-
-    // Now test opening with terminal focus
-    println!("\nOpening project with terminal focus...");
     test.open_project("test-project", Some("terminal"));
 
-    thread::sleep(Duration::from_millis(1000));
-    let focused_app = RealEditorTest::get_focused_app();
-    println!(
-        "Current focused app after opening with terminal focus: {}",
-        focused_app
+    // Give time for focus change
+    thread::sleep(Duration::from_millis(500));
+
+    // Verify terminal gets focus
+    assert!(
+        RealEditorTest::wait_for_focus(&terminal_app, Duration::from_secs(3)),
+        "Terminal should get focus when opening with land-in=terminal"
     );
+    println!("✓ Terminal correctly received focus with land-in=terminal");
 
-    // Note: Focus behavior can vary based on system settings
-    // The important thing is that the windows are created properly
-    println!("✓ Project opened with terminal focus request");
-
-    println!("\n✓ Focus switching test completed");
+    println!("\n✓ Focus switching test completed successfully!");
 }
 
 #[test]
-fn test_real_editor_multiple_windows() {
-    // Create test directories
-    std::fs::create_dir_all("/tmp/real-project-a").ok();
-    std::fs::create_dir_all("/tmp/real-project-b").ok();
+fn test_real_editor_default_focus_behavior() {
+    // Create test directory with a file
+    std::fs::create_dir_all("/tmp/real-default-test").ok();
+    std::fs::write("/tmp/real-default-test/test.rs", "fn main() {}").ok();
 
-    let test = RealEditorTest::new("multi", 8901);
+    let test = RealEditorTest::new("default", 8901);
 
-    // Add two projects
-    test.add_project("project-a", "/tmp/real-project-a");
-    test.add_project("project-b", "/tmp/real-project-b");
+    // Add project
+    test.add_project("default-test", "/tmp/real-default-test");
 
-    println!("Opening project-a...");
-    test.open_project("project-a", Some("editor"));
+    // Detect terminal app
+    let terminal_app = match Command::new("hs")
+        .args(&[
+            "-c",
+            r#"
+            local terminals = {'Alacritty', 'Terminal', 'iTerm2', 'kitty', 'WezTerm'}
+            for _, name in ipairs(terminals) do
+                local app = hs.application.find(name)
+                if app and app:isRunning() then
+                    return name
+                end
+            end
+            return 'Alacritty'
+        "#,
+        ])
+        .output()
+    {
+        Ok(output) => String::from_utf8_lossy(&output.stdout)
+            .trim()
+            .trim_matches('"')
+            .to_string(),
+        Err(_) => "Alacritty".to_string(),
+    };
 
-    // Wait for first window
+    println!("Using terminal: {}", terminal_app);
+
+    // TEST 1: Opening a file should default to editor focus
+    println!("\nTest 1: Opening a file (should default to editor focus)...");
+
+    // Start with terminal focused
+    RealEditorTest::focus_app(&terminal_app);
+
+    // Open a specific file (without specifying land-in)
+    let file_url = format!("http://localhost:8901/file//tmp/real-default-test/test.rs");
+    ureq::get(&file_url).call().expect("Failed to open file");
+
+    // Wait for Cursor window
     assert!(
-        RealEditorTest::wait_for_cursor_window_containing(
-            "real-project-a",
-            Duration::from_secs(10)
-        ),
-        "Cursor window for project-a should appear"
+        RealEditorTest::wait_for_cursor_window_containing("test.rs", Duration::from_secs(10)),
+        "Cursor window should open for file"
     );
 
-    println!("Opening project-b...");
-    test.open_project("project-b", Some("editor"));
-
-    // Wait for second window
+    // Verify Cursor gets focus (files default to editor)
     assert!(
-        RealEditorTest::wait_for_cursor_window_containing(
-            "real-project-b",
-            Duration::from_secs(10)
-        ),
-        "Cursor window for project-b should appear"
+        RealEditorTest::wait_for_focus("Cursor", Duration::from_secs(3)),
+        "Opening a file should focus Cursor by default"
     );
+    println!("✓ File correctly defaulted to editor focus");
 
-    // Verify both windows exist
+    // TEST 2: Opening a project without land-in uses system default
+    println!("\nTest 2: Opening project without land-in (uses default)...");
+
+    // Focus terminal again
+    RealEditorTest::focus_app(&terminal_app);
+
+    // Open project without specifying land-in
+    test.open_project("default-test", None);
+
+    thread::sleep(Duration::from_millis(500));
+
+    // Just verify the window opened - default behavior may vary
     let windows = RealEditorTest::get_cursor_windows();
-    println!("Current Cursor windows: {:?}", windows);
-
     assert!(
-        windows.iter().any(|w| w.contains("real-project-a")),
-        "Should have project-a window"
-    );
-    assert!(
-        windows.iter().any(|w| w.contains("real-project-b")),
-        "Should have project-b window"
+        windows.iter().any(|w| w.contains("real-default-test")),
+        "Project window should open"
     );
 
-    println!("✓ Multiple windows test passed");
+    let focused = RealEditorTest::get_focused_app();
+    println!("Project opened with focus on: {}", focused);
+
+    println!("\n✓ Default focus behavior test completed!");
 }

@@ -171,3 +171,47 @@ Removes a project from wormhole.
 Closes the editor and terminal windows for a project.
 - **Path**: Project name to close
 - **Example**: `/close-project/myapp`
+
+## Testing
+
+Wormhole includes a functional test suite that verifies the HTTP API without actually executing system commands.
+
+### Test Infrastructure
+
+The test framework uses command interception to capture system calls instead of executing them:
+- Tests run wormhole on different ports (7777-7784 range) to avoid conflicts with production (7117)
+- When `WORMHOLE_TEST_MODE` is set, commands are logged to a JSON file instead of being executed
+- Tests verify the correct commands would be executed for each API operation
+
+### Running Tests
+
+```bash
+# Run all tests (single-threaded to avoid port conflicts)
+cargo test -- --test-threads=1
+
+# Run a specific test
+cargo test test_list_projects -- --test-threads=1
+
+# Use the test runner script
+./run_tests.sh
+```
+
+### Test Coverage
+
+The test suite covers:
+- Project listing and navigation
+- File opening with line numbers
+- Editor vs terminal focus behavior
+- Key-value storage operations
+- GitHub URL handling
+- HTTP method enforcement (GET vs POST)
+
+### Writing New Tests
+
+Tests are located in `tests/test_basic.rs`. To add a new test:
+1. Start a test server on a unique port using `TestServer::start(port)`
+2. Make HTTP requests using `server.request(method, path, params, body)`
+3. Verify captured commands using `server.get_captured_commands()`
+4. Assert expected behavior using helper functions like `assert_command_with_arg()`
+
+The test framework handles server lifecycle automatically, cleaning up when tests complete.

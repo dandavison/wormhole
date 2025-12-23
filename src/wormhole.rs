@@ -138,7 +138,7 @@ fn determine_requested_operation(
             Some((
                 Some(project_path),
                 Mutation::Insert,
-                Some(Application::Editor),
+                land_in,  // Pass through request param (could be None)
             ))
         }
     } else {

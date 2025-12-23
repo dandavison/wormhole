@@ -21,12 +21,14 @@ impl ProjectPath {
         let mut projects = projects::lock();
         let project = self.project.clone();
 
-        // Check for land-in override in KV store
-        if let Some(land_in_value) = project.kv.get("land-in") {
-            match land_in_value.as_str() {
-                "terminal" => land_in = Some(Application::Terminal),
-                "editor" => land_in = Some(Application::Editor),
-                _ => {} // Keep the original land_in value
+        // Use KV store value only if no request parameter was provided
+        if land_in.is_none() {
+            if let Some(land_in_value) = project.kv.get("land-in") {
+                match land_in_value.as_str() {
+                    "terminal" => land_in = Some(Application::Terminal),
+                    "editor" => land_in = Some(Application::Editor),
+                    _ => {} // Invalid value, keep as None
+                }
             }
         }
 

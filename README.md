@@ -179,7 +179,7 @@ Wormhole includes a functional test suite that verifies the HTTP API without act
 ### Test Infrastructure
 
 The test framework uses command interception to capture system calls instead of executing them:
-- Tests run wormhole on different ports (7777-7784 range) to avoid conflicts with production (7117)
+- Tests run wormhole on different ports (7777-7778) to avoid conflicts with production (7117)
 - When `WORMHOLE_TEST_MODE` is set, commands are logged to a JSON file instead of being executed
 - Tests verify the correct commands would be executed for each API operation
 
@@ -198,13 +198,12 @@ cargo test test_list_projects -- --test-threads=1
 
 ### Test Coverage
 
-The test suite covers:
-- Project listing and navigation
-- File opening with line numbers
-- Editor vs terminal focus behavior
-- Key-value storage operations
-- GitHub URL handling
-- HTTP method enforcement (GET vs POST)
+The test suite currently covers:
+- Project listing endpoint behavior
+- Adding new projects
+- Command capture verification
+
+Tests can be extended to cover additional scenarios as needed.
 
 ### Writing New Tests
 

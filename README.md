@@ -111,6 +111,36 @@ Handles GitHub URLs for direct file opening (always focuses editor).
 - **Example**: `/dandavison/delta/blob/main/src/main.rs?line=25`
 - **Note**: Always lands in editor. If the repository isn't recognized as a local project, redirects to GitHub.
 
+### Key-Value Storage
+
+#### `GET /kv/<project>/<key>`
+Retrieves a stored value for a project.
+- **Path**: Project name and key name
+- **Response**: Plain text value
+- **Example**: `/kv/myproject/land-in` returns `terminal`
+
+#### `PUT /kv/<project>/<key>`
+Sets a value for a project key.
+- **Path**: Project name and key name
+- **Body**: Plain text value to store
+- **Example**: `curl -X PUT http://wormhole:7117/kv/myproject/land-in -d "editor"`
+
+#### `DELETE /kv/<project>/<key>`
+Deletes a key from a project.
+- **Path**: Project name and key name
+- **Example**: `curl -X DELETE http://wormhole:7117/kv/myproject/land-in`
+
+#### `GET /kv/<project>`
+Retrieves all key-value pairs for a project.
+- **Path**: Project name
+- **Response**: JSON object with all key-value pairs
+- **Example**: `/kv/myproject` returns `{"land-in": "terminal", "theme": "dark"}`
+
+#### `GET /kv`
+Retrieves all key-value pairs for all projects.
+- **Response**: JSON object with projects as keys and their KV pairs as values
+- **Example**: Returns `{"myproject": {"land-in": "terminal"}, "other": {"land-in": "editor"}}`
+
 ### Project Management
 
 #### `GET /list-projects/`

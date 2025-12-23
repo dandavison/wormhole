@@ -50,7 +50,11 @@ impl<'a> Projects<'a> {
     pub fn all(&self) -> &VecDeque<Project> {
         &self.0
     }
-    
+
+    pub fn all_mut(&mut self) -> &mut VecDeque<Project> {
+        &mut self.0
+    }
+
     pub fn names(&self) -> Vec<String> {
         self.0.iter().map(|p| p.name.clone()).collect()
     }
@@ -100,6 +104,7 @@ impl<'a> Projects<'a> {
                 name,
                 path,
                 aliases: names,
+                kv: std::collections::HashMap::new(),
             });
         }
     }
@@ -185,5 +190,6 @@ pub fn load() {
             .iter()
             .map(|p| Project::parse(p)),
     );
+    crate::kv::load_kv_data(&mut projects);
     projects.print();
 }

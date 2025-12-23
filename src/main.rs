@@ -2,6 +2,7 @@ mod config;
 mod editor;
 mod endpoints;
 mod hammerspoon;
+mod kv;
 mod project;
 mod project_path;
 mod projects;

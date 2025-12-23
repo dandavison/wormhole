@@ -8,8 +8,9 @@ static TERMINAL_CONFIG: OnceLock<Terminal> = OnceLock::new();
 pub fn editor() -> &'static Editor {
     EDITOR_CONFIG.get_or_init(|| {
         #[cfg(test)]
-        if std::env::var("WORMHOLE_TEST_MODE").is_ok()
-            || std::env::var("WORMHOLE_INTEGRATION_TEST_MODE").is_ok()
+        if (std::env::var("WORMHOLE_TEST_MODE").is_ok()
+            || std::env::var("WORMHOLE_INTEGRATION_TEST_MODE").is_ok())
+            && std::env::var("WORMHOLE_REAL_EDITOR_TEST_MODE").is_err()
         {
             return Editor::TestEditor;
         }

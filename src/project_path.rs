@@ -17,9 +17,18 @@ pub struct ProjectPath {
 }
 
 impl ProjectPath {
-    pub fn open(&self, mutation: Mutation, land_in: Option<Application>) {
+    pub fn open(&self, mutation: Mutation, mut land_in: Option<Application>) {
         let mut projects = projects::lock();
         let project = self.project.clone();
+
+        // Check for land-in override in KV store
+        if let Some(land_in_value) = project.kv.get("land-in") {
+            match land_in_value.as_str() {
+                "terminal" => land_in = Some(Application::Terminal),
+                "editor" => land_in = Some(Application::Editor),
+                _ => {} // Keep the original land_in value
+            }
+        }
 
         if !project.is_open() {
             editor::open_workspace(&project);

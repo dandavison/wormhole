@@ -141,6 +141,10 @@ Retrieves all key-value pairs for all projects.
 - **Response**: JSON object with projects as keys and their KV pairs as values
 - **Example**: Returns `{"myproject": {"land-in": "terminal"}, "other": {"land-in": "editor"}}`
 
+**Special Keys:**
+- `land-in`: Controls focus behavior when opening a project. Values: `"terminal"` or `"editor"`
+  - When set, overrides the default focus behavior and URL parameters
+
 ### Project Management
 
 #### `GET /list-projects/`

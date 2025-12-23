@@ -4,10 +4,10 @@ use std::{
     ffi::OsStr,
     fmt::{Debug, Display},
     path::{Path, PathBuf},
-    process::{Command, Output},
+    process::Output,
 };
 
-use crate::ps;
+use crate::command;
 
 pub fn debug() -> bool {
     env::var("WORMHOLE_DEBUG").is_ok()
@@ -40,31 +40,18 @@ pub fn home_dir() -> PathBuf {
 }
 
 pub fn desktop_notification(msg: &str) {
-    Command::new("terminal-notifier")
-        .args(["-message", msg, "-title", "wormhole"])
-        .spawn()
-        .unwrap_or_else(|err| panic(&format!("failed to spawn terminal-notifier: {err}")));
+    command::spawn_detached("terminal-notifier", ["-message", msg, "-title", "wormhole"]);
 }
 
 pub fn execute_command<S, I, P>(program: S, args: I, current_dir: P) -> String
 where
-    S: AsRef<OsStr>,
-    I: IntoIterator<Item = S>,
-    P: AsRef<Path>,
-    S: Copy,
-    S: Display,
-    I: Debug,
-    P: Debug,
+    S: AsRef<OsStr> + Display + Debug + Copy,
+    I: IntoIterator<Item = S> + Debug,
+    P: AsRef<Path> + Debug,
 {
-    ps!("execute_command({program}, {args:?}, {current_dir:?})");
-    let output = Command::new(program)
-        .args(args)
-        .current_dir(current_dir)
-        .output()
-        .unwrap_or_else(|_| panic(&format!("failed to execute {program}")));
-    get_stdout(program, output)
+    // Delegate to the unified command execution layer
+    command::execute_command(program, args, current_dir)
 }
-
 
 pub fn get_stdout<S>(program: S, output: Output) -> String
 where

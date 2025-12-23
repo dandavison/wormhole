@@ -5,7 +5,7 @@ echo "Building wormhole..."
 cargo build --quiet || exit 1
 
 # Check if there's a wormhole process already running on the test ports
-for port in 7777 7778; do
+for port in 8877 8878; do
     if lsof -i:$port >/dev/null 2>&1; then
         echo "Error: Port $port is already in use. Please stop any test servers."
         exit 1

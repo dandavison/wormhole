@@ -179,7 +179,7 @@ Wormhole includes a functional test suite that verifies the HTTP API without act
 ### Test Infrastructure
 
 The test framework uses command interception to capture system calls instead of executing them:
-- Tests run wormhole on different ports (7777-7778) to avoid conflicts with production (7117)
+- Tests run wormhole on different ports (8877-8878) to avoid conflicts with production (7117)
 - When `WORMHOLE_TEST_MODE` is set, commands are logged to a JSON file instead of being executed
 - Tests verify the correct commands would be executed for each API operation
 

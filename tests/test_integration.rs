@@ -1,14 +1,11 @@
-mod test_framework;
-
 use std::process::Command;
 use std::thread;
 use std::time::Duration;
-use test_framework::*;
 
 /// Integration test helper that manages a tmux session for testing
 struct TmuxTestSession {
     session_name: String,
-    socket_name: String,  // Using -L flag instead of -S for better isolation
+    socket_name: String, // Using -L flag instead of -S for better isolation
 }
 
 impl TmuxTestSession {
@@ -23,12 +20,24 @@ impl TmuxTestSession {
 
         // Create a new tmux session
         let output = Command::new("tmux")
-            .args(&["-L", &socket_name, "new-session", "-d", "-s", &session_name, "-c", "/tmp"])
+            .args(&[
+                "-L",
+                &socket_name,
+                "new-session",
+                "-d",
+                "-s",
+                &session_name,
+                "-c",
+                "/tmp",
+            ])
             .output()
             .expect("Failed to create tmux session");
 
         if !output.status.success() {
-            panic!("Failed to start tmux session: {:?}", String::from_utf8_lossy(&output.stderr));
+            panic!(
+                "Failed to start tmux session: {:?}",
+                String::from_utf8_lossy(&output.stderr)
+            );
         }
 
         // Give tmux a moment to initialize
@@ -84,6 +93,7 @@ impl TmuxTestSession {
         self.tmux_cmd(&["send-keys", "-t", &target, keys]);
     }
 
+    #[allow(dead_code)]
     fn socket_path(&self) -> String {
         // Return path that would be used with -S flag
         // This is for TMUX environment variable
@@ -115,8 +125,14 @@ fn test_real_tmux_project_discovery() {
 
     // Verify tmux windows were created
     let windows = tmux.list_windows();
-    assert!(windows.contains(&"project1".to_string()), "Expected project1 window");
-    assert!(windows.contains(&"project2".to_string()), "Expected project2 window");
+    assert!(
+        windows.contains(&"project1".to_string()),
+        "Expected project1 window"
+    );
+    assert!(
+        windows.contains(&"project2".to_string()),
+        "Expected project2 window"
+    );
 
     // Capture pane content to verify tmux is working
     let pane_content = tmux.capture_pane(Some("project1"));
@@ -144,20 +160,26 @@ fn test_tmux_capture_pane() {
     println!("Captured pane content:\n{}", content);
 
     // Verify we can capture output
-    assert!(content.contains("Hello from tmux test"), "Should capture echoed text");
+    assert!(
+        content.contains("Hello from tmux test"),
+        "Should capture echoed text"
+    );
 
     // Create a new window and test capture there
     tmux.create_window("test-window", "/tmp");
-    thread::sleep(Duration::from_millis(100));  // Let window initialize
+    thread::sleep(Duration::from_millis(100)); // Let window initialize
 
     tmux.send_keys("pwd", Some("test-window"));
     tmux.send_keys("Enter", Some("test-window"));
 
-    thread::sleep(Duration::from_millis(200));  // Give more time for command to execute
+    thread::sleep(Duration::from_millis(200)); // Give more time for command to execute
 
     let window_content = tmux.capture_pane(Some("test-window"));
     println!("Window pane content:\n{}", window_content);
 
     // Just verify we can capture something from the window
-    assert!(!window_content.is_empty(), "Should capture content from test-window");
+    assert!(
+        !window_content.is_empty(),
+        "Should capture content from test-window"
+    );
 }

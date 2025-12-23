@@ -17,6 +17,7 @@ pub struct CapturedCommand {
 
 pub struct TestServer {
     child: Option<Child>,
+    #[allow(dead_code)]
     port: u16,
     capture_file: String,
 }
@@ -66,7 +67,7 @@ impl TestServer {
         let child = Command::new("./target/debug/wormhole")
             .env("WORMHOLE_TEST_MODE", &capture_file)
             .env("WORMHOLE_PORT", port.to_string())
-            .env("TMUX", format!("{},1,1", tmux_socket))  // Set TMUX env var to use test socket
+            .env("TMUX", format!("{},1,1", tmux_socket)) // Set TMUX env var to use test socket
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
@@ -102,13 +103,17 @@ impl TestServer {
         }
     }
 
-    pub fn request(&self, method: &str, path: &str, params: Option<HashMap<&str, &str>>, body: Option<&str>) -> Result<String, Box<dyn std::error::Error>> {
+    pub fn request(
+        &self,
+        method: &str,
+        path: &str,
+        params: Option<HashMap<&str, &str>>,
+        body: Option<&str>,
+    ) -> Result<String, Box<dyn std::error::Error>> {
         let mut url = format!("http://localhost:{}{}", self.port, path);
 
         if let Some(params) = params {
-            let query: Vec<String> = params.iter()
-                .map(|(k, v)| format!("{}={}", k, v))
-                .collect();
+            let query: Vec<String> = params.iter().map(|(k, v)| format!("{}={}", k, v)).collect();
             if !query.is_empty() {
                 url.push_str("?");
                 url.push_str(&query.join("&"));
@@ -140,12 +145,11 @@ impl TestServer {
         thread::sleep(Duration::from_millis(50));
 
         match fs::read_to_string(&self.capture_file) {
-            Ok(content) => {
-                content.lines()
-                    .filter(|line| !line.is_empty())
-                    .filter_map(|line| serde_json::from_str::<CapturedCommand>(line).ok())
-                    .collect()
-            }
+            Ok(content) => content
+                .lines()
+                .filter(|line| !line.is_empty())
+                .filter_map(|line| serde_json::from_str::<CapturedCommand>(line).ok())
+                .collect(),
             Err(_) => Vec::new(),
         }
     }
@@ -158,14 +162,18 @@ impl TestServer {
     pub fn assert_command_contains(&self, program: &str, arg_substring: &str) -> bool {
         let commands = self.get_captured_commands();
         commands.iter().any(|cmd| {
-            cmd.program == program &&
-            cmd.args.iter().any(|arg| arg.contains(arg_substring))
+            cmd.program == program && cmd.args.iter().any(|arg| arg.contains(arg_substring))
         })
     }
 
+    #[allow(dead_code)]
     pub fn assert_no_commands(&self) {
         let commands = self.get_captured_commands();
-        assert!(commands.is_empty(), "Expected no commands, but found: {:?}", commands);
+        assert!(
+            commands.is_empty(),
+            "Expected no commands, but found: {:?}",
+            commands
+        );
     }
 }
 
@@ -183,6 +191,7 @@ impl Drop for TestServer {
 }
 
 // Test assertion helpers
+#[allow(dead_code)]
 pub fn assert_contains(haystack: &str, needle: &str) {
     assert!(
         haystack.contains(needle),
@@ -193,13 +202,20 @@ pub fn assert_contains(haystack: &str, needle: &str) {
 }
 
 #[allow(dead_code)]
-pub fn assert_command<'a>(commands: &'a [CapturedCommand], program: &str) -> Option<&'a CapturedCommand> {
+pub fn assert_command<'a>(
+    commands: &'a [CapturedCommand],
+    program: &str,
+) -> Option<&'a CapturedCommand> {
     commands.iter().find(|cmd| cmd.program == program)
 }
 
 #[allow(dead_code)]
-pub fn assert_command_with_arg<'a>(commands: &'a [CapturedCommand], program: &str, arg: &str) -> Option<&'a CapturedCommand> {
-    commands.iter().find(|cmd| {
-        cmd.program == program && cmd.args.iter().any(|a| a.contains(arg))
-    })
+pub fn assert_command_with_arg<'a>(
+    commands: &'a [CapturedCommand],
+    program: &str,
+    arg: &str,
+) -> Option<&'a CapturedCommand> {
+    commands
+        .iter()
+        .find(|cmd| cmd.program == program && cmd.args.iter().any(|a| a.contains(arg)))
 }

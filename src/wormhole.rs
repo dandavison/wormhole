@@ -6,7 +6,7 @@ use crate::project_path::ProjectPath;
 use crate::projects;
 use crate::projects::Mutation;
 use crate::ps;
-use hyper::{header, Body, Request, Response, StatusCode};
+use hyper::{header, Body, Method, Request, Response, StatusCode};
 use url::form_urlencoded;
 
 #[derive(Debug)]
@@ -30,6 +30,7 @@ pub struct QueryParams {
 }
 
 pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
+    let method = req.method();
     let uri = req.uri();
     let path = uri.path().to_string();
     if &path == "/favicon.ico" {
@@ -37,7 +38,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
     }
     let params = QueryParams::from_query(uri.query());
     if &path != "/list-projects/" {
-        ps!("\nRequest: {} {:?}", uri, params);
+        ps!("\nRequest: {} {} {:?}", method, uri, params);
     }
     if &path == "/list-projects/" {
         Ok(endpoints::list_projects())
@@ -45,12 +46,30 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         Ok(endpoints::debug_projects())
     } else if let Some(path) = path.strip_prefix("/add-project/") {
         // An absolute path must have a double slash: /add-project//Users/me/file.rs
+        if method != Method::POST {
+            return Ok(Response::builder()
+                .status(StatusCode::METHOD_NOT_ALLOWED)
+                .body(Body::from("Method not allowed. Use POST for /add-project/"))
+                .unwrap());
+        }
         Ok(endpoints::add_project(&path.trim(), params.names))
     } else if let Some(name) = path.strip_prefix("/remove-project/") {
+        if method != Method::POST {
+            return Ok(Response::builder()
+                .status(StatusCode::METHOD_NOT_ALLOWED)
+                .body(Body::from("Method not allowed. Use POST for /remove-project/"))
+                .unwrap());
+        }
         Ok(endpoints::remove_project(&name.trim()))
     } else if let Some(name) = path.strip_prefix("/open-project/") {
         Ok(endpoints::open_project(&name.trim()))
     } else if let Some(name) = path.strip_prefix("/close-project/") {
+        if method != Method::POST {
+            return Ok(Response::builder()
+                .status(StatusCode::METHOD_NOT_ALLOWED)
+                .body(Body::from("Method not allowed. Use POST for /close-project/"))
+                .unwrap());
+        }
         Ok(endpoints::close_project(&name.trim()))
     } else {
         // wormhole uses the `hs` client to make a call to the hammerspoon

@@ -17,9 +17,9 @@ pub fn current_application() -> Application {
     .map(str::trim)
     {
         Ok(app_title) => {
-            if app_title == config::TERMINAL.application_name() {
+            if app_title == config::terminal().application_name() {
                 Application::Terminal
-            } else if app_title == config::EDITOR.application_name() {
+            } else if app_title == config::editor().application_name() {
                 Application::Editor
             } else {
                 Application::Other

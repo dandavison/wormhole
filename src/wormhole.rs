@@ -5,7 +5,7 @@ use crate::endpoints;
 use crate::project_path::ProjectPath;
 use crate::projects;
 use crate::projects::Mutation;
-use crate::ps;
+use crate::{log_request, ps};
 use hyper::{header, Body, Method, Request, Response, StatusCode};
 use url::form_urlencoded;
 
@@ -38,7 +38,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
     }
     let params = QueryParams::from_query(uri.query());
     if &path != "/list-projects/" {
-        ps!("\nRequest: {} {} {:?}", method, uri, params);
+        log_request!("\nRequest: {} {} {:?}", method, uri, params);
     }
     if &path == "/list-projects/" {
         Ok(endpoints::list_projects())

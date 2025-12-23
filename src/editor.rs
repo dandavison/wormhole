@@ -101,7 +101,9 @@ impl Editor {
             dir.to_string_lossy(),
             self.application_name()
         );
-        println!("cmd: {}", cmd);
+        if std::env::var("WORMHOLE_DEBUG").is_ok() {
+            println!("cmd: {}", cmd);
+        }
         execute_command("bash", ["-c", &cmd], dir.as_path());
     }
 }

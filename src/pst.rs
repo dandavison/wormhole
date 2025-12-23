@@ -3,6 +3,15 @@ use std::env::current_dir;
 #[macro_export]
 macro_rules! ps {
     ($($arg:tt)*) => {
+        if std::env::var("WORMHOLE_DEBUG").is_ok() {
+            $crate::print_hyperlinked!($($arg)*)
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! log_request {
+    ($($arg:tt)*) => {
         $crate::print_hyperlinked!($($arg)*)
     };
 }

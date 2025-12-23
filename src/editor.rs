@@ -4,7 +4,7 @@ use crate::project::Project;
 use crate::{project_path::ProjectPath, util::execute_command, wormhole::WindowAction};
 
 #[allow(dead_code)]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Editor {
     Cursor,
     Emacs,
@@ -13,6 +13,8 @@ pub enum Editor {
     PyCharmCE,
     VSCode,
     VSCodeInsiders,
+    #[cfg(test)]
+    TestEditor,
 }
 use Editor::*;
 
@@ -46,6 +48,8 @@ impl Editor {
             PyCharm => "PyCharm",
             PyCharmCE => "PyCharm",
             IntelliJ => "IntelliJ",
+            #[cfg(test)]
+            TestEditor => "TestEditor",
         }
     }
 
@@ -58,6 +62,8 @@ impl Editor {
             PyCharm => "pycharm",
             PyCharmCE => "pycharm",
             IntelliJ => "idea",
+            #[cfg(test)]
+            TestEditor => "test-editor",
         }
     }
 
@@ -71,6 +77,8 @@ impl Editor {
             PyCharmCE => format!("pycharm://open?file={path}"),
             VSCode => format!("vscode://file/{path}"),
             VSCodeInsiders => format!("vscode-insiders://file/{path}"),
+            #[cfg(test)]
+            TestEditor => format!("test-editor://dir/{path}"),
         }
     }
 
@@ -85,6 +93,8 @@ impl Editor {
             PyCharmCE => format!("pycharm://open?file={path}&line={line}"),
             VSCode => format!("vscode://file/{path}:{line}"),
             VSCodeInsiders => format!("vscode-insiders://file/{path}:{line}"),
+            #[cfg(test)]
+            TestEditor => format!("test-editor://file/{path}:{line}"),
         }
     }
 
@@ -124,6 +134,15 @@ pub fn open_workspace(project: &Project) {
         }
         Emacs => {
             execute_command("emacsclient", ["-n", "."], project_dir);
+        }
+        #[cfg(test)]
+        TestEditor => {
+            // For tests, just execute a test-editor command that will be captured
+            execute_command(
+                "test-editor",
+                ["open-workspace", project_dir.to_str().unwrap()],
+                &project_dir,
+            );
         }
         _ => {
             execute_command(

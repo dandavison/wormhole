@@ -130,16 +130,16 @@ fn determine_requested_operation(
         Some((p, Mutation::Insert, land_in))
     } else if let Some(absolute_path) = url_path.strip_prefix("/file/") {
         let p = ProjectPath::from_absolute_path(absolute_path, &projects);
+        // Default to editor for file requests (unless overridden by request param)
+        let land_in = land_in.or(Some(Application::Editor));
         Some((p, Mutation::Insert, land_in))
     } else if let Some(project_path) = ProjectPath::from_github_url(&url_path, line, &projects) {
         if url_path.ends_with(".md") {
             None
         } else {
-            Some((
-                Some(project_path),
-                Mutation::Insert,
-                land_in,  // Pass through request param (could be None)
-            ))
+            // Default to editor for file requests (unless overridden by request param)
+            let land_in = land_in.or(Some(Application::Editor));
+            Some((Some(project_path), Mutation::Insert, land_in))
         }
     } else {
         None

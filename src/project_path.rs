@@ -21,16 +21,34 @@ impl ProjectPath {
         let mut projects = projects::lock();
         let project = self.project.clone();
 
+        ps!("ProjectPath::open - Initial land_in: {:?}", land_in);
+        ps!("ProjectPath::open - Project KV store: {:?}", project.kv);
+
         // Use KV store value only if no request parameter was provided
         if land_in.is_none() {
             if let Some(land_in_value) = project.kv.get("land-in") {
+                ps!("ProjectPath::open - Found KV land-in value: {}", land_in_value);
                 match land_in_value.as_str() {
-                    "terminal" => land_in = Some(Application::Terminal),
-                    "editor" => land_in = Some(Application::Editor),
-                    _ => {} // Invalid value, keep as None
+                    "terminal" => {
+                        land_in = Some(Application::Terminal);
+                        ps!("ProjectPath::open - Set land_in to Terminal from KV");
+                    }
+                    "editor" => {
+                        land_in = Some(Application::Editor);
+                        ps!("ProjectPath::open - Set land_in to Editor from KV");
+                    }
+                    _ => {
+                        ps!("ProjectPath::open - Invalid KV land-in value: {}", land_in_value);
+                    }
                 }
+            } else {
+                ps!("ProjectPath::open - No land-in key in KV store");
             }
+        } else {
+            ps!("ProjectPath::open - Using request land_in, skipping KV");
         }
+
+        ps!("ProjectPath::open - Final land_in: {:?}", land_in);
 
         if !project.is_open() {
             editor::open_workspace(&project);
@@ -52,12 +70,22 @@ impl ProjectPath {
         }
         let project_path = self.clone();
         let editor_window_action = match &land_in {
-            Some(Application::Editor) => WindowAction::Raise,
-            Some(Application::Terminal) => WindowAction::Focus,
-            _ => match current_application() {
-                Application::Editor => WindowAction::Raise,
-                _ => WindowAction::Focus,
-            },
+            Some(Application::Editor) => {
+                ps!("Window action: Raise (land_in = Editor)");
+                WindowAction::Raise
+            }
+            Some(Application::Terminal) => {
+                ps!("Window action: Focus (land_in = Terminal)");
+                WindowAction::Focus
+            }
+            _ => {
+                let current_app = current_application();
+                ps!("Window action: No land_in, current app: {:?}", current_app);
+                match current_app {
+                    Application::Editor => WindowAction::Raise,
+                    _ => WindowAction::Focus,
+                }
+            }
         };
         let editor_thread = thread::spawn(move || {
             editor::open_path(&project_path, editor_window_action).unwrap_or_else(|err| {
@@ -71,8 +99,18 @@ impl ProjectPath {
         editor_thread.join().unwrap();
         let flip_keybinding = Path::new("/tmp/wormhole-toggle").exists();
         let land_in_terminal = matches!(land_in, Some(Application::Terminal));
+        let land_in_editor = matches!(land_in, Some(Application::Editor));
+        ps!("Final focus decision - flip_keybinding: {}, land_in_terminal: {}, land_in_editor: {}",
+            flip_keybinding, land_in_terminal, land_in_editor);
+
         if flip_keybinding ^ land_in_terminal {
+            ps!("Focusing terminal (XOR condition met)");
             config::TERMINAL.focus()
+        } else if land_in_editor {
+            ps!("Focusing editor (land_in = Editor)");
+            self.project.editor().focus()
+        } else {
+            ps!("No explicit focus change (using current context)")
         }
         projects.apply(mutation, &self.project.name);
         projects.print();

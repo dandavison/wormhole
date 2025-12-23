@@ -91,6 +91,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         if let Some((Some(project_path), mutation, land_in)) =
             determine_requested_operation(&path, params.line, params.land_in)
         {
+            ps!("Service - calling project_path.open with land_in: {:?}", land_in);
             if project_path.project.name != "dan" {
                 thread::spawn(move || project_path.open(mutation, land_in));
                 Ok(Response::new(Body::from("Sent into wormhole.")))
@@ -127,18 +128,23 @@ fn determine_requested_operation(
         Some((p, Mutation::RotateRight, land_in))
     } else if let Some(name) = url_path.strip_prefix("/project/") {
         let p = projects.by_name(name).map(|p| p.as_project_path());
+        ps!("Project request - land_in: {:?}", land_in);
         Some((p, Mutation::Insert, land_in))
     } else if let Some(absolute_path) = url_path.strip_prefix("/file/") {
         let p = ProjectPath::from_absolute_path(absolute_path, &projects);
+        ps!("File request - incoming land_in: {:?}", land_in);
         // Default to editor for file requests (unless overridden by request param)
         let land_in = land_in.or(Some(Application::Editor));
+        ps!("File request - after default applied: {:?}", land_in);
         Some((p, Mutation::Insert, land_in))
     } else if let Some(project_path) = ProjectPath::from_github_url(&url_path, line, &projects) {
         if url_path.ends_with(".md") {
             None
         } else {
+            ps!("GitHub URL - incoming land_in: {:?}", land_in);
             // Default to editor for file requests (unless overridden by request param)
             let land_in = land_in.or(Some(Application::Editor));
+            ps!("GitHub URL - after default applied: {:?}", land_in);
             Some((Some(project_path), Mutation::Insert, land_in))
         }
     } else {

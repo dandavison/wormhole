@@ -89,6 +89,10 @@ impl Editor {
         }
     }
 
+    pub fn focus(&self) {
+        crate::hammerspoon::launch_or_focus(self.application_name())
+    }
+
     pub fn close(&self, project: &Project) {
         let dir = project.root().absolute_path();
         let cmd = format!(
@@ -101,9 +105,7 @@ impl Editor {
             dir.to_string_lossy(),
             self.application_name()
         );
-        if std::env::var("WORMHOLE_DEBUG").is_ok() {
-            println!("cmd: {}", cmd);
-        }
+        println!("cmd: {}", cmd);
         execute_command("bash", ["-c", &cmd], dir.as_path());
     }
 }

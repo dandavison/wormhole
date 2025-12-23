@@ -17,9 +17,20 @@ pub struct ProjectPath {
 }
 
 impl ProjectPath {
-    pub fn open(&self, mutation: Mutation, land_in: Option<Application>) {
+    pub fn open(&self, mutation: Mutation, mut land_in: Option<Application>) {
         let mut projects = projects::lock();
         let project = self.project.clone();
+
+        // Use KV store value only if no request parameter was provided
+        if land_in.is_none() {
+            if let Some(land_in_value) = project.kv.get("land-in") {
+                match land_in_value.as_str() {
+                    "terminal" => land_in = Some(Application::Terminal),
+                    "editor" => land_in = Some(Application::Editor),
+                    _ => {} // Invalid value, keep as None
+                }
+            }
+        }
 
         if !project.is_open() {
             editor::open_workspace(&project);
@@ -60,8 +71,12 @@ impl ProjectPath {
         editor_thread.join().unwrap();
         let flip_keybinding = Path::new("/tmp/wormhole-toggle").exists();
         let land_in_terminal = matches!(land_in, Some(Application::Terminal));
+        let land_in_editor = matches!(land_in, Some(Application::Editor));
+        
         if flip_keybinding ^ land_in_terminal {
             config::TERMINAL.focus()
+        } else if land_in_editor {
+            self.project.editor().focus()
         }
         projects.apply(mutation, &self.project.name);
         projects.print();

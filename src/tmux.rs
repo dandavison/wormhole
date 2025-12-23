@@ -1,11 +1,11 @@
 use core::str;
 use std::collections::HashMap;
-use std::process::Command;
 use std::thread;
 
+use crate::command;
 use crate::project::Project;
 use crate::terminal::write_wormhole_env_vars;
-use crate::util::{get_stdout, panic};
+use crate::util::panic;
 
 struct Window {
     id: String,
@@ -113,11 +113,10 @@ where
         .unwrap()
         .to_string();
 
-    let program = "tmux";
-    let output = Command::new(program)
-        .args(["-S", &socket_path])
-        .args(args)
-        .output()
-        .unwrap_or_else(|_| panic("Failed to execute command"));
-    get_stdout(program, output)
+    // Build args with socket path prepended
+    let mut full_args = vec!["-S".to_string(), socket_path];
+    full_args.extend(args.into_iter().map(|s| s.to_string()));
+
+    let full_args_refs: Vec<&str> = full_args.iter().map(|s| s.as_str()).collect();
+    command::execute_command("tmux", full_args_refs, "/tmp")
 }

@@ -1,7 +1,7 @@
-use std::process::Command;
 use std::str;
 
-use crate::util::{error, panic, warn};
+use crate::command;
+use crate::util::{error, warn};
 use crate::wormhole::Application;
 use crate::{config, ps};
 
@@ -42,16 +42,19 @@ pub fn launch_or_focus(application_name: &str) {
 }
 
 fn hammerspoon(lua: &str) -> Vec<u8> {
-    let output = Command::new("hs")
-        .arg("-c")
-        .arg(lua)
-        .output()
-        .unwrap_or_else(|_| panic("Failed to execute hammerspoon"));
-    for line in str::from_utf8(&output.stderr)
-        .unwrap()
-        .split_terminator("\n")
-    {
-        error(line);
+    let result = command::execute_with_stderr("hs", ["-c", lua]);
+
+    // Log any errors from stderr
+    if !result.stderr.is_empty() {
+        for line in str::from_utf8(&result.stderr)
+            .unwrap_or("")
+            .split_terminator("\n")
+        {
+            if !line.is_empty() {
+                error(line);
+            }
+        }
     }
-    output.stdout
+
+    result.stdout
 }

@@ -1,17 +1,12 @@
-use core::{panic, str};
+use core::panic;
 use std::{
     env,
     ffi::OsStr,
     fmt::{Debug, Display},
     path::{Path, PathBuf},
-    process::{Command, Output},
 };
 
-use crate::ps;
-
-pub fn debug() -> bool {
-    env::var("WORMHOLE_DEBUG").is_ok()
-}
+use crate::command;
 
 pub fn debug() -> bool {
     env::var("WORMHOLE_DEBUG").is_ok()
@@ -44,47 +39,15 @@ pub fn home_dir() -> PathBuf {
 }
 
 pub fn desktop_notification(msg: &str) {
-    Command::new("terminal-notifier")
-        .args(["-message", msg, "-title", "wormhole"])
-        .spawn()
-        .unwrap_or_else(|err| panic(&format!("failed to spawn terminal-notifier: {err}")));
+    command::spawn_detached("terminal-notifier", ["-message", msg, "-title", "wormhole"]);
 }
 
 pub fn execute_command<S, I, P>(program: S, args: I, current_dir: P) -> String
 where
-    S: AsRef<OsStr>,
-    I: IntoIterator<Item = S>,
-    P: AsRef<Path>,
-    S: Copy,
-    S: Display,
-    I: Debug,
-    P: Debug,
+    S: AsRef<OsStr> + Display + Debug + Copy,
+    I: IntoIterator<Item = S> + Debug,
+    P: AsRef<Path> + Debug,
 {
-    ps!("execute_command({program}, {args:?}, {current_dir:?})");
-    let output = Command::new(program)
-        .args(args)
-        .current_dir(current_dir)
-        .output()
-        .unwrap_or_else(|_| panic(&format!("failed to execute {program}")));
-    get_stdout(program, output)
-}
-
-
-pub fn get_stdout<S>(program: S, output: Output) -> String
-where
-    S: AsRef<OsStr>,
-    S: Display,
-{
-    let stdout = str::from_utf8(&output.stdout)
-        .unwrap_or_else(|err| panic(&format!("failed to parse stdout from {program}: {err}")))
-        .trim_end()
-        .to_string();
-    if !output.stderr.is_empty() {
-        let stderr = str::from_utf8(&output.stderr)
-            .unwrap_or_else(|err| panic(&format!("failed to parse stderr from {program}: {err}")));
-        panic(&format!(
-            "program {program} produced output on stderr: {stderr}"
-        ));
-    }
-    stdout
+    // Delegate to the unified command execution layer
+    command::execute_command(program, args, current_dir)
 }

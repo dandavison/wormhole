@@ -92,6 +92,12 @@ where
         // All other commands (including tmux) execute normally
     }
 
+    // Real editor test mode: let everything through (for testing with real Cursor)
+    // This mode allows full execution to test actual window behavior
+    if env::var("WORMHOLE_REAL_EDITOR_TEST_MODE").is_ok() {
+        // Everything executes normally - no interception
+    }
+
     let mut cmd = Command::new(program.as_ref());
     cmd.args(args_vec.iter().map(|a| a.as_ref()));
 

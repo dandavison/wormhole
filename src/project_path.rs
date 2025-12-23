@@ -71,8 +71,12 @@ impl ProjectPath {
         editor_thread.join().unwrap();
         let flip_keybinding = Path::new("/tmp/wormhole-toggle").exists();
         let land_in_terminal = matches!(land_in, Some(Application::Terminal));
+        let land_in_editor = matches!(land_in, Some(Application::Editor));
+        
         if flip_keybinding ^ land_in_terminal {
             config::TERMINAL.focus()
+        } else if land_in_editor {
+            self.project.editor().focus()
         }
         projects.apply(mutation, &self.project.name);
         projects.print();

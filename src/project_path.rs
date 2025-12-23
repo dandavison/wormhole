@@ -5,7 +5,6 @@ use regex::Regex;
 
 use crate::hammerspoon::current_application;
 use crate::projects::{self, Mutation, Projects};
-use crate::ps;
 use crate::util::warn;
 use crate::wormhole::{Application, WindowAction};
 use crate::{config, editor, project::Project};
@@ -72,7 +71,7 @@ impl ProjectPath {
         let flip_keybinding = Path::new("/tmp/wormhole-toggle").exists();
         let land_in_terminal = matches!(land_in, Some(Application::Terminal));
         let land_in_editor = matches!(land_in, Some(Application::Editor));
-        
+
         if flip_keybinding ^ land_in_terminal {
             config::TERMINAL.focus()
         } else if land_in_editor {
@@ -108,16 +107,9 @@ impl ProjectPath {
     pub fn from_github_url(path: &str, line: Option<usize>, projects: &Projects) -> Option<Self> {
         let re = Regex::new(r"/([^/]+)/([^/]+)/blob/([^/]+)/([^?]*)").unwrap();
         if let Some(captures) = re.captures(path) {
-            ps!("Handling as github URL");
             let path = PathBuf::from(captures.get(4).unwrap().as_str());
             let repo = captures.get(2).unwrap().as_str();
 
-            ps!(
-                "path: {} line: {:?} repo: {}",
-                path.to_string_lossy(),
-                line,
-                repo
-            );
             if let Some(project) = projects.by_name(repo) {
                 Some(ProjectPath {
                     project,

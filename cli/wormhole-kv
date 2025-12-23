@@ -1,0 +1,19 @@
+#!/bin/bash
+# Usage:
+#   wormhole-kv                        # Get all KV data
+#   wormhole-kv <project>              # Get all KV for project
+#   wormhole-kv <project> <key>        # Get value
+#   wormhole-kv <project> <key> <val>  # Set value
+#   wormhole-kv <project> -d <key>     # Delete key
+
+if [ $# -eq 0 ]; then
+    curl -s "http://wormhole:7117/kv"
+elif [ $# -eq 1 ]; then
+    curl -s "http://wormhole:7117/kv/$1"
+elif [ $# -eq 2 ]; then
+    curl -s "http://wormhole:7117/kv/$1/$2"
+elif [ $# -eq 3 ] && [ "$2" = "-d" ]; then
+    curl -s -X DELETE "http://wormhole:7117/kv/$1/$3"
+elif [ $# -eq 3 ]; then
+    curl -s -X PUT "http://wormhole:7117/kv/$1/$2" -d "$3"
+fi

@@ -1,4 +1,3 @@
-use core::panic;
 use std::process::Command;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -100,7 +99,6 @@ impl WormholeTest {
         false
     }
 
-    #[allow(dead_code)]
     pub fn wait_for_window_containing(&self, name: &str, timeout_secs: u64) -> bool {
         let name = name.to_string();
         self.wait_until(|| self.window_exists(&name), timeout_secs)

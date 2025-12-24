@@ -1,7 +1,3 @@
-use core::panic;
-use std::thread;
-use std::time::Duration;
-
 mod harness;
 use harness::TEST_PREFIX;
 
@@ -14,8 +10,8 @@ fn test_open_project_preserves_application() {
     let dir_a = format!("/tmp/{}", proj_a);
     let dir_b = format!("/tmp/{}", proj_b);
 
-    std::fs::create_dir_all(&dir_a).ok();
-    std::fs::create_dir_all(&dir_b).ok();
+    std::fs::create_dir_all(&dir_a).unwrap();
+    std::fs::create_dir_all(&dir_b).unwrap();
 
     test.hs_post(&format!("/add-project/{}?name={}", dir_a, proj_a))
         .unwrap();
@@ -29,20 +25,25 @@ fn test_open_project_preserves_application() {
     test.hs_get(&format!("/project/{}", proj_b)).unwrap();
     test.wait_for_window_containing(&proj_b, 5);
     test.assert_editor_has_focus();
+
+    test.close_cursor_window(&proj_a);
+    test.close_cursor_window(&proj_b);
 }
 
 #[test]
 fn test_navigation_no_deadlock() {
     let test = harness::WormholeTest::new(8930);
 
-    match test.hs_get("/previous-project/") {
-        Err(e) if e.contains("timeout") => panic!("Deadlock detected! {}", e),
-        _ => {}
+    if let Err(e) = test.hs_get("/previous-project/") {
+        if e.contains("timeout") {
+            panic!("Deadlock detected! {}", e);
+        }
     }
 
-    match test.hs_get("/next-project/") {
-        Err(e) if e.contains("timeout") => panic!("Deadlock detected! {}", e),
-        _ => {}
+    if let Err(e) = test.hs_get("/next-project/") {
+        if e.contains("timeout") {
+            panic!("Deadlock detected! {}", e);
+        }
     }
 }
 
@@ -54,19 +55,13 @@ fn test_file_opens_in_editor() {
     let dir = format!("/tmp/{}", proj);
     let file = format!("{}/test.rs", dir);
 
-    std::fs::create_dir_all(&dir).ok();
-    std::fs::write(&file, "fn main() {}").ok();
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(&file, "fn main() {}").unwrap();
 
     test.hs_post(&format!("/add-project/{}?name={}", dir, proj))
         .unwrap();
-
     test.hs_get(&format!("/file/{}", file)).unwrap();
     test.wait_for_window_containing(&proj, 5);
-}
 
-#[test]
-fn z_cleanup() {
-    let test = harness::WormholeTest::new(8999);
-    test.close_cursor_window(TEST_PREFIX);
-    thread::sleep(Duration::from_millis(500));
+    test.close_cursor_window(&proj);
 }

@@ -9,7 +9,7 @@ use crate::ps;
 use hyper::{header, Body, Method, Request, Response, StatusCode};
 use url::form_urlencoded;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Application {
     Editor,
     Terminal,

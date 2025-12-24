@@ -4,7 +4,7 @@ use std::thread;
 use crate::projects::{self, Mutation, Projects};
 use crate::util::warn;
 use crate::wormhole::Application;
-use crate::{config, editor, project::Project};
+use crate::{config, editor, hammerspoon, project::Project};
 use crate::{ps, util};
 use regex::Regex;
 
@@ -17,11 +17,17 @@ pub struct ProjectPath {
 impl ProjectPath {
     pub fn open(&self, mutation: Mutation, land_in: Option<Application>) {
         let mut projects = projects::lock();
+        if let Some(current) = projects.current() {
+            projects.set_last_application(&current.name, hammerspoon::current_application());
+        }
         let project = self.project.clone();
-
         if !project.is_open() {
             editor::open_workspace(&project);
         }
+        let land_in = land_in.or_else(|| match mutation {
+            Mutation::RotateLeft | Mutation::RotateRight => self.project.last_application.clone(),
+            _ => parse_application(self.project.kv.get("land-in")),
+        });
 
         let terminal_thread = thread::spawn(move || {
             config::TERMINAL.open(&project).unwrap_or_else(|err| {
@@ -49,17 +55,7 @@ impl ProjectPath {
         terminal_thread.join().unwrap();
         editor_thread.join().unwrap();
 
-        let land_in = land_in.or_else(|| {
-            self.project
-                .kv
-                .get("land-in")
-                .and_then(|v| match v.as_str() {
-                    "terminal" => Some(Application::Terminal),
-                    "editor" => Some(Application::Editor),
-                    _ => None,
-                })
-        });
-        match land_in {
+        match &land_in {
             Some(Application::Terminal) => config::TERMINAL.focus(),
             Some(Application::Editor) => config::EDITOR.focus(),
             None => {}
@@ -129,4 +125,12 @@ impl ProjectPath {
                 .unwrap_or("".into()),
         )
     }
+}
+
+fn parse_application(s: Option<&String>) -> Option<Application> {
+    s.and_then(|v| match v.as_str() {
+        "terminal" => Some(Application::Terminal),
+        "editor" => Some(Application::Editor),
+        _ => None,
+    })
 }

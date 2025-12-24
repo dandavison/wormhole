@@ -1,5 +1,6 @@
 use crate::project::Project;
 use crate::util::execute_command;
+use crate::wormhole::Application;
 use crate::{config, ps};
 use lazy_static::lazy_static;
 use std::collections::VecDeque;
@@ -105,6 +106,7 @@ impl<'a> Projects<'a> {
                 path,
                 aliases: names,
                 kv: std::collections::HashMap::new(),
+                last_application: None,
             });
         }
     }
@@ -129,6 +131,12 @@ impl<'a> Projects<'a> {
                 self.0.push_back(p);
             });
         });
+    }
+
+    pub fn set_last_application(&mut self, name: &str, application: Application) {
+        if let Some(i) = self.index_by_name(name) {
+            self.0[i].last_application = Some(application);
+        }
     }
 
     fn _insert_right(&mut self, p: Project) {

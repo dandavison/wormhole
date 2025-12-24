@@ -2,6 +2,7 @@ use crate::config;
 use crate::editor::Editor;
 use crate::project_path::ProjectPath;
 use crate::util::{expand_user, panic};
+use crate::wormhole::Application;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -12,6 +13,7 @@ pub struct Project {
     #[allow(unused)]
     pub aliases: Vec<String>,
     pub kv: HashMap<String, String>,
+    pub last_application: Option<Application>,
 }
 
 impl Project {
@@ -61,6 +63,7 @@ impl Project {
             path,
             aliases,
             kv: HashMap::new(),
+            last_application: None,
         }
     }
 

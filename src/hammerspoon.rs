@@ -5,7 +5,6 @@ use crate::util::{error, panic, warn};
 use crate::wormhole::Application;
 use crate::{config, ps};
 
-#[allow(dead_code)]
 pub fn current_application() -> Application {
     match str::from_utf8(&hammerspoon(
         r#"

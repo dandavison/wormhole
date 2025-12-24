@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use crate::hammerspoon;
 use crate::project::Project;
 use crate::{project_path::ProjectPath, util::execute_command};
 
@@ -103,6 +104,10 @@ impl Editor {
         );
         println!("cmd: {}", cmd);
         execute_command("bash", ["-c", &cmd], dir.as_path());
+    }
+
+    pub fn focus(&self) {
+        hammerspoon::launch_or_focus(self.application_name())
     }
 }
 

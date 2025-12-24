@@ -48,9 +48,10 @@ impl ProjectPath {
         });
         terminal_thread.join().unwrap();
         editor_thread.join().unwrap();
-        // The editor has focus; take it back if necessary
-        if matches!(land_in, Some(Application::Terminal)) {
-            config::TERMINAL.focus()
+        match land_in {
+            Some(Application::Terminal) => config::TERMINAL.focus(),
+            Some(Application::Editor) => config::EDITOR.focus(),
+            None => {}
         }
         projects.apply(mutation, &self.project.name);
         if util::debug() {

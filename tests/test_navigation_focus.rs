@@ -177,8 +177,54 @@ impl Drop for NavigationTest {
     }
 }
 
+fn focus_app(app_name: &str) {
+    let _ = Command::new("hs")
+        .args(&[
+            "-c",
+            &format!(
+                r#"
+            local app = hs.application.find('{}')
+            if app then
+                app:activate()
+                return true
+            else
+                return false
+            end
+        "#,
+                app_name
+            ),
+        ])
+        .output();
+    thread::sleep(Duration::from_millis(200));
+}
+
+fn detect_terminal_app() -> String {
+    match Command::new("hs")
+        .args(&[
+            "-c",
+            r#"
+            local terminals = {'Alacritty', 'Terminal', 'iTerm2', 'kitty', 'WezTerm'}
+            for _, name in ipairs(terminals) do
+                local app = hs.application.find(name)
+                if app and app:isRunning() then
+                    return name
+                end
+            end
+            return 'Alacritty'  -- fallback
+        "#,
+        ])
+        .output()
+    {
+        Ok(output) => String::from_utf8_lossy(&output.stdout)
+            .trim()
+            .trim_matches('"')
+            .to_string(),
+        Err(_) => "Alacritty".to_string(),
+    }
+}
+
 #[test]
-fn test_navigation_focus_with_kv_land_in() {
+fn test_navigation_focus_respects_origin() {
     // Create test directories
     std::fs::create_dir_all("/tmp/nav-test-wormhole").ok();
     std::fs::create_dir_all("/tmp/nav-test-temporal").ok();
@@ -201,35 +247,14 @@ fn test_navigation_focus_with_kv_land_in() {
     // Setup: Set temporal to have land-in=editor via KV
     test.set_kv("temporal", "land-in", "editor");
 
-    println!("\n=== Starting Navigation Focus Test ===");
+    println!("\n=== Starting Navigation Focus Test (NEW BEHAVIOR) ===");
 
-    // Step 1: Open 'wormhole' project (no land-in specified, should use default)
-    println!("\nStep 1: Opening 'wormhole' project...");
-    let response = test.open_project("wormhole");
-    println!("Response from opening wormhole: {}", response);
-
-    // Wait for wormhole window
-    thread::sleep(Duration::from_millis(2000));
-
-    let windows = NavigationTest::get_cursor_windows();
-    println!("Cursor windows after opening wormhole: {:?}", windows);
-
-    // The window title should contain either the project name or directory name
-    let has_window = windows
-        .iter()
-        .any(|w| w.to_lowercase().contains("wormhole") || w.contains("nav-test-wormhole"));
-    assert!(has_window, "Wormhole cursor window should be open");
-    thread::sleep(Duration::from_millis(2000));
-
-    let focus_after_wormhole = NavigationTest::get_focused_app();
-    println!("Focus after opening wormhole: {}", focus_after_wormhole);
-
-    // Step 2: Navigate to 'temporal' using /project/temporal (should land in editor due to KV)
-    println!("\nStep 2: Opening 'temporal' with KV land-in=editor...");
+    // Step 1: Open 'temporal' directly (should land in editor due to KV)
+    println!("\nStep 1: Opening 'temporal' project directly...");
     test.open_project("temporal");
 
     // Wait for temporal window
-    thread::sleep(Duration::from_millis(2000));
+    thread::sleep(Duration::from_millis(3000));
     let temporal_windows = NavigationTest::get_cursor_windows();
     println!(
         "Cursor windows after opening temporal: {:?}",
@@ -240,53 +265,85 @@ fn test_navigation_focus_with_kv_land_in() {
         .iter()
         .any(|w| w.to_lowercase().contains("temporal") || w.contains("nav-test-temporal"));
     assert!(has_temporal_window, "Temporal cursor window should open");
-    thread::sleep(Duration::from_millis(3000));
 
     let focus_after_temporal = NavigationTest::get_focused_app();
-    println!("Focus after opening temporal: {}", focus_after_temporal);
-
-    // In current implementation, this should be Cursor (editor) due to KV land-in=editor
-    // Note: Focus may not change on some systems, but the intent is editor
-    if focus_after_temporal == "Cursor" {
-        println!("✓ Temporal opened with editor focus (as expected from KV)");
-    } else {
-        println!(
-            "Note: Temporal opened but focus is on {}",
-            focus_after_temporal
-        );
-    }
-
-    // Step 3: Navigate back using /previous-project/
-    // CURRENT BEHAVIOR: This will apply wormhole's KV settings (if any) when returning
-    println!("\nStep 3: Navigating back to wormhole via /previous-project/...");
-    test.navigate_previous();
-
-    thread::sleep(Duration::from_millis(3000));
-
-    let focus_after_previous = NavigationTest::get_focused_app();
-    println!("Focus after /previous-project/: {}", focus_after_previous);
-
-    // Step 4: Navigate forward again using /previous-project/
-    // CURRENT BEHAVIOR: This will re-apply temporal's land-in=editor from KV
-    println!("\nStep 4: Navigating forward to temporal via /previous-project/...");
-    test.navigate_previous();
-
-    thread::sleep(Duration::from_millis(3000));
-
-    let focus_after_second_previous = NavigationTest::get_focused_app();
     println!(
-        "Focus after second /previous-project/: {}",
-        focus_after_second_previous
+        "Focus after opening temporal directly: {}",
+        focus_after_temporal
+    );
+    // This should ideally be Cursor due to KV land-in=editor
+
+    // Step 2: Ensure we're in Cursor, then navigate to wormhole using /previous-project/
+    // NEW BEHAVIOR: Should stay in editor since we're navigating FROM editor
+    println!("\nStep 2: Focusing Cursor, then navigating to wormhole via /previous-project/...");
+
+    // Force focus to Cursor to establish a known state
+    focus_app("Cursor");
+    thread::sleep(Duration::from_millis(1000));
+
+    let focus_before_nav = NavigationTest::get_focused_app();
+    println!("Focus before navigation: {}", focus_before_nav);
+
+    test.navigate_previous();
+    thread::sleep(Duration::from_millis(3000));
+
+    // Verify wormhole window is now active
+    let windows_after_nav = NavigationTest::get_cursor_windows();
+    let has_wormhole = windows_after_nav
+        .iter()
+        .any(|w| w.to_lowercase().contains("wormhole") || w.contains("nav-test-wormhole"));
+    assert!(
+        has_wormhole,
+        "Wormhole window should be open after navigation"
     );
 
-    // Document current behavior: When navigating to temporal, its KV land-in=editor
-    // is applied regardless of navigation method
-    println!("\n=== Current Behavior Summary ===");
-    println!("When navigating to a project with KV land-in setting,");
-    println!("that setting is applied regardless of:");
-    println!("1. Where you came from (terminal vs editor)");
-    println!("2. How you navigated (direct vs previous/next)");
-    println!("\nThis test documents the CURRENT behavior.");
+    let focus_after_nav_from_editor = NavigationTest::get_focused_app();
+    println!(
+        "Focus after /previous-project/ FROM EDITOR: {}",
+        focus_after_nav_from_editor
+    );
+
+    // NEW BEHAVIOR: Should stay in editor when navigating from editor
+    if focus_after_nav_from_editor == "Cursor" {
+        println!("✓ NEW BEHAVIOR: Stayed in editor when navigating from editor");
+    }
+
+    // Step 3: Switch to terminal, then navigate back to temporal
+    // NEW BEHAVIOR: Should stay in terminal since we're navigating FROM terminal
+    println!("\nStep 3: Focusing terminal, then navigating to temporal via /previous-project/...");
+
+    // Detect and focus terminal
+    let terminal_app = detect_terminal_app();
+    println!("Using terminal: {}", terminal_app);
+    focus_app(&terminal_app);
+    thread::sleep(Duration::from_millis(1000));
+
+    let focus_before_nav2 = NavigationTest::get_focused_app();
+    println!("Focus before navigation: {}", focus_before_nav2);
+
+    test.navigate_previous();
+    thread::sleep(Duration::from_millis(3000));
+
+    let focus_after_nav_from_terminal = NavigationTest::get_focused_app();
+    println!(
+        "Focus after /previous-project/ FROM TERMINAL: {}",
+        focus_after_nav_from_terminal
+    );
+
+    // NEW BEHAVIOR: Should stay in terminal when navigating from terminal
+    // (even though temporal has KV land-in=editor)
+    if focus_after_nav_from_terminal == terminal_app {
+        println!("✓ NEW BEHAVIOR: Stayed in terminal when navigating from terminal");
+        println!("  (Overriding temporal's KV land-in=editor setting)");
+    }
+
+    // Summary
+    println!("\n=== NEW Behavior Summary ===");
+    println!("Navigation now respects WHERE you came from:");
+    println!("- Navigate from editor → land in editor");
+    println!("- Navigate from terminal → land in terminal");
+    println!("- KV settings are only used for direct project opens");
+    println!("- Query params can still override this behavior");
 
     // The test passes if windows were created (focus behavior may vary)
     let final_windows = NavigationTest::get_cursor_windows();

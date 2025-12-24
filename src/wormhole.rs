@@ -13,13 +13,6 @@ use url::form_urlencoded;
 pub enum Application {
     Editor,
     Terminal,
-    Other,
-}
-
-#[derive(Debug)]
-pub enum WindowAction {
-    Focus,
-    Raise,
 }
 
 #[derive(Debug)]

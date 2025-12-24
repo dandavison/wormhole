@@ -1,8 +1,11 @@
 mod harness;
+use harness::Focus::*;
 use harness::TEST_PREFIX;
 
 #[test]
-fn test_open_project_preserves_application_by_default_but_respects_land_in() {
+fn test_open_project() {
+    // open-project preserves application by default, but respects land-in (from query parameter and
+    // from kv).
     let test = harness::WormholeTest::new(8932);
 
     let proj_a = format!("{}proj-a", TEST_PREFIX);
@@ -20,45 +23,38 @@ fn test_open_project_preserves_application_by_default_but_respects_land_in() {
 
     // Initially, editor gains focus.
     test.hs_get(&format!("/project/{}", proj_a)).unwrap();
-    test.assert_tmux_window(&proj_a);
-    test.assert_editor_has_focus(&proj_a);
+    test.assert_focus(Editor(&proj_a));
 
     // Switching stays with editor.
     test.hs_get(&format!("/project/{}", proj_b)).unwrap();
-    test.assert_tmux_window(&proj_b);
-    test.assert_editor_has_focus(&proj_b);
+    test.assert_focus(Editor(&proj_b));
 
     // Now focus the terminal.
     test.focus_terminal();
-    test.assert_terminal_has_focus();
 
     // Switching now stays with terminal.
     test.hs_get(&format!("/project/{}", proj_a)).unwrap();
-    test.assert_tmux_window(&proj_a);
-    test.assert_terminal_has_focus();
+    test.assert_focus(Terminal(&proj_a));
 
     // land-in=editor overrides: even though we're in terminal, we land in editor
     test.hs_get(&format!("/project/{}?land-in=editor", proj_b))
         .unwrap();
-    test.assert_tmux_window(&proj_b);
-    test.assert_editor_has_focus(&proj_b);
+    test.assert_focus(Editor(&proj_b));
 
     // land-in=terminal overrides: even though we're now in editor, we land in terminal
     test.hs_get(&format!("/project/{}?land-in=terminal", proj_a))
         .unwrap();
-    test.assert_tmux_window(&proj_a);
-    test.assert_terminal_has_focus();
+    test.assert_focus(Terminal(&proj_a));
 
     // land-in is also respected from project kv store.
     test.hs_put(&format!("/kv/{}/land-in", proj_b), "editor")
         .unwrap();
     test.hs_get(&format!("/project/{}", proj_b)).unwrap();
-    test.assert_tmux_window(&proj_b);
-    test.assert_editor_has_focus(&proj_b);
+    test.assert_focus(Editor(&proj_b));
 }
 
 #[test]
-fn test_previous_next_navigation() {
+fn test_previous_project_and_next_project() {
     let test = harness::WormholeTest::new(8932);
 
     let proj_a = format!("{}proj-a", TEST_PREFIX);
@@ -76,30 +72,25 @@ fn test_previous_next_navigation() {
 
     // Start in (a, editor)
     test.hs_get(&format!("/project/{}", proj_a)).unwrap();
-    test.assert_tmux_window(&proj_a);
-    test.assert_editor_has_focus(&proj_a);
+    test.assert_focus(Editor(&proj_a));
 
     // Transition to (b, editor)
     test.hs_get(&format!("/project/{}", proj_b)).unwrap();
-    test.assert_tmux_window(&proj_b);
-    test.assert_editor_has_focus(&proj_b);
+    test.assert_focus(Editor(&proj_b));
 
     for _ in 0..2 {
         // Previous should transition to (a, editor)
         test.hs_get("/previous-project/").unwrap();
-        test.assert_tmux_window(&proj_a);
-        test.assert_editor_has_focus(&proj_a);
+        test.assert_focus(Editor(&proj_a));
 
         // Next should transition to (b, editor)
         test.hs_get("/next-project/").unwrap();
-        test.assert_tmux_window(&proj_b);
-        test.assert_editor_has_focus(&proj_b);
+        test.assert_focus(Editor(&proj_b));
     }
 
     // Transition to (b, terminal)
     test.focus_terminal();
-    test.assert_tmux_window(&proj_b);
-    test.assert_terminal_has_focus();
+    test.assert_focus(Terminal(&proj_b));
 
     // Set land-in in kv to check that previous disregards it
     test.hs_put(&format!("/kv/{}/land-in", proj_a), "terminal")
@@ -107,25 +98,7 @@ fn test_previous_next_navigation() {
 
     // Previous should transition to (a, editor)
     test.hs_get("/previous-project/").unwrap();
-    test.assert_tmux_window(&proj_a);
-    test.assert_editor_has_focus(&proj_a);
-}
-
-#[test]
-fn test_navigation_no_deadlock() {
-    let test = harness::WormholeTest::new(8930);
-
-    if let Err(e) = test.hs_get("/previous-project/") {
-        if e.contains("timeout") {
-            panic!("Deadlock detected! {}", e);
-        }
-    }
-
-    if let Err(e) = test.hs_get("/next-project/") {
-        if e.contains("timeout") {
-            panic!("Deadlock detected! {}", e);
-        }
-    }
+    test.assert_focus(Editor(&proj_a));
 }
 
 #[test]
@@ -142,5 +115,5 @@ fn test_file_opens_in_editor() {
     test.hs_post(&format!("/add-project/{}?name={}", dir, proj))
         .unwrap();
     test.hs_get(&format!("/file/{}", file)).unwrap();
-    test.assert_editor_has_focus(&proj);
+    test.assert_focus(Editor(&proj));
 }

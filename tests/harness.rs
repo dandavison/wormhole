@@ -6,6 +6,11 @@ use std::time::{Duration, Instant};
 
 pub const TEST_PREFIX: &str = "wh-test-";
 
+pub enum Focus<'a> {
+    Editor(&'a str),
+    Terminal(&'a str),
+}
+
 pub struct WormholeTest {
     port: u16,
     tmux_socket: String,
@@ -129,29 +134,36 @@ impl WormholeTest {
     }
 
     #[track_caller]
-    pub fn assert_editor_has_focus(&self, expected_window: &str) {
-        let expected = expected_window.to_string();
-        assert!(
-            self.wait_until(|| self.focused_window_contains(&expected), 5),
-            "Expected Cursor window containing '{}' to have focus, got '{}'",
-            expected_window,
-            self.get_focused_window_title()
-        );
+    pub fn assert_focus(&self, focus: Focus) {
+        let project = match focus {
+            Focus::Editor(p) => p,
+            Focus::Terminal(p) => p,
+        };
+        self.assert_tmux_window(project);
+        match focus {
+            Focus::Editor(expected_window) => {
+                let expected = expected_window.to_string();
+                assert!(
+                    self.wait_until(|| self.focused_window_contains(&expected), 5),
+                    "Expected Cursor window containing '{}' to have focus, got '{}'",
+                    expected_window,
+                    self.get_focused_window_title()
+                );
+            }
+            Focus::Terminal(_) => {
+                assert!(
+                    self.wait_for_app_focus("Alacritty", 5),
+                    "Expected Alacritty to have focus, but {} has focus",
+                    self.get_focused_app()
+                );
+            }
+        }
     }
 
     pub fn focus_terminal(&self) {
         let lua = r#"hs.application.launchOrFocus("/Applications/Alacritty.app")"#;
         self.run_hs(lua).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(100));
-    }
-
-    #[track_caller]
-    pub fn assert_terminal_has_focus(&self) {
-        assert!(
-            self.wait_for_app_focus("Alacritty", 5),
-            "Expected Alacritty to have focus, but {} has focus",
-            self.get_focused_app()
-        );
     }
 
     pub fn get_tmux_window_name(&self) -> String {

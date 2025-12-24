@@ -2,7 +2,7 @@ use core::panic;
 use serde_json;
 use std::process::Command;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 pub struct WormholeTest {
     port: u16,
@@ -125,6 +125,35 @@ impl WormholeTest {
             self.port, path
         );
         self.run_hs(&lua)
+    }
+
+    pub fn get_focused_app(&self) -> String {
+        let lua = r#"
+            local focusedWindow = hs.window.focusedWindow()
+            if focusedWindow then
+                return focusedWindow:application():title()
+            else
+                return ""
+            end
+        "#;
+        self.run_hs(lua).unwrap_or_else(|_| String::new())
+    }
+
+    #[allow(dead_code)]
+    pub fn wait_until<F>(&self, mut predicate: F, timeout_secs: u64) -> bool
+    where
+        F: FnMut() -> bool,
+    {
+        let timeout = Duration::from_secs(timeout_secs);
+        let start = Instant::now();
+
+        while start.elapsed() < timeout {
+            if predicate() {
+                return true;
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
+        false
     }
 
     fn run_hs(&self, lua: &str) -> Result<String, String> {

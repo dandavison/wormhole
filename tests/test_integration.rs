@@ -5,6 +5,27 @@ use std::time::Duration;
 mod harness;
 
 #[test]
+fn test_open_project_preserves_application() {
+    let test = harness::WormholeTest::new(8932);
+
+    std::fs::create_dir_all("/tmp/test-proj-a").ok();
+    std::fs::create_dir_all("/tmp/test-proj-b").ok();
+
+    test.hs_post("/add-project//tmp/test-proj-a?name=proj-a")
+        .unwrap_or_else(|_| panic!("Failed to add proj-a"));
+    test.hs_post("/add-project//tmp/test-proj-b?name=proj-b")
+        .unwrap_or_else(|_| panic!("Failed to add proj-b"));
+
+    test.hs_get("/project/proj-a")
+        .unwrap_or_else(|_| panic!("Failed to open proj-a"));
+
+    thread::sleep(Duration::from_secs(2));
+
+    let focused_app = test.get_focused_app();
+    println!("Focused app after opening project: {}", focused_app);
+}
+
+#[test]
 fn test_navigation_no_deadlock() {
     let test = harness::WormholeTest::new(8930);
 

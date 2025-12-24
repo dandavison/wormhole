@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use crate::project::Project;
-use crate::{project_path::ProjectPath, util::execute_command, wormhole::WindowAction};
+use crate::{project_path::ProjectPath, util::execute_command};
 
 #[allow(dead_code)]
 #[derive(Debug, PartialEq)]
@@ -134,7 +134,7 @@ pub fn open_workspace(project: &Project) {
     }
 }
 
-pub fn open_path(path: &ProjectPath, window_action: WindowAction) -> Result<(), String> {
+pub fn open_path(path: &ProjectPath) -> Result<(), String> {
     /*
        - We do two calls: one to open the workspace (i.e. analogous to `code .`)
          and one to open the path.
@@ -148,7 +148,7 @@ pub fn open_path(path: &ProjectPath, window_action: WindowAction) -> Result<(), 
 
        - `open --new` with a URI doesn't actually open anything
     */
-    ps!("Editor::open_path(path={path:?}, window_action={window_action:?})");
+    ps!("Editor::open_path(path={path:?}");
     let line = path
         .relative_path
         .as_ref()

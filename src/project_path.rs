@@ -7,7 +7,7 @@ use crate::hammerspoon::current_application;
 use crate::projects::{self, Mutation, Projects};
 use crate::ps;
 use crate::util::warn;
-use crate::wormhole::{Application, WindowAction};
+use crate::wormhole::Application;
 use crate::{config, editor, project::Project};
 
 #[derive(Clone, Debug)]
@@ -40,16 +40,8 @@ impl ProjectPath {
             return;
         }
         let project_path = self.clone();
-        let editor_window_action = match &land_in {
-            Some(Application::Editor) => WindowAction::Raise,
-            Some(Application::Terminal) => WindowAction::Focus,
-            _ => match current_application() {
-                Application::Editor => WindowAction::Raise,
-                _ => WindowAction::Focus,
-            },
-        };
         let editor_thread = thread::spawn(move || {
-            editor::open_path(&project_path, editor_window_action).unwrap_or_else(|err| {
+            editor::open_path(&project_path).unwrap_or_else(|err| {
                 warn(&format!(
                     "Error opening {:?} in editor: {}",
                     project_path.relative_path, err
@@ -58,6 +50,7 @@ impl ProjectPath {
         });
         terminal_thread.join().unwrap();
         editor_thread.join().unwrap();
+        // The editor has focus; take it back if necessary
         if matches!(land_in, Some(Application::Terminal)) {
             config::TERMINAL.focus()
         }

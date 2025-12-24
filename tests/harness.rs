@@ -165,6 +165,14 @@ impl WormholeTest {
         )
     }
 
+    pub fn assert_editor_has_focus(&self) {
+        assert!(
+            self.wait_for_app_focus("Cursor", 5),
+            "Expected Cursor to have focus, but {} has focus",
+            self.get_focused_app()
+        );
+    }
+
     fn run_hs(&self, lua: &str) -> Result<String, String> {
         let output = Command::new("hs")
             .args(&["-c", lua])

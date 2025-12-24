@@ -12,25 +12,15 @@ fn test_open_project_preserves_application() {
     std::fs::create_dir_all("/tmp/test-proj-b").ok();
 
     test.hs_post("/add-project//tmp/test-proj-a?name=proj-a")
-        .unwrap_or_else(|_| panic!("Failed to add proj-a"));
+        .unwrap();
     test.hs_post("/add-project//tmp/test-proj-b?name=proj-b")
-        .unwrap_or_else(|_| panic!("Failed to add proj-b"));
+        .unwrap();
 
-    test.hs_get("/project/proj-a")
-        .unwrap_or_else(|_| panic!("Failed to open proj-a"));
+    test.hs_get("/project/proj-a").unwrap();
+    test.assert_editor_has_focus();
 
-    assert!(
-        test.wait_for_app_focus("Cursor", 5),
-        "Expected Cursor to have focus after opening proj-a"
-    );
-
-    test.hs_get("/project/proj-b")
-        .unwrap_or_else(|_| panic!("Failed to open proj-b"));
-
-    assert!(
-        test.wait_for_app_focus("Cursor", 5),
-        "Expected Cursor to have focus after switching to proj-b"
-    );
+    test.hs_get("/project/proj-b").unwrap();
+    test.assert_editor_has_focus();
 }
 
 #[test]

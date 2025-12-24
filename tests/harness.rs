@@ -46,7 +46,7 @@ impl WormholeTest {
 
     pub fn hs_get(&self, path: &str) -> Result<String, String> {
         let lua = format!(
-            r#"local s, b = require("hs.http").get("http://127.0.0.1:{}{}"); if s == 200 then return b else error("HTTP " .. s) end"#,
+            r#"local s, b = hs.http.get("http://127.0.0.1:{}{}", nil); if s == 200 then return b else error("HTTP " .. s) end"#,
             self.port, path
         );
         self.run_hs(&lua)
@@ -66,6 +66,19 @@ impl WormholeTest {
         self.run_hs(lua).unwrap_or_default()
     }
 
+    #[allow(dead_code)]
+    pub fn get_focused_window_title(&self) -> String {
+        let lua =
+            r#"local w = hs.window.focusedWindow(); if w then return w:title() else return "" end"#;
+        self.run_hs(lua).unwrap_or_default()
+    }
+
+    #[allow(dead_code)]
+    pub fn focused_window_contains(&self, name: &str) -> bool {
+        self.get_focused_window_title().contains(name)
+    }
+
+    #[allow(dead_code)]
     pub fn window_exists(&self, name: &str) -> bool {
         let lua_pattern = name.replace("-", "%-");
         let lua = format!(
@@ -99,6 +112,7 @@ impl WormholeTest {
         false
     }
 
+    #[allow(dead_code)]
     pub fn wait_for_window_containing(&self, name: &str, timeout_secs: u64) -> bool {
         let name = name.to_string();
         self.wait_until(|| self.window_exists(&name), timeout_secs)
@@ -110,10 +124,28 @@ impl WormholeTest {
     }
 
     #[allow(dead_code)]
-    pub fn assert_editor_has_focus(&self) {
+    pub fn assert_editor_has_focus(&self, expected_window: &str) {
+        let expected = expected_window.to_string();
         assert!(
-            self.wait_for_app_focus("Cursor", 5),
-            "Expected Cursor to have focus, but {} has focus",
+            self.wait_until(|| self.focused_window_contains(&expected), 5),
+            "Expected Cursor window containing '{}' to have focus, got '{}'",
+            expected_window,
+            self.get_focused_window_title()
+        );
+    }
+
+    #[allow(dead_code)]
+    pub fn focus_terminal(&self) {
+        let lua = r#"local app = hs.application.find('Alacritty'); if app then app:activate() end"#;
+        self.run_hs(lua).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+
+    #[allow(dead_code)]
+    pub fn assert_terminal_has_focus(&self) {
+        assert!(
+            self.wait_for_app_focus("Alacritty", 5),
+            "Expected Alacritty to have focus, but {} has focus",
             self.get_focused_app()
         );
     }

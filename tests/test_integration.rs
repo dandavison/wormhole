@@ -2,7 +2,7 @@ mod harness;
 use harness::TEST_PREFIX;
 
 #[test]
-fn test_open_project_preserves_application() {
+fn test_open_project_preserves_application_by_default_but_respects_land_in() {
     let test = harness::WormholeTest::new(8932);
 
     let proj_a = format!("{}proj-a", TEST_PREFIX);
@@ -18,13 +18,24 @@ fn test_open_project_preserves_application() {
     test.hs_post(&format!("/add-project/{}?name={}", dir_b, proj_b))
         .unwrap();
 
+    // Initially, editor gains focus.
     test.hs_get(&format!("/project/{}", proj_a)).unwrap();
-    test.wait_for_window_containing(&proj_a, 5);
-    test.assert_editor_has_focus();
+    test.assert_tmux_window(&proj_a);
+    test.assert_editor_has_focus(&proj_a);
 
+    // Switching stays with editor.
     test.hs_get(&format!("/project/{}", proj_b)).unwrap();
-    test.wait_for_window_containing(&proj_b, 5);
-    test.assert_editor_has_focus();
+    test.assert_tmux_window(&proj_b);
+    test.assert_editor_has_focus(&proj_b);
+
+    // Now focus the terminal.
+    test.focus_terminal();
+    test.assert_terminal_has_focus();
+
+    // Switching now stays with terminal.
+    test.hs_get(&format!("/project/{}", proj_a)).unwrap();
+    test.assert_tmux_window(&proj_a);
+    test.assert_terminal_has_focus();
 
     test.close_cursor_window(&proj_a);
     test.close_cursor_window(&proj_b);
@@ -61,7 +72,7 @@ fn test_file_opens_in_editor() {
     test.hs_post(&format!("/add-project/{}?name={}", dir, proj))
         .unwrap();
     test.hs_get(&format!("/file/{}", file)).unwrap();
-    test.wait_for_window_containing(&proj, 5);
+    test.assert_editor_has_focus(&proj);
 
     test.close_cursor_window(&proj);
 }

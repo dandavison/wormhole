@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::process::Command;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -54,31 +56,27 @@ impl WormholeTest {
 
     pub fn hs_post(&self, path: &str) -> Result<String, String> {
         let lua = format!(
-            r#"local s, b = require("hs.http").post("http://127.0.0.1:{}{}", "", nil); if s == 200 then return b else error("HTTP " .. s) end"#,
+            r#"local s, b = hs.http.post("http://127.0.0.1:{}{}", "", nil); if s == 200 then return b else error("HTTP " .. s) end"#,
             self.port, path
         );
         self.run_hs(&lua)
     }
 
-    #[allow(dead_code)]
     pub fn get_focused_app(&self) -> String {
         let lua = r#"local w = hs.window.focusedWindow(); if w then return w:application():title() else return "" end"#;
         self.run_hs(lua).unwrap_or_default()
     }
 
-    #[allow(dead_code)]
     pub fn get_focused_window_title(&self) -> String {
         let lua =
             r#"local w = hs.window.focusedWindow(); if w then return w:title() else return "" end"#;
         self.run_hs(lua).unwrap_or_default()
     }
 
-    #[allow(dead_code)]
     pub fn focused_window_contains(&self, name: &str) -> bool {
         self.get_focused_window_title().contains(name)
     }
 
-    #[allow(dead_code)]
     pub fn window_exists(&self, name: &str) -> bool {
         let lua_pattern = name.replace("-", "%-");
         let lua = format!(
@@ -112,18 +110,16 @@ impl WormholeTest {
         false
     }
 
-    #[allow(dead_code)]
     pub fn wait_for_window_containing(&self, name: &str, timeout_secs: u64) -> bool {
         let name = name.to_string();
         self.wait_until(|| self.window_exists(&name), timeout_secs)
     }
 
-    #[allow(dead_code)]
     pub fn wait_for_app_focus(&self, expected_app: &str, timeout_secs: u64) -> bool {
         self.wait_until(|| self.get_focused_app() == expected_app, timeout_secs)
     }
 
-    #[allow(dead_code)]
+    #[track_caller]
     pub fn assert_editor_has_focus(&self, expected_window: &str) {
         let expected = expected_window.to_string();
         assert!(
@@ -134,19 +130,37 @@ impl WormholeTest {
         );
     }
 
-    #[allow(dead_code)]
     pub fn focus_terminal(&self) {
-        let lua = r#"local app = hs.application.find('Alacritty'); if app then app:activate() end"#;
+        let lua = r#"hs.application.launchOrFocus("/Applications/Alacritty.app")"#;
         self.run_hs(lua).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
 
-    #[allow(dead_code)]
+    #[track_caller]
     pub fn assert_terminal_has_focus(&self) {
         assert!(
             self.wait_for_app_focus("Alacritty", 5),
             "Expected Alacritty to have focus, but {} has focus",
             self.get_focused_app()
+        );
+    }
+
+    pub fn get_tmux_window_name(&self) -> String {
+        let output = Command::new("tmux")
+            .args(["-L", &self.tmux_socket, "display-message", "-p", "#W"])
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
+    }
+
+    #[track_caller]
+    pub fn assert_tmux_window(&self, expected: &str) {
+        let expected = expected.to_string();
+        assert!(
+            self.wait_until(|| self.get_tmux_window_name().contains(&expected), 5),
+            "Expected tmux window containing '{}', got '{}'",
+            expected,
+            self.get_tmux_window_name()
         );
     }
 

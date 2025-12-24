@@ -61,6 +61,7 @@ impl WormholeTest {
         self.run_hs(&lua)
     }
 
+    #[allow(dead_code)]
     pub fn get_focused_app(&self) -> String {
         let lua = r#"local w = hs.window.focusedWindow(); if w then return w:application():title() else return "" end"#;
         self.run_hs(lua).unwrap_or_default()
@@ -99,15 +100,18 @@ impl WormholeTest {
         false
     }
 
+    #[allow(dead_code)]
     pub fn wait_for_window_containing(&self, name: &str, timeout_secs: u64) -> bool {
         let name = name.to_string();
         self.wait_until(|| self.window_exists(&name), timeout_secs)
     }
 
+    #[allow(dead_code)]
     pub fn wait_for_app_focus(&self, expected_app: &str, timeout_secs: u64) -> bool {
         self.wait_until(|| self.get_focused_app() == expected_app, timeout_secs)
     }
 
+    #[allow(dead_code)]
     pub fn assert_editor_has_focus(&self) {
         assert!(
             self.wait_for_app_focus("Cursor", 5),

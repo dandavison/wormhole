@@ -2,10 +2,10 @@ use std::convert::Infallible;
 use std::thread;
 
 use crate::endpoints;
+use crate::log_request;
 use crate::project_path::ProjectPath;
 use crate::projects;
 use crate::projects::Mutation;
-use crate::ps;
 use hyper::{header, Body, Method, Request, Response, StatusCode};
 use url::form_urlencoded;
 
@@ -38,7 +38,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
     }
     let params = QueryParams::from_query(uri.query());
     if &path != "/list-projects/" {
-        ps!("\nRequest: {} {} {:?}", method, uri, params);
+        log_request!("\nRequest: {} {} {:?}", method, uri, params);
     }
     if &path == "/list-projects/" {
         Ok(endpoints::list_projects())
@@ -102,7 +102,6 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
                 "https://github.com{path}#L{}?wormhole=false",
                 params.line.unwrap_or(1)
             );
-            ps!("Redirecting to: {}", redirect_to);
             let response = Response::builder()
                 .status(StatusCode::FOUND)
                 .header(header::LOCATION, redirect_to)
@@ -130,16 +129,16 @@ fn determine_requested_operation(
         Some((p, Mutation::Insert, land_in))
     } else if let Some(absolute_path) = url_path.strip_prefix("/file/") {
         let p = ProjectPath::from_absolute_path(absolute_path, &projects);
+        // Default to editor for file requests (unless overridden by request param)
+        let land_in = land_in.or(Some(Application::Editor));
         Some((p, Mutation::Insert, land_in))
     } else if let Some(project_path) = ProjectPath::from_github_url(&url_path, line, &projects) {
         if url_path.ends_with(".md") {
             None
         } else {
-            Some((
-                Some(project_path),
-                Mutation::Insert,
-                Some(Application::Editor),
-            ))
+            // Default to editor for file requests (unless overridden by request param)
+            let land_in = land_in.or(Some(Application::Editor));
+            Some((Some(project_path), Mutation::Insert, land_in))
         }
     } else {
         None

@@ -3,6 +3,15 @@ use std::env::current_dir;
 #[macro_export]
 macro_rules! ps {
     ($($arg:tt)*) => {
+        if $crate::util::debug() {
+            $crate::print_hyperlinked!($($arg)*)
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! log_request {
+    ($($arg:tt)*) => {
         $crate::print_hyperlinked!($($arg)*)
     };
 }

@@ -16,7 +16,7 @@ pub struct Project {
 
 impl Project {
     pub fn is_open(&self) -> bool {
-        config::TERMINAL.exists(self)
+        config::terminal().exists(self)
     }
 
     pub fn as_project_path(&self) -> ProjectPath {
@@ -74,7 +74,7 @@ impl Project {
         } else if self.name == "mathematics" {
             Editor::Emacs
         } else {
-            config::EDITOR
+            *config::editor()
         }
     }
 }

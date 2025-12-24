@@ -83,7 +83,7 @@ impl<'a> Projects<'a> {
     }
 
     pub fn open(&self) -> Vec<Project> {
-        let terminal_windows = config::TERMINAL.window_names();
+        let terminal_windows = config::terminal().window_names();
         self.0
             .iter()
             .filter(|p| terminal_windows.contains(&p.name))
@@ -175,8 +175,10 @@ impl<'a> Projects<'a> {
 
         thread::spawn(move || {
             thread::sleep(Duration::from_secs(2));
-            println!("{}", execute_command("vscode-summary", [], "/tmp"));
-            println!("");
+            if crate::util::debug() {
+                println!("{}", execute_command("vscode-summary", [], "/tmp"));
+                println!("");
+            }
             ps!("..., {}, {}*, {}, ... ({})", previous, current, next, len,);
         });
     }
@@ -185,7 +187,7 @@ impl<'a> Projects<'a> {
 pub fn load() {
     let mut projects = lock();
     projects.0.extend(
-        config::TERMINAL
+        config::terminal()
             .project_directories()
             .iter()
             .map(|p| Project::parse(p)),

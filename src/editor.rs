@@ -4,7 +4,7 @@ use crate::project::Project;
 use crate::{project_path::ProjectPath, util::execute_command, wormhole::WindowAction};
 
 #[allow(dead_code)]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Editor {
     Cursor,
     Emacs,
@@ -13,8 +13,9 @@ pub enum Editor {
     PyCharmCE,
     VSCode,
     VSCodeInsiders,
+    #[cfg(test)]
+    TestEditor,
 }
-use crate::ps;
 use Editor::*;
 
 /*
@@ -47,6 +48,8 @@ impl Editor {
             PyCharm => "PyCharm",
             PyCharmCE => "PyCharm",
             IntelliJ => "IntelliJ",
+            #[cfg(test)]
+            TestEditor => "TestEditor",
         }
     }
 
@@ -59,6 +62,8 @@ impl Editor {
             PyCharm => "pycharm",
             PyCharmCE => "pycharm",
             IntelliJ => "idea",
+            #[cfg(test)]
+            TestEditor => "test-editor",
         }
     }
 
@@ -72,6 +77,8 @@ impl Editor {
             PyCharmCE => format!("pycharm://open?file={path}"),
             VSCode => format!("vscode://file/{path}"),
             VSCodeInsiders => format!("vscode-insiders://file/{path}"),
+            #[cfg(test)]
+            TestEditor => format!("test-editor://dir/{path}"),
         }
     }
 
@@ -86,7 +93,13 @@ impl Editor {
             PyCharmCE => format!("pycharm://open?file={path}&line={line}"),
             VSCode => format!("vscode://file/{path}:{line}"),
             VSCodeInsiders => format!("vscode-insiders://file/{path}:{line}"),
+            #[cfg(test)]
+            TestEditor => format!("test-editor://file/{path}:{line}"),
         }
+    }
+
+    pub fn focus(&self) {
+        crate::hammerspoon::launch_or_focus(self.application_name())
     }
 
     pub fn close(&self, project: &Project) {
@@ -101,13 +114,14 @@ impl Editor {
             dir.to_string_lossy(),
             self.application_name()
         );
-        println!("cmd: {}", cmd);
+        if crate::util::debug() {
+            println!("cmd: {}", cmd);
+        }
         execute_command("bash", ["-c", &cmd], dir.as_path());
     }
 }
 
 pub fn open_workspace(project: &Project) {
-    ps!("open_workspace({project:?})");
     let editor = project.editor();
     let project_dir = project.root().absolute_path();
     match editor {
@@ -120,6 +134,15 @@ pub fn open_workspace(project: &Project) {
         }
         Emacs => {
             execute_command("emacsclient", ["-n", "."], project_dir);
+        }
+        #[cfg(test)]
+        TestEditor => {
+            // For tests, just execute a test-editor command that will be captured
+            execute_command(
+                "test-editor",
+                ["open-workspace", project_dir.to_str().unwrap()],
+                &project_dir,
+            );
         }
         _ => {
             execute_command(
@@ -134,7 +157,7 @@ pub fn open_workspace(project: &Project) {
     }
 }
 
-pub fn open_path(path: &ProjectPath, window_action: WindowAction) -> Result<(), String> {
+pub fn open_path(path: &ProjectPath, _window_action: WindowAction) -> Result<(), String> {
     /*
        - We do two calls: one to open the workspace (i.e. analogous to `code .`)
          and one to open the path.
@@ -148,7 +171,6 @@ pub fn open_path(path: &ProjectPath, window_action: WindowAction) -> Result<(), 
 
        - `open --new` with a URI doesn't actually open anything
     */
-    ps!("Editor::open_path(path={path:?}, window_action={window_action:?})");
     let line = path
         .relative_path
         .as_ref()

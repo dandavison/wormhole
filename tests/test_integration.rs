@@ -55,9 +55,6 @@ fn test_open_project_preserves_application_by_default_but_respects_land_in() {
     test.hs_get(&format!("/project/{}", proj_b)).unwrap();
     test.assert_tmux_window(&proj_b);
     test.assert_editor_has_focus(&proj_b);
-
-    test.close_cursor_window(&proj_a);
-    test.close_cursor_window(&proj_b);
 }
 
 #[test]
@@ -92,6 +89,4 @@ fn test_file_opens_in_editor() {
         .unwrap();
     test.hs_get(&format!("/file/{}", file)).unwrap();
     test.assert_editor_has_focus(&proj);
-
-    test.close_cursor_window(&proj);
 }

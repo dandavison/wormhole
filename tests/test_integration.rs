@@ -49,6 +49,13 @@ fn test_open_project_preserves_application_by_default_but_respects_land_in() {
     test.assert_tmux_window(&proj_a);
     test.assert_terminal_has_focus();
 
+    // land-in is also respected from project kv store.
+    test.hs_put(&format!("/kv/{}/land-in", proj_b), "editor")
+        .unwrap();
+    test.hs_get(&format!("/project/{}", proj_b)).unwrap();
+    test.assert_tmux_window(&proj_b);
+    test.assert_editor_has_focus(&proj_b);
+
     test.close_cursor_window(&proj_a);
     test.close_cursor_window(&proj_b);
 }

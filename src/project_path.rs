@@ -1,14 +1,12 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::thread;
 
-use regex::Regex;
-
-use crate::hammerspoon::current_application;
 use crate::projects::{self, Mutation, Projects};
 use crate::ps;
 use crate::util::warn;
 use crate::wormhole::Application;
 use crate::{config, editor, project::Project};
+use regex::Regex;
 
 #[derive(Clone, Debug)]
 pub struct ProjectPath {

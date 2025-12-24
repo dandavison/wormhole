@@ -5,6 +5,7 @@ use crate::util::{error, panic, warn};
 use crate::wormhole::Application;
 use crate::{config, ps};
 
+#[allow(dead_code)]
 pub fn current_application() -> Application {
     match str::from_utf8(&hammerspoon(
         r#"
@@ -19,15 +20,13 @@ pub fn current_application() -> Application {
         Ok(app_title) => {
             if app_title == config::TERMINAL.application_name() {
                 Application::Terminal
-            } else if app_title == config::EDITOR.application_name() {
-                Application::Editor
             } else {
-                Application::Other
+                Application::Editor
             }
         }
         Err(err) => {
             warn(&format!("current_application() ERROR: {err}"));
-            Application::Other
+            Application::Editor
         }
     }
 }

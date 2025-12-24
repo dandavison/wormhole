@@ -102,23 +102,6 @@ fn test_previous_project_and_next_project() {
 }
 
 #[test]
-fn test_file_opens_in_editor() {
-    let test = harness::WormholeTest::new(8931);
-
-    let proj = format!("{}file-proj", TEST_PREFIX);
-    let dir = format!("/tmp/{}", proj);
-    let file = format!("{}/test.rs", dir);
-
-    std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(&file, "fn main() {}").unwrap();
-
-    test.hs_post(&format!("/add-project/{}?name={}", dir, proj))
-        .unwrap();
-    test.hs_get(&format!("/file/{}", file)).unwrap();
-    test.assert_focus(Editor(&proj));
-}
-
-#[test]
 fn test_close_project() {
     let test = harness::WormholeTest::new(8933);
 
@@ -139,4 +122,42 @@ fn test_close_project() {
         test.wait_until(|| !test.window_exists(&proj), 5),
         "Editor window should be closed"
     );
+}
+
+#[test]
+fn test_open_github_url() {
+    let test = harness::WormholeTest::new(8934);
+
+    let proj = format!("{}github-proj", TEST_PREFIX);
+    let dir = format!("/tmp/{}", proj);
+    let file = format!("{}/src/main.rs", dir);
+
+    std::fs::create_dir_all(format!("{}/src", dir)).unwrap();
+    std::fs::write(&file, "fn main() {}").unwrap();
+
+    test.hs_post(&format!("/add-project/{}?name={}", dir, proj))
+        .unwrap();
+
+    // GitHub URL format: /<owner>/<repo>/blob/<branch>/<path>
+    // The repo name should match the project name
+    test.hs_get(&format!("/owner/{}/blob/main/src/main.rs", proj))
+        .unwrap();
+    test.assert_focus(Editor(&proj));
+}
+
+#[test]
+fn test_open_file() {
+    let test = harness::WormholeTest::new(8931);
+
+    let proj = format!("{}file-proj", TEST_PREFIX);
+    let dir = format!("/tmp/{}", proj);
+    let file = format!("{}/test.rs", dir);
+
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(&file, "fn main() {}").unwrap();
+
+    test.hs_post(&format!("/add-project/{}?name={}", dir, proj))
+        .unwrap();
+    test.hs_get(&format!("/file/{}", file)).unwrap();
+    test.assert_focus(Editor(&proj));
 }

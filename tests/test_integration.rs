@@ -100,6 +100,15 @@ fn test_previous_next_navigation() {
     test.focus_terminal();
     test.assert_tmux_window(&proj_b);
     test.assert_terminal_has_focus();
+
+    // Set land-in in kv to check that previous disregards it
+    test.hs_put(&format!("/kv/{}/land-in", proj_a), "terminal")
+        .unwrap();
+
+    // Previous should transition to (a, editor)
+    test.hs_get("/previous-project/").unwrap();
+    test.assert_tmux_window(&proj_a);
+    test.assert_editor_has_focus(&proj_a);
 }
 
 #[test]

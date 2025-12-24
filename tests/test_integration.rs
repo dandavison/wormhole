@@ -117,3 +117,26 @@ fn test_file_opens_in_editor() {
     test.hs_get(&format!("/file/{}", file)).unwrap();
     test.assert_focus(Editor(&proj));
 }
+
+#[test]
+fn test_close_project() {
+    let test = harness::WormholeTest::new(8933);
+
+    let proj = format!("{}close-proj", TEST_PREFIX);
+    let dir = format!("/tmp/{}", proj);
+
+    std::fs::create_dir_all(&dir).unwrap();
+
+    test.hs_post(&format!("/add-project/{}?name={}", dir, proj))
+        .unwrap();
+
+    test.hs_get(&format!("/project/{}", proj)).unwrap();
+    test.assert_focus(Editor(&proj));
+
+    test.hs_post(&format!("/close-project/{}", proj)).unwrap();
+
+    assert!(
+        test.wait_until(|| !test.window_exists(&proj), 5),
+        "Editor window should be closed"
+    );
+}

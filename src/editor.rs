@@ -91,19 +91,7 @@ impl Editor {
     }
 
     pub fn close(&self, project: &Project) {
-        let dir = project.root().absolute_path();
-        let cmd = format!(
-            r#"
-            lsof +D "{}" | rg "{}" | awk '{{print $2}}' | while read pid; do
-                echo "killing $pid"
-                kill -9 "$pid"
-            done
-            "#,
-            dir.to_string_lossy(),
-            self.application_name()
-        );
-        println!("cmd: {}", cmd);
-        execute_command("bash", ["-c", &cmd], dir.as_path());
+        hammerspoon::close_window(self.application_name(), &project.name);
     }
 
     pub fn focus(&self) {

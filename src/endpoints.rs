@@ -86,13 +86,11 @@ pub fn open_project(name_or_path: &str) -> Response<Body> {
     }
 }
 
-pub fn close_project(name: &str) -> Response<Body> {
-    // TODO: close editor workspace
+pub fn close_project(name: &str) {
     let projects = projects::lock();
     projects.by_name(name).map(|p| {
         config::TERMINAL.close(&p);
         config::EDITOR.close(&p);
     });
     projects.print();
-    Response::new(Body::from(format!("closed project: {}", name)))
 }

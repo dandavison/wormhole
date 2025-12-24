@@ -67,7 +67,9 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
                 ))
                 .unwrap());
         }
-        Ok(endpoints::close_project(&name.trim()))
+        let name = name.trim().to_string();
+        thread::spawn(move || endpoints::close_project(&name));
+        Ok(Response::new(Body::from("")))
     } else if path == "/kv" {
         Ok(crate::kv::get_all_kv())
     } else if let Some(kv_path) = path.strip_prefix("/kv/") {

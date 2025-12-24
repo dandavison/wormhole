@@ -1,8 +1,10 @@
 serve: build
 	./target/release/wormhole
 
-serve-tmux: build
-	TMUX=$$TMUX ./target/release/wormhole
-
 build:
 	cargo build --release
+
+test:
+	cargo test --test test_integration -- --test-threads=1 --nocapture
+
+.PHONY: test serve serve-tmux build

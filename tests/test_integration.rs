@@ -19,10 +19,18 @@ fn test_open_project_preserves_application() {
     test.hs_get("/project/proj-a")
         .unwrap_or_else(|_| panic!("Failed to open proj-a"));
 
-    thread::sleep(Duration::from_secs(2));
+    assert!(
+        test.wait_for_app_focus("Cursor", 5),
+        "Expected Cursor to have focus after opening proj-a"
+    );
 
-    let focused_app = test.get_focused_app();
-    println!("Focused app after opening project: {}", focused_app);
+    test.hs_get("/project/proj-b")
+        .unwrap_or_else(|_| panic!("Failed to open proj-b"));
+
+    assert!(
+        test.wait_for_app_focus("Cursor", 5),
+        "Expected Cursor to have focus after switching to proj-b"
+    );
 }
 
 #[test]

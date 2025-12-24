@@ -139,7 +139,6 @@ impl WormholeTest {
         self.run_hs(lua).unwrap_or_else(|_| String::new())
     }
 
-    #[allow(dead_code)]
     pub fn wait_until<F>(&self, mut predicate: F, timeout_secs: u64) -> bool
     where
         F: FnMut() -> bool,
@@ -154,6 +153,16 @@ impl WormholeTest {
             thread::sleep(Duration::from_millis(100));
         }
         false
+    }
+
+    pub fn wait_for_app_focus(&self, expected_app: &str, timeout_secs: u64) -> bool {
+        self.wait_until(
+            || {
+                let app = self.get_focused_app();
+                app == expected_app
+            },
+            timeout_secs,
+        )
     }
 
     fn run_hs(&self, lua: &str) -> Result<String, String> {

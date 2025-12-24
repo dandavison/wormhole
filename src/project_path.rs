@@ -2,10 +2,10 @@ use std::path::PathBuf;
 use std::thread;
 
 use crate::projects::{self, Mutation, Projects};
-use crate::ps;
 use crate::util::warn;
 use crate::wormhole::Application;
 use crate::{config, editor, project::Project};
+use crate::{ps, util};
 use regex::Regex;
 
 #[derive(Clone, Debug)]
@@ -53,7 +53,9 @@ impl ProjectPath {
             config::TERMINAL.focus()
         }
         projects.apply(mutation, &self.project.name);
-        projects.print();
+        if util::debug() {
+            projects.print();
+        }
     }
 
     pub fn from_absolute_path(path: &str, projects: &Projects) -> Option<Self> {

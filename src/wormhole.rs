@@ -31,7 +31,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
     }
     let params = QueryParams::from_query(uri.query());
     if &path != "/list-projects/" {
-        ps!("\nRequest: {} {} {:?}", method, uri, params);
+        ps!("{} {} {:?}", method, uri, params);
     }
     if &path == "/list-projects/" {
         Ok(endpoints::list_projects())

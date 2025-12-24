@@ -1,5 +1,6 @@
 use core::{panic, str};
 use std::{
+    env,
     ffi::OsStr,
     fmt::{Debug, Display},
     path::{Path, PathBuf},
@@ -7,6 +8,10 @@ use std::{
 };
 
 use crate::ps;
+
+pub fn debug() -> bool {
+    env::var("WORMHOLE_DEBUG").is_ok()
+}
 
 pub fn warn(msg: &str) {
     let msg = format!("WARNING: {}", msg);
@@ -51,7 +56,9 @@ where
     I: Debug,
     P: Debug,
 {
-    ps!("execute_command({program}, {args:?}, {current_dir:?})");
+    if debug() {
+        ps!("execute_command({program}, {args:?}, {current_dir:?})");
+    }
     let output = Command::new(program)
         .args(args)
         .current_dir(current_dir)

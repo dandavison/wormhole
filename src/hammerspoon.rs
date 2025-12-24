@@ -32,7 +32,9 @@ pub fn current_application() -> Application {
 }
 
 pub fn launch_or_focus(application_name: &str) {
-    ps!("Focusing {}", application_name);
+    if crate::util::debug() {
+        ps!("launch_or_focus({application_name})");
+    }
     hammerspoon(&format!(
         r#"
         hs.application.launchOrFocus("/Applications/{application_name}.app")

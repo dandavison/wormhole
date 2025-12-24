@@ -148,7 +148,9 @@ pub fn open_path(path: &ProjectPath) -> Result<(), String> {
 
        - `open --new` with a URI doesn't actually open anything
     */
-    ps!("Editor::open_path(path={path:?}");
+    if crate::util::debug() {
+        ps!("Editor::open_path(path={path:?})");
+    }
     let line = path
         .relative_path
         .as_ref()

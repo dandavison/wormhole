@@ -191,5 +191,7 @@ pub fn load() {
             .map(|p| Project::parse(p)),
     );
     crate::kv::load_kv_data(&mut projects);
-    projects.print();
+    if crate::util::debug() {
+        projects.print();
+    }
 }

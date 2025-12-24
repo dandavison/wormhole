@@ -58,6 +58,51 @@ fn test_open_project_preserves_application_by_default_but_respects_land_in() {
 }
 
 #[test]
+fn test_previous_next_navigation() {
+    let test = harness::WormholeTest::new(8932);
+
+    let proj_a = format!("{}proj-a", TEST_PREFIX);
+    let proj_b = format!("{}proj-b", TEST_PREFIX);
+    let dir_a = format!("/tmp/{}", proj_a);
+    let dir_b = format!("/tmp/{}", proj_b);
+
+    std::fs::create_dir_all(&dir_a).unwrap();
+    std::fs::create_dir_all(&dir_b).unwrap();
+
+    test.hs_post(&format!("/add-project/{}?name={}", dir_a, proj_a))
+        .unwrap();
+    test.hs_post(&format!("/add-project/{}?name={}", dir_b, proj_b))
+        .unwrap();
+
+    // Start in (a, editor)
+    test.hs_get(&format!("/project/{}", proj_a)).unwrap();
+    test.assert_tmux_window(&proj_a);
+    test.assert_editor_has_focus(&proj_a);
+
+    // Transition to (b, editor)
+    test.hs_get(&format!("/project/{}", proj_b)).unwrap();
+    test.assert_tmux_window(&proj_b);
+    test.assert_editor_has_focus(&proj_b);
+
+    for _ in 0..2 {
+        // Previous should transition to (a, editor)
+        test.hs_get("/previous-project/").unwrap();
+        test.assert_tmux_window(&proj_a);
+        test.assert_editor_has_focus(&proj_a);
+
+        // Next should transition to (b, editor)
+        test.hs_get("/next-project/").unwrap();
+        test.assert_tmux_window(&proj_b);
+        test.assert_editor_has_focus(&proj_b);
+    }
+
+    // Transition to (b, terminal)
+    test.focus_terminal();
+    test.assert_tmux_window(&proj_b);
+    test.assert_terminal_has_focus();
+}
+
+#[test]
 fn test_navigation_no_deadlock() {
     let test = harness::WormholeTest::new(8930);
 

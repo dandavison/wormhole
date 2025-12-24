@@ -166,20 +166,6 @@ impl NavigationTest {
         serde_json::from_str(&json_str).unwrap_or_else(|_| vec![])
     }
 
-    fn wait_for_cursor_window_containing(substring: &str, timeout: Duration) -> bool {
-        let start = std::time::Instant::now();
-        while start.elapsed() < timeout {
-            let windows = Self::get_cursor_windows();
-            if windows
-                .iter()
-                .any(|title| title.to_lowercase().contains(&substring.to_lowercase()))
-            {
-                return true;
-            }
-            thread::sleep(Duration::from_millis(100));
-        }
-        false
-    }
 }
 
 impl Drop for NavigationTest {

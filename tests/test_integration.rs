@@ -62,3 +62,10 @@ fn test_file_opens_in_editor() {
 
     thread::sleep(Duration::from_secs(2));
 }
+
+#[test]
+fn z_cleanup() {
+    let test = harness::WormholeTest::new(8999);
+    test.close_cursor_window(TEST_PREFIX);
+    thread::sleep(Duration::from_millis(500));
+}

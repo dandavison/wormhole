@@ -12,8 +12,6 @@ pub struct WormholeTest {
 
 impl WormholeTest {
     pub fn new(port: u16) -> Self {
-        Self::close_test_cursor_windows();
-
         let tmux_socket = format!("wormhole-test-{}", port);
         let _ = Command::new("tmux")
             .args(["-L", &tmux_socket, "kill-server"])
@@ -47,18 +45,6 @@ impl WormholeTest {
         test
     }
 
-    fn close_test_cursor_windows() {
-        let lua_pattern = TEST_PREFIX.replace("-", "%-");
-        let lua = format!(
-            r#"local cursor = hs.application.find('Cursor'); if cursor then for _, w in ipairs(cursor:allWindows()) do if string.find(w:title(), "{}") then w:close() end end end"#,
-            lua_pattern
-        );
-        if let Ok(mut child) = Command::new("hs").args(["-c", &lua]).spawn() {
-            let _ = child.wait();
-        }
-        thread::sleep(Duration::from_millis(500));
-    }
-
     pub fn hs_get(&self, path: &str) -> Result<String, String> {
         let lua = format!(
             r#"local s, b = require("hs.http").get("http://127.0.0.1:{}{}"); if s == 200 then return b else error("HTTP " .. s) end"#,
@@ -80,6 +66,24 @@ impl WormholeTest {
         self.run_hs(lua).unwrap_or_default()
     }
 
+    pub fn window_exists(&self, name: &str) -> bool {
+        let lua_pattern = name.replace("-", "%-");
+        let lua = format!(
+            r#"local cursor = hs.application.find('Cursor'); if cursor then for _, w in ipairs(cursor:allWindows()) do if string.find(w:title(), "{}") then return "true" end end end; return "false""#,
+            lua_pattern
+        );
+        self.run_hs(&lua).map(|s| s == "true").unwrap_or(false)
+    }
+
+    pub fn close_cursor_window(&self, name: &str) {
+        let lua_pattern = name.replace("-", "%-");
+        let lua = format!(
+            r#"local cursor = hs.application.find('Cursor'); if cursor then for _, w in ipairs(cursor:allWindows()) do if string.find(w:title(), "{}") then w:close() end end end"#,
+            lua_pattern
+        );
+        let _ = self.run_hs(&lua);
+    }
+
     pub fn wait_until<F>(&self, mut predicate: F, timeout_secs: u64) -> bool
     where
         F: FnMut() -> bool,
@@ -93,6 +97,11 @@ impl WormholeTest {
             thread::sleep(Duration::from_millis(100));
         }
         false
+    }
+
+    pub fn wait_for_window_containing(&self, name: &str, timeout_secs: u64) -> bool {
+        let name = name.to_string();
+        self.wait_until(|| self.window_exists(&name), timeout_secs)
     }
 
     pub fn wait_for_app_focus(&self, expected_app: &str, timeout_secs: u64) -> bool {

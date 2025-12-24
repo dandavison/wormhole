@@ -23,9 +23,11 @@ fn test_open_project_preserves_application() {
         .unwrap();
 
     test.hs_get(&format!("/project/{}", proj_a)).unwrap();
+    test.wait_for_window_containing(&proj_a, 5);
     test.assert_editor_has_focus();
 
     test.hs_get(&format!("/project/{}", proj_b)).unwrap();
+    test.wait_for_window_containing(&proj_b, 5);
     test.assert_editor_has_focus();
 }
 
@@ -59,8 +61,7 @@ fn test_file_opens_in_editor() {
         .unwrap();
 
     test.hs_get(&format!("/file/{}", file)).unwrap();
-
-    thread::sleep(Duration::from_secs(2));
+    test.wait_for_window_containing(&proj, 5);
 }
 
 #[test]

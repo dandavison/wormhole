@@ -47,17 +47,26 @@ impl WormholeTest {
     }
 
     pub fn hs_get(&self, path: &str) -> Result<String, String> {
-        let lua = format!(
-            r#"local s, b = hs.http.get("http://127.0.0.1:{}{}", nil); if s == 200 then return b else error("HTTP " .. s) end"#,
-            self.port, path
-        );
-        self.run_hs(&lua)
+        self.hs_request_with_body("get", path, "")
+    }
+
+    pub fn hs_put(&self, path: &str, body: &str) -> Result<String, String> {
+        self.hs_request_with_body("put", path, body)
     }
 
     pub fn hs_post(&self, path: &str) -> Result<String, String> {
+        self.hs_request_with_body("post", path, "")
+    }
+
+    fn hs_request_with_body(&self, method: &str, path: &str, body: &str) -> Result<String, String> {
+        let url = format!("http://127.0.0.1:{}{}", self.port, path);
+        let call = match method {
+            "get" => format!(r#"hs.http.get("{}", nil)"#, url),
+            _ => format!(r#"hs.http.{}("{}", "{}", nil)"#, method, url, body),
+        };
         let lua = format!(
-            r#"local s, b = hs.http.post("http://127.0.0.1:{}{}", "", nil); if s == 200 then return b else error("HTTP " .. s) end"#,
-            self.port, path
+            r#"local s, b = {}; if s == 200 then return b else error("HTTP " .. s) end"#,
+            call
         );
         self.run_hs(&lua)
     }

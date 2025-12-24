@@ -48,6 +48,17 @@ impl ProjectPath {
         });
         terminal_thread.join().unwrap();
         editor_thread.join().unwrap();
+
+        let land_in = land_in.or_else(|| {
+            self.project
+                .kv
+                .get("land-in")
+                .and_then(|v| match v.as_str() {
+                    "terminal" => Some(Application::Terminal),
+                    "editor" => Some(Application::Editor),
+                    _ => None,
+                })
+        });
         match land_in {
             Some(Application::Terminal) => config::TERMINAL.focus(),
             Some(Application::Editor) => config::EDITOR.focus(),

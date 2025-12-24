@@ -3,23 +3,29 @@ use std::thread;
 use std::time::Duration;
 
 mod harness;
+use harness::TEST_PREFIX;
 
 #[test]
 fn test_open_project_preserves_application() {
     let test = harness::WormholeTest::new(8932);
 
-    std::fs::create_dir_all("/tmp/test-proj-a").ok();
-    std::fs::create_dir_all("/tmp/test-proj-b").ok();
+    let proj_a = format!("{}proj-a", TEST_PREFIX);
+    let proj_b = format!("{}proj-b", TEST_PREFIX);
+    let dir_a = format!("/tmp/{}", proj_a);
+    let dir_b = format!("/tmp/{}", proj_b);
 
-    test.hs_post("/add-project//tmp/test-proj-a?name=proj-a")
+    std::fs::create_dir_all(&dir_a).ok();
+    std::fs::create_dir_all(&dir_b).ok();
+
+    test.hs_post(&format!("/add-project/{}?name={}", dir_a, proj_a))
         .unwrap();
-    test.hs_post("/add-project//tmp/test-proj-b?name=proj-b")
+    test.hs_post(&format!("/add-project/{}?name={}", dir_b, proj_b))
         .unwrap();
 
-    test.hs_get("/project/proj-a").unwrap();
+    test.hs_get(&format!("/project/{}", proj_a)).unwrap();
     test.assert_editor_has_focus();
 
-    test.hs_get("/project/proj-b").unwrap();
+    test.hs_get(&format!("/project/{}", proj_b)).unwrap();
     test.assert_editor_has_focus();
 }
 
@@ -40,16 +46,19 @@ fn test_navigation_no_deadlock() {
 
 #[test]
 fn test_file_opens_in_editor() {
-    std::fs::create_dir_all("/tmp/test-file-proj").ok();
-    std::fs::write("/tmp/test-file-proj/test.rs", "fn main() {}").ok();
-
     let test = harness::WormholeTest::new(8931);
 
-    test.hs_post("/add-project//tmp/test-file-proj?name=file-proj")
-        .unwrap_or_else(|_| panic!("Failed to add project"));
+    let proj = format!("{}file-proj", TEST_PREFIX);
+    let dir = format!("/tmp/{}", proj);
+    let file = format!("{}/test.rs", dir);
 
-    test.hs_get("/file//tmp/test-file-proj/test.rs")
-        .unwrap_or_else(|_| panic!("Failed to open file"));
+    std::fs::create_dir_all(&dir).ok();
+    std::fs::write(&file, "fn main() {}").ok();
+
+    test.hs_post(&format!("/add-project/{}?name={}", dir, proj))
+        .unwrap();
+
+    test.hs_get(&format!("/file/{}", file)).unwrap();
 
     thread::sleep(Duration::from_secs(2));
 }

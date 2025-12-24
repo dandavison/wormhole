@@ -1,29 +1,28 @@
 use core::panic;
-use serde_json;
 use std::process::Command;
 use std::thread;
 use std::time::{Duration, Instant};
 
+pub const TEST_PREFIX: &str = "wh-test-";
+
 pub struct WormholeTest {
     port: u16,
     tmux_socket: String,
-    initial_cursor_windows: Vec<String>,
 }
 
 impl WormholeTest {
     pub fn new(port: u16) -> Self {
+        Self::close_test_cursor_windows();
+
         let tmux_socket = format!("wormhole-test-{}", port);
         let _ = Command::new("tmux")
-            .args(&["-L", &tmux_socket, "kill-server"])
+            .args(["-L", &tmux_socket, "kill-server"])
             .output();
 
-        let initial_cursor_windows = Self::get_cursor_windows();
-
-        // Start wormhole in tmux
         let current_dir =
             std::env::current_dir().unwrap_or_else(|_| panic!("Failed to get current directory"));
         Command::new("tmux")
-            .args(&[
+            .args([
                 "-L",
                 &tmux_socket,
                 "new-session",
@@ -36,13 +35,8 @@ impl WormholeTest {
             .output()
             .unwrap_or_else(|_| panic!("Failed to start wormhole in tmux"));
 
-        let test = WormholeTest {
-            port,
-            tmux_socket,
-            initial_cursor_windows,
-        };
+        let test = WormholeTest { port, tmux_socket };
 
-        // Wait for wormhole to be ready
         for _ in 0..20 {
             if test.hs_get("/list-projects/").is_ok() {
                 break;
@@ -53,66 +47,21 @@ impl WormholeTest {
         test
     }
 
-    fn get_cursor_windows() -> Vec<String> {
-        let lua = r#"
-            local cursor = hs.application.find('Cursor')
-            if cursor then
-                local windows = cursor:allWindows()
-                local titles = {}
-                for i, window in ipairs(windows) do
-                    table.insert(titles, window:title())
-                end
-                return hs.json.encode(titles)
-            else
-                return '[]'
-            end
-        "#;
-
-        Command::new("hs")
-            .args(&["-c", lua])
-            .output()
-            .ok()
-            .and_then(|output| {
-                if output.status.success() {
-                    let json = String::from_utf8_lossy(&output.stdout);
-                    serde_json::from_str(&json).ok()
-                } else {
-                    None
-                }
-            })
-            .unwrap_or_else(Vec::new)
-    }
-
-    fn close_test_cursor_windows(&self) {
-        let current_windows = Self::get_cursor_windows();
-
-        for window_title in current_windows {
-            if !self.initial_cursor_windows.contains(&window_title) {
-                // This window was created during our test, close it
-                let lua = format!(
-                    r#"
-                    local cursor = hs.application.find('Cursor')
-                    if cursor then
-                        local windows = cursor:allWindows()
-                        for i, window in ipairs(windows) do
-                            if window:title() == '{}' then
-                                window:close()
-                            end
-                        end
-                    end
-                "#,
-                    window_title.replace("'", "\\'").replace("\"", "\\\"")
-                );
-
-                let _ = Command::new("hs").args(&["-c", &lua]).output();
-            }
+    fn close_test_cursor_windows() {
+        let lua_pattern = TEST_PREFIX.replace("-", "%-");
+        let lua = format!(
+            r#"local cursor = hs.application.find('Cursor'); if cursor then for _, w in ipairs(cursor:allWindows()) do if string.find(w:title(), "{}") then w:close() end end end"#,
+            lua_pattern
+        );
+        if let Ok(mut child) = Command::new("hs").args(["-c", &lua]).spawn() {
+            let _ = child.wait();
         }
+        thread::sleep(Duration::from_millis(500));
     }
 
     pub fn hs_get(&self, path: &str) -> Result<String, String> {
         let lua = format!(
-            r#"local s, b = require("hs.http").get("http://127.0.0.1:{}{}");
-               if s == 200 then return b else error("HTTP " .. s) end"#,
+            r#"local s, b = require("hs.http").get("http://127.0.0.1:{}{}"); if s == 200 then return b else error("HTTP " .. s) end"#,
             self.port, path
         );
         self.run_hs(&lua)
@@ -120,32 +69,23 @@ impl WormholeTest {
 
     pub fn hs_post(&self, path: &str) -> Result<String, String> {
         let lua = format!(
-            r#"local s, b = require("hs.http").post("http://127.0.0.1:{}{}", "", nil);
-               if s == 200 then return b else error("HTTP " .. s) end"#,
+            r#"local s, b = require("hs.http").post("http://127.0.0.1:{}{}", "", nil); if s == 200 then return b else error("HTTP " .. s) end"#,
             self.port, path
         );
         self.run_hs(&lua)
     }
 
     pub fn get_focused_app(&self) -> String {
-        let lua = r#"
-            local focusedWindow = hs.window.focusedWindow()
-            if focusedWindow then
-                return focusedWindow:application():title()
-            else
-                return ""
-            end
-        "#;
-        self.run_hs(lua).unwrap_or_else(|_| String::new())
+        let lua = r#"local w = hs.window.focusedWindow(); if w then return w:application():title() else return "" end"#;
+        self.run_hs(lua).unwrap_or_default()
     }
 
     pub fn wait_until<F>(&self, mut predicate: F, timeout_secs: u64) -> bool
     where
         F: FnMut() -> bool,
     {
-        let timeout = Duration::from_secs(timeout_secs);
         let start = Instant::now();
-
+        let timeout = Duration::from_secs(timeout_secs);
         while start.elapsed() < timeout {
             if predicate() {
                 return true;
@@ -156,13 +96,7 @@ impl WormholeTest {
     }
 
     pub fn wait_for_app_focus(&self, expected_app: &str, timeout_secs: u64) -> bool {
-        self.wait_until(
-            || {
-                let app = self.get_focused_app();
-                app == expected_app
-            },
-            timeout_secs,
-        )
+        self.wait_until(|| self.get_focused_app() == expected_app, timeout_secs)
     }
 
     pub fn assert_editor_has_focus(&self) {
@@ -175,7 +109,7 @@ impl WormholeTest {
 
     fn run_hs(&self, lua: &str) -> Result<String, String> {
         let output = Command::new("hs")
-            .args(&["-c", lua])
+            .args(["-c", lua])
             .output()
             .map_err(|e| format!("Failed to run Hammerspoon: {}", e))?;
 
@@ -189,9 +123,8 @@ impl WormholeTest {
 
 impl Drop for WormholeTest {
     fn drop(&mut self) {
-        self.close_test_cursor_windows();
         let _ = Command::new("tmux")
-            .args(&["-L", &self.tmux_socket, "kill-server"])
+            .args(["-L", &self.tmux_socket, "kill-server"])
             .output();
     }
 }

@@ -37,6 +37,18 @@ fn test_open_project_preserves_application_by_default_but_respects_land_in() {
     test.assert_tmux_window(&proj_a);
     test.assert_terminal_has_focus();
 
+    // land-in=editor overrides: even though we're in terminal, we land in editor
+    test.hs_get(&format!("/project/{}?land-in=editor", proj_b))
+        .unwrap();
+    test.assert_tmux_window(&proj_b);
+    test.assert_editor_has_focus(&proj_b);
+
+    // land-in=terminal overrides: even though we're now in editor, we land in terminal
+    test.hs_get(&format!("/project/{}?land-in=terminal", proj_a))
+        .unwrap();
+    test.assert_tmux_window(&proj_a);
+    test.assert_terminal_has_focus();
+
     test.close_cursor_window(&proj_a);
     test.close_cursor_window(&proj_b);
 }

@@ -20,7 +20,17 @@ impl ProjectPath {
         let mut projects = projects::lock();
         let project = self.project.clone();
 
-        // Use KV store value only if no request parameter was provided
+        // For navigation operations, detect current app first (if not explicitly set)
+        if land_in.is_none() && matches!(mutation, Mutation::RotateLeft | Mutation::RotateRight) {
+            // Detect where we're navigating FROM
+            match current_application() {
+                Application::Terminal => land_in = Some(Application::Terminal),
+                Application::Editor => land_in = Some(Application::Editor),
+                Application::Other => {} // Fall through to KV check
+            }
+        }
+
+        // Use KV store value only if no request parameter was provided and not navigation
         if land_in.is_none() {
             if let Some(land_in_value) = project.kv.get("land-in") {
                 match land_in_value.as_str() {

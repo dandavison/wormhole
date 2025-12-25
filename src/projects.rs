@@ -117,14 +117,6 @@ impl<'a> Projects<'a> {
         });
     }
 
-    pub fn move_to_front(&mut self, name: &str) {
-        self.index_by_name(&name).map(|i| {
-            self.0.remove(i).map(|p| {
-                self.0.push_front(p);
-            });
-        });
-    }
-
     pub fn move_to_back(&mut self, name: &str) {
         self.index_by_name(&name).map(|i| {
             self.0.remove(i).map(|p| {

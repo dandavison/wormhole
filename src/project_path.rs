@@ -37,12 +37,6 @@ impl ProjectPath {
                 ))
             })
         });
-        if self.project.is_terminal_only() {
-            terminal_thread.join().unwrap();
-            config::TERMINAL.focus();
-            projects.move_to_front(&self.project.name);
-            return;
-        }
         let project_path = self.clone();
         let editor_thread = thread::spawn(move || {
             editor::open_path(&project_path).unwrap_or_else(|err| {

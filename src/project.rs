@@ -67,10 +67,6 @@ impl Project {
         }
     }
 
-    pub fn is_terminal_only(&self) -> bool {
-        self.name == "services"
-    }
-
     pub fn editor(&self) -> Editor {
         if false && self.name.to_lowercase().contains("java") {
             Editor::IntelliJ

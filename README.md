@@ -89,6 +89,13 @@ Switches to the next project in the rotation.
   - `land-in` - Which application to focus: `terminal` or `editor`
 - **Example**: `/next-project/`
 
+#### `POST /pin/`
+Pins the current state by saving which application (editor or terminal) is currently focused to the project's KV store as `land-in`.
+- **Example workflow**:
+  1. Switch to project A and focus editor, then `POST /pin/` → saves `land-in=editor` for A
+  2. Switch to project B and focus terminal, then `POST /pin/` → saves `land-in=terminal` for B
+  3. Now using `/previous-project/` and `/next-project/` will toggle between (A, editor) and (B, terminal)
+
 ### File Opening
 
 #### `GET /file/<absolute_path>`

@@ -161,3 +161,47 @@ fn test_open_file() {
     test.hs_get(&format!("/file/{}", file)).unwrap();
     test.assert_focus(Editor(&proj));
 }
+
+#[test]
+fn test_pin() {
+    // Test that /pin/ sets the land-in KV based on current application.
+    // The actual effect of land-in on navigation is tested in test_open_project.
+    let test = harness::WormholeTest::new(8935);
+
+    let proj = format!("{}pin-proj", TEST_PREFIX);
+    let dir = format!("/tmp/{}", proj);
+
+    std::fs::create_dir_all(&dir).unwrap();
+
+    test.hs_post(&format!("/add-project/{}?name={}", dir, proj))
+        .unwrap();
+
+    // Go to project in editor
+    test.hs_get(&format!("/project/{}", proj)).unwrap();
+    test.assert_focus(Editor(&proj));
+
+    // Pin while in editor - should set land-in=editor
+    test.hs_post("/pin/").unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+
+    // Verify KV was set
+    let kv = test.hs_get(&format!("/kv/{}/land-in", proj)).unwrap();
+    assert_eq!(
+        kv, "editor",
+        "Expected land-in=editor after pinning in editor"
+    );
+
+    // Focus terminal and pin again
+    test.focus_terminal();
+    test.assert_focus(Terminal(&proj));
+
+    test.hs_post("/pin/").unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+
+    // Verify KV was updated
+    let kv = test.hs_get(&format!("/kv/{}/land-in", proj)).unwrap();
+    assert_eq!(
+        kv, "terminal",
+        "Expected land-in=terminal after pinning in terminal"
+    );
+}

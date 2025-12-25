@@ -3,7 +3,7 @@ use std::{collections::VecDeque, path::PathBuf};
 use hyper::{Body, Response};
 use itertools::Itertools;
 
-use crate::{config, projects};
+use crate::{config, hammerspoon, projects, util::debug};
 
 pub fn list_projects() -> Response<Body> {
     let mut names: VecDeque<_> = projects::lock()
@@ -93,4 +93,16 @@ pub fn close_project(name: &str) {
         config::EDITOR.close(&p);
     });
     projects.print();
+}
+
+pub fn pin_current() {
+    let projects = projects::lock();
+    if let Some(current) = projects.current() {
+        let app = hammerspoon::current_application();
+        drop(projects); // Release lock before modifying KV
+        crate::kv::set_value_sync(&current.name, "land-in", app.as_str());
+        if debug() {
+            crate::ps!("Pinned {}: land-in={}", current.name, app.as_str());
+        }
+    }
 }

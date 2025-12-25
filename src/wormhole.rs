@@ -15,6 +15,15 @@ pub enum Application {
     Terminal,
 }
 
+impl Application {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Application::Editor => "editor",
+            Application::Terminal => "terminal",
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct QueryParams {
     pub land_in: Option<Application>,
@@ -70,6 +79,15 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         let name = name.trim().to_string();
         thread::spawn(move || endpoints::close_project(&name));
         Ok(Response::new(Body::from("")))
+    } else if path == "/pin/" || path == "/pin" {
+        if method != &Method::POST {
+            return Ok(Response::builder()
+                .status(StatusCode::METHOD_NOT_ALLOWED)
+                .body(Body::from("Method not allowed. Use POST for /pin/"))
+                .unwrap());
+        }
+        thread::spawn(move || endpoints::pin_current());
+        Ok(Response::new(Body::from("Pinning current state...")))
     } else if path == "/kv" {
         Ok(crate::kv::get_all_kv())
     } else if let Some(kv_path) = path.strip_prefix("/kv/") {

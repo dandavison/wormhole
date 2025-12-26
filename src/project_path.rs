@@ -48,14 +48,14 @@ impl ProjectPath {
 
         match &land_in {
             Some(Application::Terminal) => {
-                thread::spawn(open_terminal).join().unwrap();
+                open_terminal();
                 config::TERMINAL.focus();
-                thread::spawn(open_editor).join().unwrap();
+                open_editor();
             }
             Some(Application::Editor) => {
-                thread::spawn(open_editor).join().unwrap();
+                open_editor();
                 config::EDITOR.focus();
-                thread::spawn(open_terminal).join().unwrap();
+                open_terminal();
             }
             None => {
                 let terminal_thread = thread::spawn(open_terminal);

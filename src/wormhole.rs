@@ -6,7 +6,7 @@ use crate::project_path::ProjectPath;
 use crate::projects;
 use crate::projects::Mutation;
 use crate::ps;
-use hyper::{header, Body, Method, Request, Response, StatusCode};
+use hyper::{header, Body, Request, Response, StatusCode};
 use url::form_urlencoded;
 
 #[derive(Clone, Debug)]
@@ -29,6 +29,8 @@ pub struct QueryParams {
     pub land_in: Option<Application>,
     pub line: Option<usize>,
     pub names: Vec<String>,
+    pub kv_value: Option<String>,
+    pub kv_delete: bool,
 }
 
 pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
@@ -48,50 +50,22 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         Ok(endpoints::debug_projects())
     } else if let Some(path) = path.strip_prefix("/add-project/") {
         // An absolute path must have a double slash: /add-project//Users/me/file.rs
-        if method != &Method::POST {
-            return Ok(Response::builder()
-                .status(StatusCode::METHOD_NOT_ALLOWED)
-                .body(Body::from("Method not allowed. Use POST for /add-project/"))
-                .unwrap());
-        }
         Ok(endpoints::add_project(&path.trim(), params.names))
     } else if let Some(name) = path.strip_prefix("/remove-project/") {
-        if method != &Method::POST {
-            return Ok(Response::builder()
-                .status(StatusCode::METHOD_NOT_ALLOWED)
-                .body(Body::from(
-                    "Method not allowed. Use POST for /remove-project/",
-                ))
-                .unwrap());
-        }
         Ok(endpoints::remove_project(&name.trim()))
     } else if let Some(name) = path.strip_prefix("/open-project/") {
         Ok(endpoints::open_project(&name.trim()))
     } else if let Some(name) = path.strip_prefix("/close-project/") {
-        if method != &Method::POST {
-            return Ok(Response::builder()
-                .status(StatusCode::METHOD_NOT_ALLOWED)
-                .body(Body::from(
-                    "Method not allowed. Use POST for /close-project/",
-                ))
-                .unwrap());
-        }
         let name = name.trim().to_string();
         thread::spawn(move || endpoints::close_project(&name));
         Ok(Response::new(Body::from("")))
     } else if path == "/pin/" || path == "/pin" {
-        if method != &Method::POST {
-            return Ok(Response::builder()
-                .status(StatusCode::METHOD_NOT_ALLOWED)
-                .body(Body::from("Method not allowed. Use POST for /pin/"))
-                .unwrap());
-        }
         thread::spawn(move || endpoints::pin_current());
         Ok(Response::new(Body::from("Pinning current state...")))
     } else if path == "/kv" {
         Ok(crate::kv::get_all_kv())
     } else if let Some(kv_path) = path.strip_prefix("/kv/") {
-        handle_kv_request(&method, kv_path, req).await
+        Ok(handle_kv_request(kv_path, &params))
     } else {
         // wormhole uses the `hs` client to make a call to the hammerspoon
         // service. But one might also want to use hammerspoon to configure a
@@ -159,48 +133,34 @@ fn determine_requested_operation(
     }
 }
 
-async fn handle_kv_request(
-    method: &Method,
-    kv_path: &str,
-    req: Request<Body>,
-) -> Result<Response<Body>, Infallible> {
+fn handle_kv_request(kv_path: &str, params: &QueryParams) -> Response<Body> {
     let parts: Vec<&str> = kv_path.split('/').collect();
 
     match parts.as_slice() {
         [project] if project.is_empty() => {
             // /kv/ - same as /kv
-            Ok(crate::kv::get_all_kv())
+            crate::kv::get_all_kv()
         }
         [project] => {
             // /kv/<project> - get all KV for project
-            if method == Method::GET {
-                Ok(crate::kv::get_project_kv(project))
-            } else {
-                Ok(Response::builder()
-                    .status(StatusCode::METHOD_NOT_ALLOWED)
-                    .body(Body::from("Method not allowed. Use GET for /kv/<project>"))
-                    .unwrap())
-            }
+            crate::kv::get_project_kv(project)
         }
         [project, key] => {
             // /kv/<project>/<key>
-            match *method {
-                Method::GET => Ok(crate::kv::get_value(project, key)),
-                Method::PUT => {
-                    let (_, body) = req.into_parts();
-                    Ok(crate::kv::set_value(project, key, body).await)
-                }
-                Method::DELETE => Ok(crate::kv::delete_value(project, key)),
-                _ => Ok(Response::builder()
-                    .status(StatusCode::METHOD_NOT_ALLOWED)
-                    .body(Body::from("Method not allowed. Use GET, PUT, or DELETE"))
-                    .unwrap()),
+            // Use query params: ?value=x to set, ?delete to delete, otherwise get
+            if let Some(value) = &params.kv_value {
+                crate::kv::set_value_sync(project, key, value);
+                Response::new(Body::from(""))
+            } else if params.kv_delete {
+                crate::kv::delete_value(project, key)
+            } else {
+                crate::kv::get_value(project, key)
             }
         }
-        _ => Ok(Response::builder()
+        _ => Response::builder()
             .status(StatusCode::BAD_REQUEST)
             .body(Body::from("Invalid KV path format"))
-            .unwrap()),
+            .unwrap(),
     }
 }
 
@@ -210,25 +170,31 @@ impl QueryParams {
             land_in: None,
             line: None,
             names: vec![],
+            kv_value: None,
+            kv_delete: false,
         };
         if let Some(query) = query {
-            for (key, val) in
-                form_urlencoded::parse(query.to_lowercase().as_bytes()).collect::<Vec<(_, _)>>()
-            {
-                if key == "land-in" {
-                    if val == "terminal" {
+            for (key, val) in form_urlencoded::parse(query.as_bytes()).collect::<Vec<(_, _)>>() {
+                let key_lower = key.to_lowercase();
+                if key_lower == "land-in" {
+                    let val_lower = val.to_lowercase();
+                    if val_lower == "terminal" {
                         params.land_in = Some(Application::Terminal);
-                    } else if val == "editor" {
+                    } else if val_lower == "editor" {
                         params.land_in = Some(Application::Editor);
                     }
-                } else if key == "line" {
+                } else if key_lower == "line" {
                     params.line = val.parse::<usize>().ok();
-                } else if key == "name" {
+                } else if key_lower == "name" {
                     params.names = val
                         .to_string()
                         .split(",")
                         .map(|s| s.trim().to_string())
                         .collect();
+                } else if key_lower == "value" {
+                    params.kv_value = Some(val.to_string());
+                } else if key_lower == "delete" {
+                    params.kv_delete = true;
                 }
             }
         }

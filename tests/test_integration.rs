@@ -16,9 +16,9 @@ fn test_open_project() {
     std::fs::create_dir_all(&dir_a).unwrap();
     std::fs::create_dir_all(&dir_b).unwrap();
 
-    test.hs_post(&format!("/add-project/{}?name={}", dir_a, proj_a))
+    test.hs_get(&format!("/add-project/{}?name={}", dir_a, proj_a))
         .unwrap();
-    test.hs_post(&format!("/add-project/{}?name={}", dir_b, proj_b))
+    test.hs_get(&format!("/add-project/{}?name={}", dir_b, proj_b))
         .unwrap();
 
     // Initially, editor gains focus.
@@ -47,7 +47,7 @@ fn test_open_project() {
     test.assert_focus(Terminal(&proj_a));
 
     // land-in is also respected from project kv store.
-    test.hs_put(&format!("/kv/{}/land-in", proj_b), "editor")
+    test.hs_get(&format!("/kv/{}/land-in?value=editor", proj_b))
         .unwrap();
     test.hs_get(&format!("/project/{}", proj_b)).unwrap();
     test.assert_focus(Editor(&proj_b));
@@ -65,9 +65,9 @@ fn test_previous_project_and_next_project() {
     std::fs::create_dir_all(&dir_a).unwrap();
     std::fs::create_dir_all(&dir_b).unwrap();
 
-    test.hs_post(&format!("/add-project/{}?name={}", dir_a, proj_a))
+    test.hs_get(&format!("/add-project/{}?name={}", dir_a, proj_a))
         .unwrap();
-    test.hs_post(&format!("/add-project/{}?name={}", dir_b, proj_b))
+    test.hs_get(&format!("/add-project/{}?name={}", dir_b, proj_b))
         .unwrap();
 
     // Start in (a, editor)
@@ -93,7 +93,7 @@ fn test_previous_project_and_next_project() {
     test.assert_focus(Terminal(&proj_b));
 
     // Set land-in in kv to check that previous disregards it
-    test.hs_put(&format!("/kv/{}/land-in", proj_a), "terminal")
+    test.hs_get(&format!("/kv/{}/land-in?value=terminal", proj_a))
         .unwrap();
 
     // Previous should transition to (a, editor)
@@ -110,13 +110,13 @@ fn test_close_project() {
 
     std::fs::create_dir_all(&dir).unwrap();
 
-    test.hs_post(&format!("/add-project/{}?name={}", dir, proj))
+    test.hs_get(&format!("/add-project/{}?name={}", dir, proj))
         .unwrap();
 
     test.hs_get(&format!("/project/{}", proj)).unwrap();
     test.assert_focus(Editor(&proj));
 
-    test.hs_post(&format!("/close-project/{}", proj)).unwrap();
+    test.hs_get(&format!("/close-project/{}", proj)).unwrap();
 
     assert!(
         test.wait_until(|| !test.window_exists(&proj), 5),
@@ -135,7 +135,7 @@ fn test_open_github_url() {
     std::fs::create_dir_all(format!("{}/src", dir)).unwrap();
     std::fs::write(&file, "fn main() {}").unwrap();
 
-    test.hs_post(&format!("/add-project/{}?name={}", dir, proj))
+    test.hs_get(&format!("/add-project/{}?name={}", dir, proj))
         .unwrap();
 
     // GitHub URL format: /<owner>/<repo>/blob/<branch>/<path>
@@ -156,7 +156,7 @@ fn test_open_file() {
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(&file, "fn main() {}").unwrap();
 
-    test.hs_post(&format!("/add-project/{}?name={}", dir, proj))
+    test.hs_get(&format!("/add-project/{}?name={}", dir, proj))
         .unwrap();
     test.hs_get(&format!("/file/{}", file)).unwrap();
     test.assert_focus(Editor(&proj));
@@ -173,7 +173,7 @@ fn test_pin() {
 
     std::fs::create_dir_all(&dir).unwrap();
 
-    test.hs_post(&format!("/add-project/{}?name={}", dir, proj))
+    test.hs_get(&format!("/add-project/{}?name={}", dir, proj))
         .unwrap();
 
     // Go to project in editor
@@ -181,7 +181,7 @@ fn test_pin() {
     test.assert_focus(Editor(&proj));
 
     // Pin while in editor - should set land-in=editor
-    test.hs_post("/pin/").unwrap();
+    test.hs_get("/pin/").unwrap();
     std::thread::sleep(std::time::Duration::from_millis(500));
 
     // Verify KV was set
@@ -195,7 +195,7 @@ fn test_pin() {
     test.focus_terminal();
     test.assert_focus(Terminal(&proj));
 
-    test.hs_post("/pin/").unwrap();
+    test.hs_get("/pin/").unwrap();
     std::thread::sleep(std::time::Duration::from_millis(500));
 
     // Verify KV was updated

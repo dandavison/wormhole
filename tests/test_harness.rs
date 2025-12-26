@@ -8,7 +8,7 @@ fn test_close_cursor_window() {
     let dir = format!("/tmp/{}", proj);
     std::fs::create_dir_all(&dir).unwrap();
 
-    test.hs_post(&format!("/add-project/{}?name={}", dir, proj))
+    test.hs_get(&format!("/add-project/{}?name={}", dir, proj))
         .unwrap();
     test.hs_get(&format!("/project/{}", proj)).unwrap();
 

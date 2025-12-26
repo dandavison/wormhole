@@ -26,6 +26,26 @@ pub fn get_value(project_name: &str, key: &str) -> Response<Body> {
     }
 }
 
+pub async fn set_value(project_name: &str, key: &str, body: Body) -> Response<Body> {
+    let bytes = hyper::body::to_bytes(body).await.unwrap_or_default();
+    let value = String::from_utf8_lossy(&bytes).to_string();
+
+    let mut projects = projects::lock();
+
+    if let Some(project_idx) = projects.all().iter().position(|p| p.name == project_name) {
+        projects.all_mut()[project_idx]
+            .kv
+            .insert(key.to_string(), value.clone());
+        save_kv_data(&projects);
+        Response::new(Body::empty())
+    } else {
+        Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(Body::from(format!("Project '{}' not found", project_name)))
+            .unwrap()
+    }
+}
+
 pub fn set_value_sync(project_name: &str, key: &str, value: &str) {
     let mut projects = projects::lock();
 

@@ -89,11 +89,11 @@ Switches to the next project in the rotation.
   - `land-in` - Which application to focus: `terminal` or `editor`
 - **Example**: `/next-project/`
 
-#### `GET /pin/`
+#### `POST /pin/`
 Pins the current state by saving which application (editor or terminal) is currently focused to the project's KV store as `land-in`.
 - **Example workflow**:
-  1. Switch to project A and focus editor, then `/pin/` → saves `land-in=editor` for A
-  2. Switch to project B and focus terminal, then `/pin/` → saves `land-in=terminal` for B
+  1. Switch to project A and focus editor, then `POST /pin/` → saves `land-in=editor` for A
+  2. Switch to project B and focus terminal, then `POST /pin/` → saves `land-in=terminal` for B
   3. Now using `/previous-project/` and `/next-project/` will toggle between (A, editor) and (B, terminal)
 
 ### File Opening
@@ -126,17 +126,16 @@ Retrieves a stored value for a project.
 - **Response**: Plain text value
 - **Example**: `/kv/myproject/land-in` returns `terminal`
 
-#### `GET /kv/<project>/<key>?value=<value>`
+#### `PUT /kv/<project>/<key>`
 Sets a value for a project key.
 - **Path**: Project name and key name
-- **Query Parameters**:
-  - `value` - The value to store
-- **Example**: `/kv/myproject/land-in?value=editor`
+- **Body**: Plain text value to store
+- **Example**: `curl -X PUT http://wormhole:7117/kv/myproject/land-in -d "editor"`
 
-#### `GET /kv/<project>/<key>?delete`
+#### `DELETE /kv/<project>/<key>`
 Deletes a key from a project.
 - **Path**: Project name and key name
-- **Example**: `/kv/myproject/land-in?delete`
+- **Example**: `curl -X DELETE http://wormhole:7117/kv/myproject/land-in`
 
 #### `GET /kv/<project>`
 Retrieves all key-value pairs for a project.
@@ -159,19 +158,19 @@ Lists all currently open projects (one per line).
 Returns detailed debug information about all known projects.
 - **Response**: Indexed list with project names, paths, and aliases
 
-#### `GET /add-project/<path>`
+#### `POST /add-project/<path>`
 Adds a new project to wormhole.
 - **Path**: Absolute path to the project directory (e.g., `/add-project//Users/me/myproject`)
 - **Query Parameters**:
   - `name` - Optional project name and aliases (comma-separated)
 - **Example**: `/add-project//Users/me/repos/myapp?name=myapp,app`
 
-#### `GET /remove-project/<name>`
+#### `POST /remove-project/<name>`
 Removes a project from wormhole.
 - **Path**: Project name to remove
 - **Example**: `/remove-project/myapp`
 
-#### `GET /close-project/<name>`
+#### `POST /close-project/<name>`
 Closes the editor and terminal windows for a project.
 - **Path**: Project name to close
 - **Example**: `/close-project/myapp`

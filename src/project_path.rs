@@ -28,31 +28,41 @@ impl ProjectPath {
             Mutation::RotateLeft | Mutation::RotateRight => self.project.last_application.clone(),
             _ => parse_application(self.project.kv.get("land-in")),
         });
-
-        let terminal_thread = thread::spawn(move || {
+        let open_terminal = move || {
             config::TERMINAL.open(&project).unwrap_or_else(|err| {
                 warn(&format!(
                     "Error opening {} in terminal: {}",
                     &project.name, err
                 ))
             })
-        });
+        };
         let project_path = self.clone();
-        let editor_thread = thread::spawn(move || {
+        let open_editor = move || {
             editor::open_path(&project_path).unwrap_or_else(|err| {
                 warn(&format!(
                     "Error opening {:?} in editor: {}",
                     project_path.relative_path, err
                 ))
             });
-        });
-        terminal_thread.join().unwrap();
-        editor_thread.join().unwrap();
+        };
 
         match &land_in {
-            Some(Application::Terminal) => config::TERMINAL.focus(),
-            Some(Application::Editor) => config::EDITOR.focus(),
-            None => {}
+            Some(Application::Terminal) => {
+                thread::spawn(open_terminal).join().unwrap();
+                config::TERMINAL.focus();
+                thread::spawn(open_editor).join().unwrap();
+            }
+            Some(Application::Editor) => {
+                thread::spawn(open_editor).join().unwrap();
+                config::EDITOR.focus();
+                thread::spawn(open_terminal).join().unwrap();
+            }
+            None => {
+                let terminal_thread = thread::spawn(open_terminal);
+                let editor_thread = thread::spawn(open_editor);
+                terminal_thread.join().unwrap();
+                editor_thread.join().unwrap();
+            }
         }
         projects.apply(mutation, &self.project.name);
         if util::debug() {

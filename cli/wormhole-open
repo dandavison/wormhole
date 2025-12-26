@@ -1,3 +1,4 @@
 #!/bin/bash
-curl -s http://wormhole:7117/add-project/"$1" >/dev/null
-curl -s http://wormhole:7117/open-project/"$1" >/dev/null
+set -eu
+curl -f -X POST http://wormhole:7117/add-project/"$1"
+curl -f http://wormhole:7117/open-project/"$1"

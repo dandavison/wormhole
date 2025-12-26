@@ -137,13 +137,12 @@ impl<'a> Projects<'a> {
     }
 
     pub fn by_path(&self, query_path: &Path) -> Option<Project> {
-        self.0.iter().find_map(|p| {
-            if query_path.starts_with(&p.path) {
-                Some(p.clone())
-            } else {
-                None
-            }
-        })
+        // Return the most specific (longest path) match, not the first match
+        self.0
+            .iter()
+            .filter(|p| query_path.starts_with(&p.path))
+            .max_by_key(|p| p.path.as_os_str().len())
+            .cloned()
     }
 
     pub fn by_name(&self, name: &str) -> Option<Project> {
@@ -193,5 +192,44 @@ pub fn load() {
     crate::kv::load_kv_data(&mut projects);
     if crate::util::debug() {
         projects.print();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn make_project(name: &str, path: &str) -> Project {
+        Project {
+            name: name.to_string(),
+            path: PathBuf::from(path),
+            aliases: vec![],
+            kv: std::collections::HashMap::new(),
+            last_application: None,
+        }
+    }
+
+    #[test]
+    fn test_by_path_returns_most_specific_match() {
+        // Parent added before child - order shouldn't matter after fix
+        let projects = vec![
+            make_project("parent", "/tmp/parent"),
+            make_project("child", "/tmp/parent/child"),
+        ];
+
+        let query = PathBuf::from("/tmp/parent/child/file.rs");
+
+        // Fixed: use max_by_key to find longest matching path
+        let best_match = projects
+            .iter()
+            .filter(|p| query.starts_with(&p.path))
+            .max_by_key(|p| p.path.as_os_str().len());
+
+        assert_eq!(
+            best_match.map(|p| p.name.as_str()),
+            Some("child"),
+            "by_path should return most specific (longest) matching path"
+        );
     }
 }

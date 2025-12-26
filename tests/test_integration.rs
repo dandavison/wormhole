@@ -54,6 +54,28 @@ fn test_open_project() {
 }
 
 #[test]
+fn test_open_project_resolves_to_most_specific_match() {
+    let test = harness::WormholeTest::new(8936);
+
+    let parent_proj = format!("{}parent", TEST_PREFIX);
+    let child_proj = format!("{}child", TEST_PREFIX);
+    let parent_dir = format!("/tmp/{}", parent_proj);
+    let child_dir = format!("{}/subdir", parent_dir);
+
+    std::fs::create_dir_all(&child_dir).unwrap();
+
+    test.hs_post(&format!("/add-project/{}?name={}", parent_dir, parent_proj))
+        .unwrap();
+    test.hs_post(&format!("/add-project/{}?name={}", child_dir, child_proj))
+        .unwrap();
+
+    // Opening via child path should match child project, not parent
+    test.hs_get(&format!("/open-project/{}", child_dir))
+        .unwrap();
+    test.assert_focus(Terminal(&child_proj));
+}
+
+#[test]
 fn test_previous_project_and_next_project() {
     let test = harness::WormholeTest::new(8932);
 

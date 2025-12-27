@@ -94,6 +94,10 @@ impl<'a> Projects<'a> {
 
     pub fn add(&mut self, path: &str, names: Vec<String>) {
         let path = PathBuf::from(path.to_string());
+        // HACK: never add home directory as a project
+        if Some(path.as_path()) == dirs::home_dir().as_deref() {
+            return;
+        }
         let name = if !names.is_empty() {
             names[0].clone()
         } else {

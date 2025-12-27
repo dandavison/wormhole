@@ -7,6 +7,6 @@ die() {
 path="$(readlink -f "$1")"
 name="$2"
 [ -d "$path" ] || die "Not a directory: $path"
-url=http://wormhole:7117/add-project/$path
+url="http://wormhole:7117/project/$path"
 [ -n "$name" ] && url="$url?name=$name"
-curl -s -X POST "$url"
+curl -f "$url"

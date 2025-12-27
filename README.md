@@ -65,17 +65,20 @@ Wormhole runs as an HTTP server on port 7117 (configurable in `src/config.rs`).
 
 ### Project Navigation
 
-#### `GET /open-project/<name_or_path>`
-Opens a project by name or path in both editor and terminal (always focuses terminal).
+#### `GET /project/<name_or_path>`
+Unified project endpoint: switches to a project by name or path, creating it if necessary (upsert behavior).
 - **Path**: Project name or absolute path
-- **Example**: `/open-project/myapp`
-
-#### `GET /project/<name>`
-Switches to a project by name.
-- **Path**: Project name
+- **Behavior**:
+  1. If `<name_or_path>` matches an existing project name → switches to that project
+  2. If `<name_or_path>` is an absolute path matching an existing project → switches to that project
+  3. If `<name_or_path>` is an absolute path with no matching project → creates a new project and switches to it
 - **Query Parameters**:
   - `land-in` - Which application to focus: `terminal` or `editor`
-- **Example**: `/project/myapp?land-in=editor`
+  - `name` - Project name (used when creating new project from path)
+- **Examples**:
+  - `/project/myapp` - Switch to project named "myapp"
+  - `/project//Users/me/repos/myapp?name=myapp` - Open/create project at path with name "myapp"
+  - `/project/myapp?land-in=editor` - Switch to "myapp" and focus editor
 
 #### `GET /previous-project/`
 Switches to the previous project in the rotation.
@@ -157,13 +160,6 @@ Lists all currently open projects (one per line).
 #### `GET /debug-projects/`
 Returns detailed debug information about all known projects.
 - **Response**: Indexed list with project names, paths, and aliases
-
-#### `POST /add-project/<path>`
-Adds a new project to wormhole.
-- **Path**: Absolute path to the project directory (e.g., `/add-project//Users/me/myproject`)
-- **Query Parameters**:
-  - `name` - Optional project name and aliases (comma-separated)
-- **Example**: `/add-project//Users/me/repos/myapp?name=myapp,app`
 
 #### `POST /remove-project/<name>`
 Removes a project from wormhole.

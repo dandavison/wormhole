@@ -1,6 +1,7 @@
 use std::convert::Infallible;
 use std::thread;
 
+use crate::config;
 use crate::endpoints;
 use crate::project_path::ProjectPath;
 use crate::projects;
@@ -143,7 +144,23 @@ fn determine_requested_operation(
                 ))
             }
         } else {
-            Some((None, Mutation::Insert, land_in))
+            // Search WORMHOLE_PATH for a directory matching this name
+            let found_path = config::search_paths()
+                .into_iter()
+                .map(|dir| dir.join(name_or_path))
+                .find(|p| p.is_dir());
+            if let Some(path) = found_path {
+                let path_str = path.to_string_lossy().to_string();
+                projects.add(&path_str, names);
+                let project = projects.by_exact_path(&path);
+                Some((
+                    project.map(|p| p.as_project_path()),
+                    Mutation::Insert,
+                    land_in,
+                ))
+            } else {
+                Some((None, Mutation::Insert, land_in))
+            }
         }
     } else if let Some(absolute_path) = url_path.strip_prefix("/file/") {
         let p = ProjectPath::from_absolute_path(absolute_path, &projects);

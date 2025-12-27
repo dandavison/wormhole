@@ -46,15 +46,6 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         Ok(endpoints::list_projects())
     } else if &path == "/debug-projects/" {
         Ok(endpoints::debug_projects())
-    } else if let Some(path) = path.strip_prefix("/add-project/") {
-        // An absolute path must have a double slash: /add-project//Users/me/file.rs
-        if method != &Method::POST {
-            return Ok(Response::builder()
-                .status(StatusCode::METHOD_NOT_ALLOWED)
-                .body(Body::from("Method not allowed. Use POST for /add-project/"))
-                .unwrap());
-        }
-        Ok(endpoints::add_project(&path.trim(), params.names))
     } else if let Some(name) = path.strip_prefix("/remove-project/") {
         if method != &Method::POST {
             return Ok(Response::builder()
@@ -65,8 +56,6 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
                 .unwrap());
         }
         Ok(endpoints::remove_project(&name.trim()))
-    } else if let Some(name) = path.strip_prefix("/open-project/") {
-        Ok(endpoints::open_project(&name.trim()))
     } else if let Some(name) = path.strip_prefix("/close-project/") {
         if method != &Method::POST {
             return Ok(Response::builder()
@@ -102,7 +91,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         // call blocked until the HTTP request timed out. So, wormhole returns
         // immediately, performing its actions asynchronously.
         if let Some((Some(project_path), mutation, land_in)) =
-            determine_requested_operation(&path, params.line, params.land_in)
+            determine_requested_operation(&path, params.line, params.land_in, params.names)
         {
             if project_path.project.name != "dan" {
                 thread::spawn(move || project_path.open(mutation, land_in));
@@ -130,17 +119,36 @@ fn determine_requested_operation(
     url_path: &str,
     line: Option<usize>,
     land_in: Option<Application>,
+    names: Vec<String>,
 ) -> Option<(Option<ProjectPath>, Mutation, Option<Application>)> {
-    let projects = projects::lock();
+    let mut projects = projects::lock();
     if url_path == "/previous-project/" {
         let p = projects.previous().map(|p| p.as_project_path());
         Some((p, Mutation::RotateLeft, land_in))
     } else if url_path == "/next-project/" {
         let p = projects.next().map(|p| p.as_project_path());
         Some((p, Mutation::RotateRight, land_in))
-    } else if let Some(name) = url_path.strip_prefix("/project/") {
-        let p = projects.by_name(name).map(|p| p.as_project_path());
-        Some((p, Mutation::Insert, land_in))
+    } else if let Some(name_or_path) = url_path.strip_prefix("/project/") {
+        // Try lookup by name, then path, then insert as new
+        let name_or_path = name_or_path.trim();
+        if let Some(project) = projects.by_name(name_or_path) {
+            Some((Some(project.as_project_path()), Mutation::Insert, land_in))
+        } else if name_or_path.starts_with('/') {
+            let path = std::path::PathBuf::from(name_or_path);
+            if let Some(project) = projects.by_exact_path(&path) {
+                Some((Some(project.as_project_path()), Mutation::Insert, land_in))
+            } else {
+                projects.add(name_or_path, names);
+                let project = projects.by_exact_path(&path);
+                Some((
+                    project.map(|p| p.as_project_path()),
+                    Mutation::Insert,
+                    land_in,
+                ))
+            }
+        } else {
+            Some((None, Mutation::Insert, land_in))
+        }
     } else if let Some(absolute_path) = url_path.strip_prefix("/file/") {
         let p = ProjectPath::from_absolute_path(absolute_path, &projects);
         Some((p, Mutation::Insert, land_in))

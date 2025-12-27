@@ -1,2 +1,0 @@
-#!/bin/bash
-curl -s -X POST http://wormhole:7117/close-project/"${1:-$WORMHOLE_PROJECT_NAME}"

@@ -16,10 +16,14 @@ fn test_open_project() {
     std::fs::create_dir_all(&dir_a).unwrap();
     std::fs::create_dir_all(&dir_b).unwrap();
 
-    test.hs_post(&format!("/add-project/{}?name={}", dir_a, proj_a))
+    // Create projects using unified /project/ endpoint (upsert behavior)
+    // Small delay between calls since project opening is async and uses Hammerspoon
+    test.hs_get(&format!("/project/{}?name={}", dir_a, proj_a))
         .unwrap();
-    test.hs_post(&format!("/add-project/{}?name={}", dir_b, proj_b))
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    test.hs_get(&format!("/project/{}?name={}", dir_b, proj_b))
         .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
 
     // Initially, editor gains focus.
     test.hs_get(&format!("/project/{}", proj_a)).unwrap();
@@ -65,10 +69,14 @@ fn test_previous_project_and_next_project() {
     std::fs::create_dir_all(&dir_a).unwrap();
     std::fs::create_dir_all(&dir_b).unwrap();
 
-    test.hs_post(&format!("/add-project/{}?name={}", dir_a, proj_a))
+    // Create projects using unified /project/ endpoint
+    // Small delay between calls since project opening is async and uses Hammerspoon
+    test.hs_get(&format!("/project/{}?name={}", dir_a, proj_a))
         .unwrap();
-    test.hs_post(&format!("/add-project/{}?name={}", dir_b, proj_b))
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    test.hs_get(&format!("/project/{}?name={}", dir_b, proj_b))
         .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
 
     // Start in (a, editor)
     test.hs_get(&format!("/project/{}", proj_a)).unwrap();
@@ -110,8 +118,10 @@ fn test_close_project() {
 
     std::fs::create_dir_all(&dir).unwrap();
 
-    test.hs_post(&format!("/add-project/{}?name={}", dir, proj))
+    // Create project using unified /project/ endpoint
+    test.hs_get(&format!("/project/{}?name={}", dir, proj))
         .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
 
     test.hs_get(&format!("/project/{}", proj)).unwrap();
     test.assert_focus(Editor(&proj));
@@ -135,7 +145,8 @@ fn test_open_github_url() {
     std::fs::create_dir_all(format!("{}/src", dir)).unwrap();
     std::fs::write(&file, "fn main() {}").unwrap();
 
-    test.hs_post(&format!("/add-project/{}?name={}", dir, proj))
+    // Create project using unified /project/ endpoint
+    test.hs_get(&format!("/project/{}?name={}", dir, proj))
         .unwrap();
 
     // GitHub URL format: /<owner>/<repo>/blob/<branch>/<path>
@@ -156,8 +167,10 @@ fn test_open_file() {
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(&file, "fn main() {}").unwrap();
 
-    test.hs_post(&format!("/add-project/{}?name={}", dir, proj))
+    // Create project using unified /project/ endpoint
+    test.hs_get(&format!("/project/{}?name={}", dir, proj))
         .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
     test.hs_get(&format!("/file/{}", file)).unwrap();
     test.assert_focus(Editor(&proj));
 }
@@ -173,8 +186,10 @@ fn test_pin() {
 
     std::fs::create_dir_all(&dir).unwrap();
 
-    test.hs_post(&format!("/add-project/{}?name={}", dir, proj))
+    // Create project using unified /project/ endpoint
+    test.hs_get(&format!("/project/{}?name={}", dir, proj))
         .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
 
     // Go to project in editor
     test.hs_get(&format!("/project/{}", proj)).unwrap();

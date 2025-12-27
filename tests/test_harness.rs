@@ -8,9 +8,10 @@ fn test_close_cursor_window() {
     let dir = format!("/tmp/{}", proj);
     std::fs::create_dir_all(&dir).unwrap();
 
-    test.hs_post(&format!("/add-project/{}?name={}", dir, proj))
+    // Create and switch to project using unified /project/ endpoint
+    test.hs_get(&format!("/project/{}?name={}", dir, proj))
         .unwrap();
-    test.hs_get(&format!("/project/{}", proj)).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
 
     assert!(
         test.wait_for_window_containing(&proj, 5),
@@ -19,7 +20,8 @@ fn test_close_cursor_window() {
 
     test.close_cursor_window(&proj);
 
-    std::thread::sleep(std::time::Duration::from_millis(500));
-
-    assert!(!test.window_exists(&proj), "Window should be closed");
+    assert!(
+        test.wait_until(|| !test.window_exists(&proj), 10),
+        "Window should be closed"
+    );
 }

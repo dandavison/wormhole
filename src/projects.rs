@@ -136,14 +136,18 @@ impl<'a> Projects<'a> {
         self.0.insert(index, p);
     }
 
+    /// Find project whose path is a prefix of query_path (for file lookups)
     pub fn by_path(&self, query_path: &Path) -> Option<Project> {
-        self.0.iter().find_map(|p| {
-            if query_path.starts_with(&p.path) {
-                Some(p.clone())
-            } else {
-                None
-            }
-        })
+        self.0
+            .iter()
+            .filter(|p| query_path.starts_with(&p.path))
+            .max_by_key(|p| p.path.as_os_str().len())
+            .cloned()
+    }
+
+    /// Find project at exactly this path (for project switching)
+    pub fn by_exact_path(&self, path: &Path) -> Option<Project> {
+        self.0.iter().find(|p| p.path == path).cloned()
     }
 
     pub fn by_name(&self, name: &str) -> Option<Project> {

@@ -1,5 +1,5 @@
 serve: build
-	./target/release/wormhole
+	./target/release/wormhole serve
 
 build:
 	cargo build --release

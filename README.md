@@ -11,11 +11,50 @@ When you switch to work on a different project, two things should happen:
 2. Your terminal emulator should switch to a window/tab/workspace with shell processes using the new project directory.
 
 Wormhole makes that be true.
-It is an HTTP service providing the following commands:
 
-- Switch to a project by name
-- Switch to a project given a file path, and open that path in your editor/IDE (at the specified line number)
-- Switch to a project given a github URL, and open the corresponding file path in your editor/IDE (at the specified line number)
+## CLI Usage
+
+Wormhole provides a unified CLI for both running the server and interacting with it:
+
+```bash
+# Start the server (default if no subcommand given)
+wormhole serve
+wormhole
+
+# Switch to a project by name
+wormhole project myapp
+
+# Open/create a project at a path
+wormhole project /path/to/repo --name myapp
+
+# Open a file (switches to containing project)
+wormhole file /path/to/repo/src/main.rs:42
+
+# Navigate between projects
+wormhole previous
+wormhole next
+
+# Pin current (project, app) state for toggle behavior
+wormhole pin
+
+# List projects
+wormhole list
+
+# Key-value storage
+wormhole kv get myapp land-in
+wormhole kv set myapp land-in editor
+wormhole kv delete myapp land-in
+wormhole kv list myapp
+
+# Close/remove projects
+wormhole close myapp
+wormhole remove myapp
+
+# Debug info
+wormhole debug
+```
+
+Run `wormhole --help` or `wormhole <command> --help` for detailed usage.
 
 ## Installation
 
@@ -29,12 +68,12 @@ Wormhole binds to port 7117 by default.
    brew install hammerspoon
    ln -s /Applications/Hammerspoon.app/Contents/Frameworks/hs/hs ~/bin
    ```
-4. Start the server with `sudo make serve`
+4. Build and install: `cargo build --release && cp target/release/wormhole ~/bin/`
+5. Start the server with `sudo wormhole serve` (or `sudo make serve`)
 
-## Example workflows:
+## Example workflows
 
-Wormhole is an HTTP server.
-It can be used in various ways, with various HTTP clients.
+Wormhole runs as an HTTP server that you interact with via the CLI or direct HTTP requests.
 Here are some ideas.
 
 - Use the MacOS [project-switcher UI](https://github.com/dandavison/wormhole-gui) to switch projects.
@@ -65,17 +104,20 @@ Wormhole runs as an HTTP server on port 7117 (configurable in `src/config.rs`).
 
 ### Project Navigation
 
-#### `GET /open-project/<name_or_path>`
-Opens a project by name or path in both editor and terminal (always focuses terminal).
+#### `GET /project/<name_or_path>`
+Unified project endpoint: switches to a project by name or path, creating it if necessary (upsert behavior).
 - **Path**: Project name or absolute path
-- **Example**: `/open-project/myapp`
-
-#### `GET /project/<name>`
-Switches to a project by name.
-- **Path**: Project name
+- **Behavior**:
+  1. If `<name_or_path>` matches an existing project name → switches to that project
+  2. If `<name_or_path>` is an absolute path matching an existing project → switches to that project
+  3. If `<name_or_path>` is an absolute path with no matching project → creates a new project and switches to it
 - **Query Parameters**:
   - `land-in` - Which application to focus: `terminal` or `editor`
-- **Example**: `/project/myapp?land-in=editor`
+  - `name` - Project name (used when creating new project from path)
+- **Examples**:
+  - `/project/myapp` - Switch to project named "myapp"
+  - `/project//Users/me/repos/myapp?name=myapp` - Open/create project at path with name "myapp"
+  - `/project/myapp?land-in=editor` - Switch to "myapp" and focus editor
 
 #### `GET /previous-project/`
 Switches to the previous project in the rotation.
@@ -157,13 +199,6 @@ Lists all currently open projects (one per line).
 #### `GET /debug-projects/`
 Returns detailed debug information about all known projects.
 - **Response**: Indexed list with project names, paths, and aliases
-
-#### `POST /add-project/<path>`
-Adds a new project to wormhole.
-- **Path**: Absolute path to the project directory (e.g., `/add-project//Users/me/myproject`)
-- **Query Parameters**:
-  - `name` - Optional project name and aliases (comma-separated)
-- **Example**: `/add-project//Users/me/repos/myapp?name=myapp,app`
 
 #### `POST /remove-project/<name>`
 Removes a project from wormhole.

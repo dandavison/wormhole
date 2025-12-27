@@ -1,4 +1,7 @@
-use clap::{Parser, Subcommand};
+use clap::builder::ValueHint;
+use clap::{CommandFactory, Parser, Subcommand};
+use clap_complete::{generate, Shell};
+use std::io;
 
 use crate::config;
 
@@ -17,6 +20,7 @@ pub enum Command {
     /// Switch to a project by name, or open/create a project at a path
     Project {
         /// Project name or absolute path
+        #[arg(value_hint = ValueHint::DirPath)]
         name_or_path: String,
         /// Optional project name (when creating from path)
         #[arg(long)]
@@ -29,6 +33,7 @@ pub enum Command {
     /// Open a file in the appropriate project
     File {
         /// Absolute file path (optionally with :line suffix)
+        #[arg(value_hint = ValueHint::FilePath)]
         path: String,
         /// Which application to focus: editor or terminal
         #[arg(long, value_name = "APP")]
@@ -75,6 +80,13 @@ pub enum Command {
 
     /// Show debug information about all projects
     Debug,
+
+    /// Generate shell completions
+    Completion {
+        /// Shell to generate completions for
+        #[arg(value_enum)]
+        shell: Shell,
+    },
 }
 
 #[derive(Subcommand)]
@@ -263,6 +275,11 @@ pub fn run(command: Command) -> Result<(), String> {
         Command::Debug => {
             let response = client.get("/debug-projects/")?;
             println!("{}", response);
+            Ok(())
+        }
+
+        Command::Completion { shell } => {
+            generate(shell, &mut Cli::command(), "wormhole", &mut io::stdout());
             Ok(())
         }
     }

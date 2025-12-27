@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
+clap_complete = "4"
 dirs = "5.0.1"
 hyper = { version = "0.14", features = ["full"] }
 indexmap = "2.0.0"

@@ -1,2 +1,0 @@
-#!/bin/bash
-curl -s -X POST http://wormhole:7117/remove-project/"$1"

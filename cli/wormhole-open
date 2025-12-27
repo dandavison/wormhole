@@ -1,3 +1,0 @@
-#!/bin/bash
-set -eu
-curl -f "http://wormhole:7117/project/$1"

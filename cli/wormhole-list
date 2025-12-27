@@ -1,2 +1,0 @@
-#!/bin/bash
-curl -s http://wormhole:7117/list-projects/

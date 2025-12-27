@@ -11,11 +11,50 @@ When you switch to work on a different project, two things should happen:
 2. Your terminal emulator should switch to a window/tab/workspace with shell processes using the new project directory.
 
 Wormhole makes that be true.
-It is an HTTP service providing the following commands:
 
-- Switch to a project by name
-- Switch to a project given a file path, and open that path in your editor/IDE (at the specified line number)
-- Switch to a project given a github URL, and open the corresponding file path in your editor/IDE (at the specified line number)
+## CLI Usage
+
+Wormhole provides a unified CLI for both running the server and interacting with it:
+
+```bash
+# Start the server (default if no subcommand given)
+wormhole serve
+wormhole
+
+# Switch to a project by name
+wormhole project myapp
+
+# Open/create a project at a path
+wormhole project /path/to/repo --name myapp
+
+# Open a file (switches to containing project)
+wormhole file /path/to/repo/src/main.rs:42
+
+# Navigate between projects
+wormhole previous
+wormhole next
+
+# Pin current (project, app) state for toggle behavior
+wormhole pin
+
+# List projects
+wormhole list
+
+# Key-value storage
+wormhole kv get myapp land-in
+wormhole kv set myapp land-in editor
+wormhole kv delete myapp land-in
+wormhole kv list myapp
+
+# Close/remove projects
+wormhole close myapp
+wormhole remove myapp
+
+# Debug info
+wormhole debug
+```
+
+Run `wormhole --help` or `wormhole <command> --help` for detailed usage.
 
 ## Installation
 
@@ -29,12 +68,12 @@ Wormhole binds to port 7117 by default.
    brew install hammerspoon
    ln -s /Applications/Hammerspoon.app/Contents/Frameworks/hs/hs ~/bin
    ```
-4. Start the server with `sudo make serve`
+4. Build and install: `cargo build --release && cp target/release/wormhole ~/bin/`
+5. Start the server with `sudo wormhole serve` (or `sudo make serve`)
 
-## Example workflows:
+## Example workflows
 
-Wormhole is an HTTP server.
-It can be used in various ways, with various HTTP clients.
+Wormhole runs as an HTTP server that you interact with via the CLI or direct HTTP requests.
 Here are some ideas.
 
 - Use the MacOS [project-switcher UI](https://github.com/dandavison/wormhole-gui) to switch projects.

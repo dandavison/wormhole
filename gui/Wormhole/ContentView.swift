@@ -2,7 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject var model = ProjectsModel()
-    
+
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()

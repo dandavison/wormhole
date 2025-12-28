@@ -3,7 +3,7 @@ import SwiftUI
 struct Project<V: Equatable>: Equatable {
     var text: String = ""
     var value: V
-    
+
     static func ==(_ lhs: Project<V>, _ rhs: Project<V>) -> Bool {
         return lhs.value == rhs.value
     }
@@ -14,12 +14,12 @@ struct ProjectInput<V: Equatable>: View {
     var projects: [Project<V>]
     
     @StateObject var model = ProjectSelectorModel<V>()
-    
+
     var body: some View {
         let model = self.model
         if model.projects != self.projects {
             model.projects = self.projects
-            
+
             model.selectedProject = nil
         }
         model.textBinding = self.$text

@@ -3,7 +3,7 @@ import SwiftUI
 struct ProjectView<V: Equatable>: View {
     var project: Project<V>
     @ObservedObject var model: ProjectSelectorModel<V>
-    
+
     var body: some View {
         let project = self.project
         let model = self.model
@@ -27,11 +27,11 @@ struct ProjectView<V: Equatable>: View {
 
 struct ProjectPopup<V: Equatable>: View {
     @ObservedObject var model: ProjectSelectorModel<V>
-    
+
     var body: some View {
         let model = self.model
         let projects = model.projects
-        
+
         return VStack(spacing: 0) {
             ForEach(projects.indices, id: \.self)  { idx in
                 ProjectView(project: projects[idx], model: model)

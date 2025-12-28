@@ -105,7 +105,10 @@ internal final class ProjectSelectorModel<V: Equatable>: ObservableObject {
 
     internal func openProject(name: String, landInTerminal: Bool) async throws {
         var url = "http://localhost:7117/project/" + name
-        url = url + (landInTerminal ? "?land-in=terminal" : "?land-in=editor")
+        // Only add land-in if modifier key was pressed (for terminal)
+        if landInTerminal {
+            url = url + "?land-in=terminal"
+        }
         let _ = try await URLSession.shared.data(from: URL(string: url)!)
     }
 

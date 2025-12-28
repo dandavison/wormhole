@@ -7,16 +7,18 @@ struct ProjectView<V: Equatable>: View {
     var body: some View {
         let project = self.project
         let model = self.model
-        
+        // Highlight if explicitly selected OR if it's the only match
+        let isHighlighted = model.selectedProject == project || (model.projects.count == 1 && model.projects.first == project)
+
         return Text(project.text)
             .id(project.text)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .foregroundColor(model.selectedProject == project ? .green : .cyan)
+            .foregroundColor(isHighlighted ? .green : .cyan)
             .padding(EdgeInsets(top: 4, leading: 6, bottom: 4, trailing: 6))
             .background(ZStack {
                 Color.black.ignoresSafeArea()
                 RoundedRectangle(cornerRadius: 5)
-                    .border(model.selectedProject == project ? Color.green : Color.clear)
+                    .border(isHighlighted ? Color.green : Color.clear)
                 }
             )
             .onTapGesture {

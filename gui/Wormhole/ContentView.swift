@@ -6,7 +6,7 @@ struct ContentView: View {
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            ProjectInput(text: self.$model.currentText, projects: self.model.projects)
+            ProjectInput(text: self.$model.currentText, projects: self.model.projects, projectsModel: model)
             .frame(width: 300)
         }
     }

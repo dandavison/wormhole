@@ -7,6 +7,7 @@ import Combine
 struct ProjectTextField<V: Equatable>: NSViewRepresentable {
     @Binding var text: String
     @ObservedObject var model: ProjectSelectorModel<V>
+    @ObservedObject var projectsModel: ProjectsModel
 
     func makeNSView(context: Context) -> NSSearchField {
         let searchField = NSSearchField(frame: .zero)
@@ -65,19 +66,21 @@ struct ProjectTextField<V: Equatable>: NSViewRepresentable {
     }
 
     func makeCoordinator() -> Coordinator {
-        return Coordinator(text: self.$text, model: self.model)
+        return Coordinator(text: self.$text, model: self.model, projectsModel: self.projectsModel)
     }
 
     class Coordinator: NSObject, NSSearchFieldDelegate, NSWindowDelegate, NSTableViewDataSource, NSTableViewDelegate {
         @Binding var text: String
         var model: ProjectSelectorModel<V>
+        var projectsModel: ProjectsModel
         var didChangeSelectionSubscription: AnyCancellable?
         var frameDidChangeSubscription: AnyCancellable?
         var updatingSelectedRange: Bool = false
 
-        init(text: Binding<String>, model: ProjectSelectorModel<V>) {
+        init(text: Binding<String>, model: ProjectSelectorModel<V>, projectsModel: ProjectsModel) {
             self._text = text
             self.model = model
+            self.projectsModel = projectsModel
 
             super.init()
 
@@ -164,6 +167,12 @@ struct ProjectTextField<V: Equatable>: NSViewRepresentable {
                     self.model.confirmProject(only, modifier: true)
                 }
 
+                return true
+            }
+
+            // Tab toggles between current and available projects
+            if commandSelector == #selector(NSResponder.insertTab(_:)) {
+                self.projectsModel.toggleMode()
                 return true
             }
 

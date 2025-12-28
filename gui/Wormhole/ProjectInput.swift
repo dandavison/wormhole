@@ -12,7 +12,8 @@ struct Project<V: Equatable>: Equatable {
 struct ProjectInput<V: Equatable>: View {
     @Binding var text: String
     var projects: [Project<V>]
-    
+    @ObservedObject var projectsModel: ProjectsModel
+
     @StateObject var model = ProjectSelectorModel<V>()
 
     var body: some View {
@@ -23,8 +24,8 @@ struct ProjectInput<V: Equatable>: View {
             model.selectedProject = nil
         }
         model.textBinding = self.$text
-        
-        return ProjectTextField(text: self.$text, model: model)
+
+        return ProjectTextField(text: self.$text, model: model, projectsModel: projectsModel)
             .borderlessWindow(isVisible: Binding<Bool>(get: { model.projectsVisible && !model.projects.isEmpty }, set: { model.projectsVisible = $0 }),
                               behavior: .transient,
                               anchor: .bottomLeading,

@@ -205,5 +205,6 @@ impl Drop for WormholeTest {
         let _ = Command::new("tmux")
             .args(["-L", &self.tmux_socket, "kill-server"])
             .output();
+        self.focus_terminal();
     }
 }

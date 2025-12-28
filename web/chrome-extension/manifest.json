@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "Wormhole",
+  "version": "1.0",
+  "description": "Redirects GitHub file links to local Wormhole server",
+  "permissions": [
+    "declarativeNetRequest"
+  ],
+  "host_permissions": [
+    "https://github.com/*"
+  ],
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "ruleset_1",
+        "enabled": true,
+        "path": "rules.json"
+      }
+    ]
+  },
+  "icons": {
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}
+

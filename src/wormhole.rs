@@ -95,7 +95,12 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
             determine_requested_operation(&path, params.line, params.land_in, params.names)
         {
             thread::spawn(move || project_path.open(mutation, land_in));
-            Ok(Response::new(Body::from("Sent into wormhole.")))
+            Ok(Response::builder()
+                .header("Content-Type", "text/html")
+                .body(Body::from(
+                    "<html><body><script>window.close()</script>Sent into wormhole.</body></html>",
+                ))
+                .unwrap())
         } else {
             let redirect_to = format!(
                 "https://github.com{path}#L{}?wormhole=false",

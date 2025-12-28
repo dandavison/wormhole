@@ -54,8 +54,12 @@ pub enum Command {
         land_in: Option<String>,
     },
 
-    /// List all open projects
-    List,
+    /// List projects (current and available)
+    List {
+        /// Output format: text (default) or json
+        #[arg(long, default_value = "text")]
+        format: String,
+    },
 
     /// Close a project (editor and terminal windows)
     Close {
@@ -220,10 +224,21 @@ pub fn run(command: Command) -> Result<(), String> {
             Ok(())
         }
 
-        Command::List => {
+        Command::List { format } => {
             let response = client.get("/list-projects/")?;
-            if !response.is_empty() {
+            if format == "json" {
                 println!("{}", response);
+            } else {
+                // Parse JSON and print current projects as plain text
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response) {
+                    if let Some(current) = json.get("current").and_then(|v| v.as_array()) {
+                        for name in current {
+                            if let Some(s) = name.as_str() {
+                                println!("{}", s);
+                            }
+                        }
+                    }
+                }
             }
             Ok(())
         }

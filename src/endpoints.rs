@@ -1,22 +1,55 @@
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 
 use hyper::{Body, Response};
-use itertools::Itertools;
 
 use crate::{config, hammerspoon, projects, util::debug};
 
+/// Return JSON with current and available projects
 pub fn list_projects() -> Response<Body> {
-    let mut names: VecDeque<_> = projects::lock()
+    // Get currently open projects
+    let mut current: VecDeque<_> = projects::lock()
         .open()
         .into_iter()
         .map(|p| p.name)
         .collect();
-    if !names.is_empty() {
-        // These names will be used by selector UIs; rotate so that current
-        // project is last.
-        names.rotate_left(1);
+    if !current.is_empty() {
+        // Rotate so current project is last (for selector UIs)
+        current.rotate_left(1);
     }
-    Response::new(Body::from(names.iter().map(|s| s.as_str()).join("\n")))
+    let seen: HashSet<String> = current.iter().cloned().collect();
+
+    // Get available projects (excluding already open ones and dotfiles)
+    let mut available: Vec<String> = Vec::new();
+    for search_dir in config::search_paths() {
+        if let Ok(entries) = std::fs::read_dir(&search_dir) {
+            for entry in entries.flatten() {
+                if entry.path().is_dir() {
+                    if let Some(name) = entry.file_name().to_str() {
+                        if !name.starts_with('.')
+                            && !seen.contains(name)
+                            && !available.contains(&name.to_string())
+                        {
+                            available.push(name.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    available.sort();
+
+    let current: Vec<&str> = current.iter().map(|s| s.as_str()).collect();
+    let available: Vec<&str> = available.iter().map(|s| s.as_str()).collect();
+
+    let json = serde_json::json!({
+        "current": current,
+        "available": available
+    });
+
+    Response::builder()
+        .header("Content-Type", "application/json")
+        .body(Body::from(json.to_string()))
+        .unwrap()
 }
 
 pub fn debug_projects() -> Response<Body> {

@@ -18,7 +18,7 @@ pub fn list_projects() -> Response<Body> {
     }
     let seen: HashSet<String> = current.iter().cloned().collect();
 
-    // Get available projects (excluding already open ones and dotfiles)
+    // Get available projects (excluding already open ones, dotfiles, and config exclusions)
     let mut available: Vec<String> = Vec::new();
     for search_dir in config::search_paths() {
         if let Ok(entries) = std::fs::read_dir(&search_dir) {
@@ -28,6 +28,7 @@ pub fn list_projects() -> Response<Body> {
                         if !name.starts_with('.')
                             && !seen.contains(name)
                             && !available.contains(&name.to_string())
+                            && !config::is_excluded(name)
                         {
                             available.push(name.to_string());
                         }

@@ -1,5 +1,7 @@
 use crate::editor::Editor;
 use crate::terminal::Terminal;
+use glob::Pattern;
+use serde::Deserialize;
 use std::sync::OnceLock;
 
 pub const EDITOR: Editor = Editor::Cursor;
@@ -33,4 +35,52 @@ pub fn search_paths() -> Vec<std::path::PathBuf> {
         .filter(|s| !s.is_empty())
         .map(std::path::PathBuf::from)
         .collect()
+}
+
+/// Config from .wormhole.toml file
+#[derive(Debug, Deserialize, Default)]
+pub struct WormholeConfig {
+    #[serde(default)]
+    pub available: AvailableConfig,
+}
+
+#[derive(Debug, Deserialize, Default)]
+pub struct AvailableConfig {
+    /// Glob patterns to exclude from available projects
+    #[serde(default)]
+    pub exclude: Vec<String>,
+}
+
+static CONFIG: OnceLock<WormholeConfig> = OnceLock::new();
+
+pub fn config() -> &'static WormholeConfig {
+    CONFIG.get_or_init(|| {
+        let config_path = std::env::current_dir()
+            .ok()
+            .map(|p| p.join(".wormhole.toml"));
+
+        if let Some(path) = config_path {
+            if path.exists() {
+                if let Ok(contents) = std::fs::read_to_string(&path) {
+                    if let Ok(config) = toml::from_str(&contents) {
+                        return config;
+                    }
+                }
+            }
+        }
+        WormholeConfig::default()
+    })
+}
+
+/// Check if a project name should be excluded based on config
+pub fn is_excluded(name: &str) -> bool {
+    config()
+        .available
+        .exclude
+        .iter()
+        .any(|pattern| {
+            Pattern::new(pattern)
+                .map(|p| p.matches(name))
+                .unwrap_or(false)
+        })
 }

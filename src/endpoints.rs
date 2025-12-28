@@ -1,4 +1,4 @@
-use std::collections::{HashSet, VecDeque};
+use std::collections::{BTreeSet, VecDeque};
 
 use hyper::{Body, Response};
 
@@ -18,24 +18,20 @@ pub fn list_projects() -> Response<Body> {
     }
 
     // Get available projects
-    let mut available: Vec<String> = Vec::new();
+    let mut available: BTreeSet<String> = BTreeSet::new();
     for search_dir in config::search_paths() {
         if let Ok(entries) = std::fs::read_dir(&search_dir) {
             for entry in entries.flatten() {
                 if entry.path().is_dir() {
                     if let Some(name) = entry.file_name().to_str() {
-                        if !name.starts_with('.')
-                            && !available.contains(&name.to_string())
-                            && !config::is_excluded(name)
-                        {
-                            available.push(name.to_string());
+                        if !name.starts_with('.') && !config::is_excluded(name) {
+                            available.insert(name.to_string());
                         }
                     }
                 }
             }
         }
     }
-    available.sort();
 
     let current: Vec<&str> = current.iter().map(|s| s.as_str()).collect();
     let available: Vec<&str> = available.iter().map(|s| s.as_str()).collect();

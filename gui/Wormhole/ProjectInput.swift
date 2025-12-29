@@ -27,16 +27,15 @@ struct ProjectInput<V: Equatable>: View {
 
         return ProjectTextField(text: self.$text, model: model, projectsModel: projectsModel)
             .borderlessWindow(isVisible: Binding<Bool>(get: { model.projectsVisible && !model.projects.isEmpty }, set: { model.projectsVisible = $0 }),
-                              behavior: .transient,
+                              behavior: .semitransient,
                               anchor: .bottomLeading,
                               windowAnchor: .topLeading,
-                              windowOffset: CGPoint(x: -20, y: -16)) {
+                              windowOffset: CGPoint(x: -28, y: -12)) {
                 ProjectPopup(model: model)
-                    .frame(width: model.width)
-                    .background(VisualEffectBlur(material: .popover, blendingMode: .behindWindow, cornerRadius: 8))
-                    .overlay(RoundedRectangle(cornerRadius: 8)
-                                .stroke(lineWidth: 1)
-                                .foregroundColor(Color(white: 0.6, opacity: 0.2))
+                    .frame(width: model.width + 16)  // Match container width (340 + 8px padding each side)
+                    .background(
+                        UnevenRoundedRectangle(topLeadingRadius: 0, bottomLeadingRadius: 10, bottomTrailingRadius: 10, topTrailingRadius: 0)
+                            .fill(Color(red: 0.02, green: 0.02, blue: 0.04))
                     )
                     .shadow(color: Color(white: 0, opacity: 0.10),
                             radius: 5, x: 0, y: 2)

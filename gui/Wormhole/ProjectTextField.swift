@@ -18,8 +18,23 @@ struct ProjectTextField<V: Equatable>: NSViewRepresentable {
         searchField.setContentHuggingPriority(NSLayoutConstraint.Priority(rawValue: 1), for: .horizontal)
         searchField.delegate = context.coordinator
 
-        let searchFieldCell = searchField.cell!
+        // Dark theme styling
+        searchField.appearance = NSAppearance(named: .darkAqua)
+        searchField.textColor = NSColor(red: 0.4, green: 0.8, blue: 1.0, alpha: 1.0) // Cyan text
+        searchField.backgroundColor = NSColor(red: 0.05, green: 0.05, blue: 0.08, alpha: 1.0)
+        searchField.drawsBackground = true
+        searchField.focusRingType = .none
+        searchField.bezelStyle = .roundedBezel
+        searchField.wantsLayer = true
+        searchField.layer?.borderColor = NSColor(red: 0.2, green: 0.6, blue: 0.8, alpha: 0.5).cgColor
+        searchField.layer?.borderWidth = 1
+        searchField.layer?.cornerRadius = 6
+        searchField.placeholderString = ""
+
+        let searchFieldCell = searchField.cell as! NSSearchFieldCell
         searchFieldCell.lineBreakMode = .byWordWrapping
+        searchFieldCell.searchButtonCell = nil  // Remove magnifying glass
+        searchFieldCell.cancelButtonCell = nil  // Remove X button
 
         context.coordinator.searchField = searchField
 

@@ -31,3 +31,4 @@ Wormhole then opens the file in your local editor at the correct line.
 
 To add custom icons, place `icon48.png` (48x48) and `icon128.png` (128x128) in this directory.
 
+

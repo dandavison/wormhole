@@ -1,17 +1,16 @@
 //
-//  ProjectsDemoApp.swift
-//  ProjectsDemo
-//
-//  Created by Stephan Michels on 16.09.20.
+//  WormholeApp.swift
+//  Wormhole
 //
 
 import SwiftUI
 
 @main
-struct ProjectsDemoApp: App {
+struct WormholeApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
         }
+        .windowStyle(.hiddenTitleBar)
     }
 }

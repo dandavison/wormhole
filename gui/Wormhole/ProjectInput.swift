@@ -33,10 +33,9 @@ struct ProjectInput<V: Equatable>: View {
                               windowOffset: CGPoint(x: -20, y: -16)) {
                 ProjectPopup(model: model)
                     .frame(width: model.width)
-                    .background(VisualEffectBlur(material: .popover, blendingMode: .behindWindow, cornerRadius: 8))
-                    .overlay(RoundedRectangle(cornerRadius: 8)
-                                .stroke(lineWidth: 1)
-                                .foregroundColor(Color(white: 0.6, opacity: 0.2))
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color(red: 0.02, green: 0.02, blue: 0.04))
                     )
                     .shadow(color: Color(white: 0, opacity: 0.10),
                             radius: 5, x: 0, y: 2)

@@ -4,15 +4,14 @@ struct ContentView: View {
     @StateObject var model = ProjectsModel()
 
     var body: some View {
-        ZStack {
-            Color(red: 0.02, green: 0.02, blue: 0.04)
-                .ignoresSafeArea()
-            ProjectInput(text: self.$model.currentText, projects: self.model.projects, projectsModel: model)
-                .frame(width: 340)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-        }
-        .background(WindowAccessor())
+        ProjectInput(text: self.$model.currentText, projects: self.model.projects, projectsModel: model)
+            .frame(width: 340)
+            .padding(8)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color(red: 0.02, green: 0.02, blue: 0.04))
+            )
+            .background(WindowAccessor())
     }
 }
 
@@ -23,12 +22,8 @@ struct WindowAccessor: NSViewRepresentable {
         DispatchQueue.main.async {
             if let window = view.window {
                 window.isOpaque = false
-                window.backgroundColor = NSColor(red: 0.02, green: 0.02, blue: 0.04, alpha: 1.0)
-                window.hasShadow = true
-                // Make corners rounded
-                window.contentView?.wantsLayer = true
-                window.contentView?.layer?.cornerRadius = 10
-                window.contentView?.layer?.masksToBounds = true
+                window.backgroundColor = .clear
+                window.hasShadow = false
                 // Hide traffic light buttons
                 window.standardWindowButton(.closeButton)?.isHidden = true
                 window.standardWindowButton(.miniaturizeButton)?.isHidden = true

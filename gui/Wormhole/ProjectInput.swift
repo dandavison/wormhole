@@ -30,11 +30,11 @@ struct ProjectInput<V: Equatable>: View {
                               behavior: .transient,
                               anchor: .bottomLeading,
                               windowAnchor: .topLeading,
-                              windowOffset: CGPoint(x: -20, y: -16)) {
+                              windowOffset: CGPoint(x: -28, y: -16)) {
                 ProjectPopup(model: model)
-                    .frame(width: model.width)
+                    .frame(width: model.width + 16)  // Match container width (340 + 8px padding each side)
                     .background(
-                        RoundedRectangle(cornerRadius: 8)
+                        RoundedRectangle(cornerRadius: 10)
                             .fill(Color(red: 0.02, green: 0.02, blue: 0.04))
                     )
                     .shadow(color: Color(white: 0, opacity: 0.10),

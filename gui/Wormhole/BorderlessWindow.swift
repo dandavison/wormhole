@@ -27,17 +27,17 @@ extension CGRect {
 public enum BorderlessWindowBehavior {
     /// Your application assumes responsibility for closing the popover.
     case applicationDefined
-    
+
     /// The view will close the window when the user interacts with a user interface element outside the window.
     case transient
-    
+
     /// The view will close the popover when the user interacts with user interface elements in the window containing the popover's positioning view.
     case semitransient
 }
 
 #if os(macOS)
 public class MyWindow: NSWindow {
-    
+
 }
 
 public struct BorderlessWindow<Content>: NSViewRepresentable where Content: View {
@@ -47,7 +47,7 @@ public struct BorderlessWindow<Content>: NSViewRepresentable where Content: View
     private let windowAnchor: UnitPoint
     private let windowOffset: CGPoint
     private let content: () -> Content
-    
+
     public init(isVisible: Binding<Bool>,
                 behavior: BorderlessWindowBehavior = .applicationDefined,
                 anchor: UnitPoint = .center,
@@ -61,17 +61,17 @@ public struct BorderlessWindow<Content>: NSViewRepresentable where Content: View
         self.windowOffset = windowOffset
         self.content = content
     }
-    
+
     public func makeNSView(context: Context) -> NSView {
         NSView(frame: .zero)
     }
-    
+
     public func updateNSView(_ view: NSView,
                              context: Context) {
         context.coordinator.hostingViewController.rootView = AnyView(self.content())
-        
+
         let window = context.coordinator.window
-        
+
         // Ensure that the visiblity has changed
         let isVisible = self.isVisible
         if isVisible != window.isVisible {
@@ -80,7 +80,7 @@ public struct BorderlessWindow<Content>: NSViewRepresentable where Content: View
                     parentWindow.addChildWindow(window, ordered: .above)
                 }
                 window.makeKeyAndOrderFront(nil)
-                
+
                 window.alphaValue = 1.0
             } else {
                 NSAnimationContext.runAnimationGroup { context in
@@ -95,7 +95,7 @@ public struct BorderlessWindow<Content>: NSViewRepresentable where Content: View
                 }
             }
         }
-        
+
         // set position of the window
         var viewFrame = view.convert(view.bounds, to: nil)
         viewFrame = view.window?.convertToScreen(viewFrame) ?? viewFrame
@@ -103,36 +103,36 @@ public struct BorderlessWindow<Content>: NSViewRepresentable where Content: View
 
         var windowFrame = window.frame
         let windowPoint = windowFrame.point(anchor: self.windowAnchor)
-        
+
         var shift: CGPoint = viewPoint
         let windowOffset = self.windowOffset
         shift.x += windowOffset.x
         shift.y -= windowOffset.y
         shift.x -= windowPoint.x
         shift.y -= windowPoint.y
-        
+
         if !shift.equalTo(.zero) {
             windowFrame.origin.x += shift.x
             windowFrame.origin.y += shift.y
             window.setFrame(windowFrame, display: false)
         }
     }
-    
+
     public func makeCoordinator() -> Coordinator {
         Coordinator(self)
     }
-    
+
     public class Coordinator: NSObject, NSWindowDelegate {
         private var parent: BorderlessWindow
-        
+
         fileprivate let window: NSWindow
         fileprivate let hostingViewController: NSHostingController<AnyView>
         private var localMouseDownEventMonitor: Any?
         private var didResizeSubscription: AnyCancellable?
-        
+
         fileprivate init(_ parent: BorderlessWindow) {
             self.parent = parent
-            
+
             let window = NSWindow(contentRect: .zero,
                                   styleMask: [.borderless],
                                   backing: .buffered,
@@ -142,27 +142,37 @@ public struct BorderlessWindow<Content>: NSViewRepresentable where Content: View
             window.hidesOnDeactivate = true
             window.isExcludedFromWindowsMenu = true
             window.isReleasedWhenClosed = false
+            window.hasShadow = false
+            window.appearance = NSAppearance(named: .darkAqua)
             self.window = window
-            
+
             let hostingViewController = NSHostingController(rootView: AnyView(EmptyView()))
+            hostingViewController.view.wantsLayer = true
+            hostingViewController.view.layer?.backgroundColor = NSColor.clear.cgColor
+            hostingViewController.view.layer?.borderWidth = 0
+            hostingViewController.view.layer?.borderColor = nil
+            window.contentView?.wantsLayer = true
+            window.contentView?.layer?.backgroundColor = NSColor.clear.cgColor
+            window.contentView?.layer?.borderWidth = 0
+            window.contentView?.layer?.borderColor = nil
             window.contentViewController = hostingViewController
             self.hostingViewController = hostingViewController
-            
+
             super.init()
-            
+
             window.delegate = self
-            
+
             let behaviour = self.parent.behavior
             if behaviour != .applicationDefined {
                 self.localMouseDownEventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] (event) -> NSEvent? in
                     guard let self = self else {
                         return event
                     }
-                    
+
                     if !self.window.isVisible {
                         return event
                     }
-                    
+
                     // If the mouse event is in the project window, then there is nothing to do.
                     if event.window != self.window {
                         if behaviour == .semitransient {
@@ -175,7 +185,7 @@ public struct BorderlessWindow<Content>: NSViewRepresentable where Content: View
                             return nil
                         }
                     }
-                    
+
                     return event
                 }
             }
@@ -190,7 +200,7 @@ public struct BorderlessWindow<Content>: UIViewRepresentable where Content: View
     private let windowAnchor: UnitPoint
     private let windowOffset: CGPoint
     private let content: () -> Content
-    
+
     public init(isVisible: Binding<Bool>,
                 behavior: BorderlessWindowBehavior = .applicationDefined,
                 anchor: UnitPoint = .center,
@@ -204,18 +214,18 @@ public struct BorderlessWindow<Content>: UIViewRepresentable where Content: View
         self.windowOffset = windowOffset
         self.content = content
     }
-    
+
     public func makeUIView(context: Context) -> UIView {
         UIView(frame: .zero)
     }
-    
+
     public func updateUIView(_ view: UIView,
                              context: Context) {
         let hostingViewController = context.coordinator.hostingViewController
         hostingViewController.rootView = AnyView(self.content().statusBar(hidden: true).edgesIgnoringSafeArea(.all))
-        
+
         let window = context.coordinator.window
-        
+
         // Ensure that the visiblity has changed
         let isVisible = self.isVisible
         if isVisible == window.isHidden {
@@ -230,52 +240,52 @@ public struct BorderlessWindow<Content>: UIViewRepresentable where Content: View
                 window.isHidden = true
             }
         }
-        
+
         // set position of the window
         var viewFrame = view.convert(view.bounds, to: nil)
         viewFrame = view.window?.convert(viewFrame, to: nil) ?? viewFrame
         let viewPoint = viewFrame.point(anchor: self.anchor)
-        
+
         var windowFrame = window.frame
         windowFrame.size = hostingViewController.sizeThatFits(in: view.window?.bounds.size ?? .zero)
-        
+
         let windowPoint = windowFrame.point(anchor: self.windowAnchor)
-        
+
         var shift: CGPoint = viewPoint
         let windowOffset = self.windowOffset
         shift.x += windowOffset.x
         shift.y += windowOffset.y
         shift.x -= windowPoint.x
         shift.y -= windowPoint.y
-        
+
         windowFrame.origin.x += shift.x
         windowFrame.origin.y += shift.y
-        
+
         if !window.frame.equalTo(windowFrame) {
             window.frame = windowFrame
         }
     }
-    
+
     public func makeCoordinator() -> Coordinator {
         Coordinator(self)
     }
-    
+
     public class Coordinator: NSObject {
         private var parent: BorderlessWindow
-        
+
         fileprivate let window: UIWindow
         fileprivate let hostingViewController: UIHostingController<AnyView>
-        
+
         fileprivate init(_ parent: BorderlessWindow) {
             self.parent = parent
-            
+
             let window = UIWindow(frame: .zero)
             window.windowLevel = .alert
             window.isOpaque = false
             window.backgroundColor = .clear
             window.canResizeToFitContent = true
             self.window = window
-            
+
             let hostingViewController = UIHostingController(rootView: AnyView(EmptyView().statusBar(hidden: true).edgesIgnoringSafeArea(.all)))
             hostingViewController.view.backgroundColor = .clear
             window.rootViewController = hostingViewController

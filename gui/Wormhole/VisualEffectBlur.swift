@@ -13,7 +13,7 @@ public struct VisualEffectBlur: View {
     private let material: NSVisualEffectView.Material
     private let blendingMode: NSVisualEffectView.BlendingMode
     private let cornerRadius: CGFloat
-    
+
     public init(material: NSVisualEffectView.Material = .headerView,
                 blendingMode: NSVisualEffectView.BlendingMode = .behindWindow,
                 cornerRadius: CGFloat = 0) {
@@ -21,7 +21,7 @@ public struct VisualEffectBlur: View {
         self.blendingMode = blendingMode
         self.cornerRadius = cornerRadius
     }
-    
+
     public var body: some View {
         Representable(material: self.material,
                       blendingMode: self.blendingMode,
@@ -37,7 +37,7 @@ extension VisualEffectBlur {
         var material: NSVisualEffectView.Material
         var blendingMode: NSVisualEffectView.BlendingMode
         var cornerRadius: CGFloat
-        
+
         func maskImage(cornerRadius: CGFloat) -> NSImage? {
             guard cornerRadius > 0 else {
                 return nil
@@ -53,31 +53,33 @@ extension VisualEffectBlur {
             maskImage.resizingMode = .stretch
             return maskImage
         }
-        
+
         func makeNSView(context: Context) -> NSVisualEffectView {
 //            context.coordinator.visualEffectView
             return NSVisualEffectView()
         }
-        
+
         func updateNSView(_ view: NSVisualEffectView, context: Context) {
 //            context.coordinator.update(material: material)
             view.material = self.material
             view.blendingMode = self.blendingMode
-            
+
 //            view.maskImage = self.maskImage(cornerRadius: self.cornerRadius)
             view.wantsLayer = true
             view.layer?.cornerRadius = self.cornerRadius
             view.layer?.masksToBounds = true
+            view.layer?.borderWidth = 0
+            view.layer?.borderColor = NSColor.clear.cgColor
         }
-        
+
 //        func makeCoordinator() -> Coordinator {
 //            Coordinator()
 //        }
     }
-    
+
     /*class Coordinator {
         let visualEffectView = NSVisualEffectView()
-        
+
         func update(material: NSVisualEffectView.Material) {
             visualEffectView.material = material
             visualEffectView.blendingMode = blendingMode
@@ -91,10 +93,10 @@ struct VisualEffectView_Previews: PreviewProvider {
     static var previews: some View {
         ZStack {
             LinearGradient(gradient: Gradient(colors: [.red, .blue]), startPoint: .topLeading, endPoint: .bottomTrailing)
-            
+
             VisualEffectBlur(blendingMode: .withinWindow)
                 .padding()
-            
+
             Text("Hello World!")
         }
         .frame(width: 200, height: 100)

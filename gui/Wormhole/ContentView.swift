@@ -8,7 +8,7 @@ struct ContentView: View {
             .frame(width: 340)
             .padding(8)
             .background(
-                RoundedRectangle(cornerRadius: 10)
+                UnevenRoundedRectangle(topLeadingRadius: 10, bottomLeadingRadius: 0, bottomTrailingRadius: 0, topTrailingRadius: 10)
                     .fill(Color(red: 0.02, green: 0.02, blue: 0.04))
             )
             .background(WindowAccessor())

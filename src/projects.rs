@@ -94,7 +94,8 @@ impl<'a> Projects<'a> {
 
     pub fn add(&mut self, path: &str, names: Vec<String>) {
         let path = PathBuf::from(path.to_string());
-        // HACK: never add home directory as a project
+        let path = std::fs::canonicalize(&path).unwrap_or(path);
+        // Never add home directory as a project
         if Some(path.as_path()) == dirs::home_dir().as_deref() {
             return;
         }
@@ -142,6 +143,8 @@ impl<'a> Projects<'a> {
 
     /// Find project whose path is a prefix of query_path (for file lookups)
     pub fn by_path(&self, query_path: &Path) -> Option<Project> {
+        let query_path =
+            std::fs::canonicalize(query_path).unwrap_or_else(|_| query_path.to_path_buf());
         self.0
             .iter()
             .filter(|p| query_path.starts_with(&p.path))
@@ -151,6 +154,7 @@ impl<'a> Projects<'a> {
 
     /// Find project at exactly this path (for project switching)
     pub fn by_exact_path(&self, path: &Path) -> Option<Project> {
+        let path = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
         self.0.iter().find(|p| p.path == path).cloned()
     }
 

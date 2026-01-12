@@ -20,8 +20,12 @@ struct ProjectInput<V: Equatable>: View {
         let model = self.model
         if model.projects != self.projects {
             model.projects = self.projects
-
-            model.selectedProject = nil
+            // Auto-select first project only when text is empty (initial load)
+            if self.text.isEmpty {
+                model.selectedProject = self.projects.first
+            } else {
+                model.selectedProject = nil
+            }
         }
         model.textBinding = self.$text
 

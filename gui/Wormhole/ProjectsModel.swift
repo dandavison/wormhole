@@ -28,8 +28,10 @@ final class ProjectsModel: ObservableObject {
     }
 
     func toggleMode() {
-        showingAvailable.toggle()
-        updateProjectsList()
+        DispatchQueue.main.async {
+            self.showingAvailable.toggle()
+            self.updateProjectsList()
+        }
     }
 
     private func updateProjectsList() {
@@ -58,6 +60,7 @@ final class ProjectsModel: ObservableObject {
                     .store(in: &cancellables)
 
                 self.$showingAvailable
+                    .receive(on: DispatchQueue.main)
                     .sink { [weak self] _ in
                         self?.updateProjectsList()
                     }

@@ -95,6 +95,7 @@ pub fn pin_current() {
         let app = hammerspoon::current_application();
         drop(projects); // Release lock before modifying KV
         crate::kv::set_value_sync(&current.name, "land-in", app.as_str());
+        hammerspoon::alert("📌");
         if debug() {
             crate::ps!("Pinned {}: land-in={}", current.name, app.as_str());
         }

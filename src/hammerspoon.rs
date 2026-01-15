@@ -57,6 +57,10 @@ pub fn close_window(application_name: &str, title_pattern: &str) {
     ));
 }
 
+pub fn alert(message: &str) {
+    hammerspoon(&format!(r#"hs.alert.show("{message}", 0.5)"#,));
+}
+
 fn hammerspoon(lua: &str) -> Vec<u8> {
     let output = Command::new("hs")
         .arg("-c")

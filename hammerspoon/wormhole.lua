@@ -1,18 +1,85 @@
 -- Wormhole Hammerspoon integration
 -- Usage in init.lua:
 --   local wormhole = require("wormhole")
---   hs.hotkey.bind({}, "f13", wormhole.select)
+--   wormhole.bindSelect({ "cmd" }, "f13")
 --   hs.hotkey.bind({ "cmd", "control" }, "left", wormhole.previous)
 --   etc.
 
 local M = {}
 
 M.host = "http://wormhole:7117"
+M.selectRepeatInterval = 0.08 -- seconds between cycles when holding key
+M.selectDebounce = 0.02       -- minimum seconds between down arrows
+
+local selectTimer = nil
+local selectTap = nil
+local selectActive = false
+local lastDownTime = 0
+
+local function sendDown()
+    local now = hs.timer.secondsSinceEpoch()
+    if now - lastDownTime < M.selectDebounce then return end
+    lastDownTime = now
+    local down = hs.eventtap.event.newKeyEvent({}, "down", true)
+    local up = hs.eventtap.event.newKeyEvent({}, "down", false)
+    down:post()
+    up:post()
+end
+
+local function stopSelect()
+    selectActive = false
+    local t = selectTimer
+    selectTimer = nil
+    if t then t:stop() end
+end
+
+local function startSelect()
+    if selectActive then return end
+    selectActive = true
+    local frontApp = hs.application.frontmostApplication()
+    if not (frontApp and frontApp:name() == "Wormhole") then
+        hs.application.launchOrFocus("/Applications/Wormhole.app")
+    end
+    selectTimer = hs.timer.doEvery(M.selectRepeatInterval, function()
+        if not selectTimer or not selectActive then return end
+        local frontApp = hs.application.frontmostApplication()
+        if frontApp and frontApp:name() == "Wormhole" then
+            sendDown()
+        else
+            stopSelect()
+        end
+    end)
+end
+
+function M.bindSelect(mods, key)
+    local keyCode = hs.keycodes.map[key]
+    local wantCmd = false
+    for _, m in ipairs(mods) do
+        if m == "cmd" then wantCmd = true end
+    end
+
+    selectTap = hs.eventtap.new({ hs.eventtap.event.types.keyDown, hs.eventtap.event.types.keyUp }, function(event)
+        if event:getKeyCode() ~= keyCode then return false end
+
+        if event:getType() == hs.eventtap.event.types.keyDown then
+            local flags = event:getFlags()
+            if wantCmd and not flags.cmd then return false end
+            startSelect()
+            return true
+        else
+            if selectActive then
+                stopSelect()
+                return true
+            end
+            return false
+        end
+    end)
+    selectTap:start()
+end
 
 function M.select()
     local frontApp = hs.application.frontmostApplication()
     if frontApp and frontApp:name() == "Wormhole" then
-        -- Already focused: cycle to next project (cmd-tab style)
         hs.eventtap.keyStroke({}, "down")
     else
         hs.application.launchOrFocus("/Applications/Wormhole.app")
@@ -116,7 +183,7 @@ function M.bindProjectHotkeys(keymap)
 end
 
 function M.bindKeys(keymap)
-    hs.hotkey.bind({ "cmd" }, "f13", M.select)
+    M.bindSelect({ "cmd" }, "f13")
     hs.hotkey.bind({ "cmd", "control" }, "left", M.previous)
     hs.hotkey.bind({ "cmd", "control" }, "right", M.next)
     hs.hotkey.bind({ "cmd", "control" }, ".", M.pin)

@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::VecDeque;
 
 use hyper::{Body, Response};
 
@@ -17,24 +17,10 @@ pub fn list_projects() -> Response<Body> {
         current.rotate_left(1);
     }
 
-    // Get available projects
-    let mut available: BTreeSet<String> = BTreeSet::new();
-    for search_dir in config::search_paths() {
-        if let Ok(entries) = std::fs::read_dir(&search_dir) {
-            for entry in entries.flatten() {
-                if entry.path().is_dir() {
-                    if let Some(name) = entry.file_name().to_str() {
-                        if !name.starts_with('.') && !config::is_excluded(name) {
-                            available.insert(name.to_string());
-                        }
-                    }
-                }
-            }
-        }
-    }
+    let available = config::available_projects();
 
     let current: Vec<&str> = current.iter().map(|s| s.as_str()).collect();
-    let available: Vec<&str> = available.iter().map(|s| s.as_str()).collect();
+    let available: Vec<&str> = available.keys().map(|s| s.as_str()).collect();
 
     let json = serde_json::json!({
         "current": current,

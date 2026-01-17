@@ -150,13 +150,17 @@ fn determine_requested_operation(
             }
         } else {
             // Search WORMHOLE_PATH for a directory matching this name
-            let found_path = config::search_paths()
-                .into_iter()
-                .map(|dir| dir.join(name_or_path))
-                .find(|p| p.is_dir());
-            if let Some(path) = found_path {
+            // This handles both simple names like "temporal" and prefixed names
+            // like "devenv-temporal" for disambiguating clashing directory names.
+            if let Some(path) = config::resolve_project_name(name_or_path) {
                 let path_str = path.to_string_lossy().to_string();
-                projects.add(&path_str, names);
+                // Use the requested name (e.g. "devenv-temporal") as the project name,
+                // not the directory name, to avoid conflicts with existing projects.
+                let mut project_names = names;
+                if project_names.is_empty() {
+                    project_names = vec![name_or_path.to_string()];
+                }
+                projects.add(&path_str, project_names);
                 let project = projects.by_exact_path(&path);
                 Some((
                     project.map(|p| p.as_project_path()),

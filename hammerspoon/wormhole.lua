@@ -12,8 +12,8 @@ M.host = "http://wormhole:7117"
 function M.select()
     local frontApp = hs.application.frontmostApplication()
     if frontApp and frontApp:name() == "Wormhole" then
-        -- Already focused: toggle between current/available projects
-        hs.eventtap.keyStroke({}, "tab")
+        -- Already focused: cycle to next project (cmd-tab style)
+        hs.eventtap.keyStroke({}, "down")
     else
         hs.application.launchOrFocus("/Applications/Wormhole.app")
     end

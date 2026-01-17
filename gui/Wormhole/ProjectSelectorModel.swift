@@ -13,6 +13,27 @@ internal final class ProjectSelectorModel<V: Equatable>: ObservableObject {
 
     var textBinding: Binding<String>?
 
+    private var commandKeyObserver: NSObjectProtocol?
+
+    init() {
+        commandKeyObserver = NotificationCenter.default.addObserver(
+            forName: .commandKeyReleased,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self = self,
+                  let project = self.selectedProject ?? self.projects.first,
+                  !self.projectConfirmed else { return }
+            self.confirmProject(project, modifier: false)
+        }
+    }
+
+    deinit {
+        if let observer = commandKeyObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
     internal func modifiedText(_ text: String) {
         self.textBinding?.wrappedValue = text
 

@@ -10,7 +10,10 @@ pub fn current_application() -> Application {
         r#"
         local focusedWindow = hs.window.focusedWindow()
         if focusedWindow then
-            print(focusedWindow:application():title())
+            local app = focusedWindow:application()
+            if app then
+                print(app:title())
+            end
         end
     "#,
     ))

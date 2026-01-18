@@ -9,21 +9,19 @@ local M = {}
 
 M.host = "http://wormhole:7117"
 M.selectRepeatInterval = 0.08 -- seconds between cycles when holding key
-M.selectDebounce = 0.02       -- minimum seconds between down arrows
+M.selectDebounce = 0.02 -- minimum seconds between down arrows
 
 local selectTimer = nil
 local selectTap = nil
 local selectActive = false
-local selectReverse = false
-local lastMoveTime = 0
+local lastDownTime = 0
 
-local function sendMove()
+local function sendDown()
     local now = hs.timer.secondsSinceEpoch()
-    if now - lastMoveTime < M.selectDebounce then return end
-    lastMoveTime = now
-    local key = selectReverse and "up" or "down"
-    local down = hs.eventtap.event.newKeyEvent({}, key, true)
-    local up = hs.eventtap.event.newKeyEvent({}, key, false)
+    if now - lastDownTime < M.selectDebounce then return end
+    lastDownTime = now
+    local down = hs.eventtap.event.newKeyEvent({}, "down", true)
+    local up = hs.eventtap.event.newKeyEvent({}, "down", false)
     down:post()
     up:post()
 end
@@ -35,13 +33,9 @@ local function stopSelect()
     if t then t:stop() end
 end
 
-local function startSelect(reverse)
-    if selectActive then
-        selectReverse = reverse
-        return
-    end
+local function startSelect()
+    if selectActive then return end
     selectActive = true
-    selectReverse = reverse
     local frontApp = hs.application.frontmostApplication()
     if not (frontApp and frontApp:name() == "Wormhole") then
         hs.application.launchOrFocus("/Applications/Wormhole.app")
@@ -50,7 +44,7 @@ local function startSelect(reverse)
         if not selectTimer or not selectActive then return end
         local frontApp = hs.application.frontmostApplication()
         if frontApp and frontApp:name() == "Wormhole" then
-            sendMove()
+            sendDown()
         else
             stopSelect()
         end
@@ -70,7 +64,7 @@ function M.bindSelect(mods, key)
         if event:getType() == hs.eventtap.event.types.keyDown then
             local flags = event:getFlags()
             if wantCmd and not flags.cmd then return false end
-            startSelect(flags.shift)
+            startSelect()
             return true
         else
             if selectActive then

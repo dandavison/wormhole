@@ -115,4 +115,13 @@ function M.bindProjectHotkeys(keymap)
     end
 end
 
+function M.bindKeys(keymap)
+    hs.hotkey.bind({ "cmd" }, "f13", M.select)
+    hs.hotkey.bind({ "cmd", "control" }, "left", M.previous)
+    hs.hotkey.bind({ "cmd", "control" }, "right", M.next)
+    hs.hotkey.bind({ "cmd", "control" }, ".", M.pin)
+    hs.hotkey.bind({ "cmd", "alt" }, "k", M.createHotkeyOverlay(keymap))
+    M.bindProjectHotkeys(keymap)
+end
+
 return M

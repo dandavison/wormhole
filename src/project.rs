@@ -1,7 +1,6 @@
 use crate::config;
 use crate::editor::Editor;
 use crate::project_path::ProjectPath;
-use crate::util::{expand_user, panic};
 use crate::wormhole::Application;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -32,38 +31,6 @@ impl Project {
         ProjectPath {
             project: (*self).clone(),
             relative_path: Some(("".into(), None)),
-        }
-    }
-
-    pub fn parse(line: &str) -> Self {
-        let parts: Vec<&str> = line.split("->").collect();
-        let path = PathBuf::from(expand_user(parts[0].trim()));
-        let (name, aliases) = if parts.len() > 1 {
-            let names: Vec<String> = parts[1].split(",").map(|s| s.trim().to_string()).collect();
-            (names[0].clone(), names)
-        } else {
-            let name = path
-                .file_name()
-                .map(|name| name.to_string_lossy().to_string())
-                .unwrap_or_else(|| {
-                    // Handle special cases where path doesn't have a file name
-                    if path == PathBuf::from("/") {
-                        panic("Cannot use root directory '/' as a project path");
-                    } else {
-                        panic(&format!(
-                            "Invalid project path (no file name): {}",
-                            path.display()
-                        ))
-                    }
-                });
-            (name, vec![])
-        };
-        Self {
-            name,
-            path,
-            aliases,
-            kv: HashMap::new(),
-            last_application: None,
         }
     }
 

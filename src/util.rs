@@ -3,7 +3,7 @@ use std::{
     env,
     ffi::OsStr,
     fmt::{Debug, Display},
-    path::{Path, PathBuf},
+    path::Path,
     process::{Command, Output},
 };
 
@@ -29,14 +29,6 @@ pub fn panic(msg: &str) -> ! {
     let msg = format!("PANIC: {}", msg);
     desktop_notification(&msg);
     panic!("{}", msg)
-}
-
-pub fn expand_user(path: &str) -> String {
-    path.replacen("~", &home_dir().to_str().unwrap(), 1)
-}
-
-pub fn home_dir() -> PathBuf {
-    dirs::home_dir().unwrap_or_else(|| panic("Cannot determine home directory"))
 }
 
 pub fn desktop_notification(msg: &str) {

@@ -90,6 +90,7 @@ struct ProjectTextField<V: Equatable>: NSViewRepresentable {
         var projectsModel: ProjectsModel
         var didChangeSelectionSubscription: AnyCancellable?
         var frameDidChangeSubscription: AnyCancellable?
+        var keyEventMonitor: Any?
         var updatingSelectedRange: Bool = false
 
         init(text: Binding<String>, model: ProjectSelectorModel<V>, projectsModel: ProjectsModel) {
@@ -109,6 +110,21 @@ struct ProjectTextField<V: Equatable>: NSViewRepresentable {
                     }
                     self.model.chooseProject(nil)
                 })
+
+            self.keyEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                // F13 key code is 105
+                if event.keyCode == 105 {
+                    self?.projectsModel.toggleMode()
+                    return nil
+                }
+                return event
+            }
+        }
+
+        deinit {
+            if let monitor = keyEventMonitor {
+                NSEvent.removeMonitor(monitor)
+            }
         }
 
         var searchField: NSSearchField! {
@@ -173,12 +189,6 @@ struct ProjectTextField<V: Equatable>: NSViewRepresentable {
                     self.model.confirmProject(only, modifier: landInTerminal)
                 }
 
-                return true
-            }
-
-            // Tab toggles between current and available projects
-            if commandSelector == #selector(NSResponder.insertTab(_:)) {
-                self.projectsModel.toggleMode()
                 return true
             }
 

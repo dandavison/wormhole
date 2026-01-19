@@ -1,7 +1,9 @@
 -- Wormhole Hammerspoon integration
 -- Usage in init.lua:
 --   local wormhole = require("wormhole")
---   wormhole.bindKeys(keymap)
+--   wormhole.bindSelect({ "cmd" }, "f13")
+--   hs.hotkey.bind({ "cmd", "control" }, "left", wormhole.previous)
+--   etc.
 
 local M = {}
 
@@ -187,7 +189,7 @@ function M.bindProjectHotkeys(keymap)
 end
 
 function M.bindKeys(keymap)
-    M.bindSelect({ "cmd" }, "f14") -- e.g. map cmd+tab to cmd+f14 via Karabiner
+    M.bindSelect({ "cmd" }, "f13")
     hs.hotkey.bind({ "cmd", "control" }, "left", M.previous)
     hs.hotkey.bind({ "cmd", "control" }, "right", M.next)
     hs.hotkey.bind({ "cmd", "control" }, ".", M.pin)

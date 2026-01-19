@@ -57,9 +57,9 @@ end
 
 function M.bindSelect(mods, key)
     local keyCode = hs.keycodes.map[key]
-    local wantCmd = false
+    local wantMods = {}
     for _, m in ipairs(mods) do
-        if m == "cmd" then wantCmd = true end
+        wantMods[m] = true
     end
 
     selectTap = hs.eventtap.new({ hs.eventtap.event.types.keyDown, hs.eventtap.event.types.keyUp }, function(event)
@@ -67,7 +67,9 @@ function M.bindSelect(mods, key)
 
         if event:getType() == hs.eventtap.event.types.keyDown then
             local flags = event:getFlags()
-            if wantCmd and not flags.cmd then return false end
+            if wantMods["cmd"] and not flags.cmd then return false end
+            if wantMods["alt"] and not flags.alt then return false end
+            if wantMods["ctrl"] and not flags.ctrl then return false end
             startSelect(flags.shift)
             return true
         else

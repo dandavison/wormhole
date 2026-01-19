@@ -196,12 +196,45 @@ impl<'a> Projects<'a> {
 
 pub fn load() {
     let mut projects = lock();
-    projects.0.extend(
-        config::TERMINAL
-            .project_directories()
-            .iter()
-            .map(|p| Project::parse(p)),
-    );
+
+    // Build a reverse map from canonical path to disambiguated name
+    let available = config::available_projects();
+    let path_to_name: std::collections::HashMap<PathBuf, String> = available
+        .into_iter()
+        .filter_map(|(name, path)| {
+            std::fs::canonicalize(&path)
+                .ok()
+                .map(|canonical| (canonical, name))
+        })
+        .collect();
+
+    for dir in config::TERMINAL.project_directories() {
+        let path = PathBuf::from(&dir);
+        let canonical = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
+
+        // Use the disambiguated name if available, otherwise derive from directory
+        let name = path_to_name
+            .get(&canonical)
+            .cloned()
+            .unwrap_or_else(|| {
+                path.file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("unknown")
+                    .to_string()
+            });
+
+        // Skip if a project with this name already exists
+        if !projects.contains(&name) {
+            projects.0.push_back(Project {
+                name,
+                path: canonical,
+                aliases: vec![],
+                kv: std::collections::HashMap::new(),
+                last_application: None,
+            });
+        }
+    }
+
     crate::kv::load_kv_data(&mut projects);
     if crate::util::debug() {
         projects.print();

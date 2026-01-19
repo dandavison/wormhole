@@ -187,7 +187,7 @@ function M.bindProjectHotkeys(keymap)
 end
 
 function M.bindKeys(keymap)
-    M.bindSelect({ "cmd" }, "f14") -- e.g. map cmd+tab to cmd+f14 via Karabiner
+    M.bindSelect({ "alt" }, "f17") -- option+tab mapped to option+f17 via Karabiner
     hs.hotkey.bind({ "cmd", "control" }, "left", M.previous)
     hs.hotkey.bind({ "cmd", "control" }, "right", M.next)
     hs.hotkey.bind({ "cmd", "control" }, ".", M.pin)

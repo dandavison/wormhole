@@ -7,7 +7,7 @@ import SwiftUI
 import AppKit
 
 extension Notification.Name {
-    static let commandKeyReleased = Notification.Name("commandKeyReleased")
+    static let modifierKeyReleased = Notification.Name("modifierKeyReleased")
 }
 
 @main
@@ -24,17 +24,17 @@ struct WormholeApp: App {
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     var localEventMonitor: Any?
-    var wasCommandPressed = false
+    var wasOptionPressed = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        wasCommandPressed = NSEvent.modifierFlags.contains(.command)
+        wasOptionPressed = NSEvent.modifierFlags.contains(.option)
 
         localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
-            let commandPressed = event.modifierFlags.contains(.command)
-            if let self = self, self.wasCommandPressed && !commandPressed {
-                NotificationCenter.default.post(name: .commandKeyReleased, object: nil)
+            let optionPressed = event.modifierFlags.contains(.option)
+            if let self = self, self.wasOptionPressed && !optionPressed {
+                NotificationCenter.default.post(name: .modifierKeyReleased, object: nil)
             }
-            self?.wasCommandPressed = commandPressed
+            self?.wasOptionPressed = optionPressed
             return event
         }
     }

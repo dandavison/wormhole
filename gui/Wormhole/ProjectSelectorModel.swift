@@ -17,7 +17,7 @@ internal final class ProjectSelectorModel<V: Equatable>: ObservableObject {
 
     init() {
         commandKeyObserver = NotificationCenter.default.addObserver(
-            forName: .commandKeyReleased,
+            forName: .modifierKeyReleased,
             object: nil,
             queue: .main
         ) { [weak self] _ in

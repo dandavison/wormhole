@@ -4,7 +4,7 @@ use std::sync::RwLock;
 use std::thread;
 
 use crate::wormhole::Application;
-use crate::{config, editor, git, project::Project, util::warn};
+use crate::{config, editor, git, project::Project, projects, util::warn};
 
 #[derive(Clone, Debug)]
 pub struct Task {
@@ -159,6 +159,11 @@ pub fn open_task(
             editor_thread.join().unwrap();
             config::EDITOR.focus();
         }
+    }
+
+    let mut projects = projects::lock();
+    if projects.by_name(&task.id).is_none() {
+        projects.add(&task.worktree_path.to_string_lossy(), vec![task.id.clone()]);
     }
 
     Ok(())

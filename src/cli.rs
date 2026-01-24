@@ -4,12 +4,19 @@ use clap_complete::{generate, Shell};
 use std::io;
 
 use crate::config;
+use crate::jira;
 
 #[derive(Parser)]
 #[command(name = "wormhole")]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Command>,
+}
+
+#[derive(Subcommand)]
+pub enum JiraCommand {
+    /// List current sprint issues
+    Sprint,
 }
 
 #[derive(Subcommand)]
@@ -84,6 +91,12 @@ pub enum Command {
 
     /// Show debug information about all projects
     Debug,
+
+    /// JIRA operations
+    Jira {
+        #[command(subcommand)]
+        command: JiraCommand,
+    },
 
     /// Generate shell completions
     Completion {
@@ -292,6 +305,10 @@ pub fn run(command: Command) -> Result<(), String> {
             println!("{}", response);
             Ok(())
         }
+
+        Command::Jira { command } => match command {
+            JiraCommand::Sprint => jira::print_sprint_issues(),
+        },
 
         Command::Completion { shell } => {
             generate(shell, &mut Cli::command(), "wormhole", &mut io::stdout());

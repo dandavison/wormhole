@@ -3,6 +3,7 @@ mod config;
 mod editor;
 mod endpoints;
 mod hammerspoon;
+mod jira;
 mod kv;
 mod project;
 mod project_path;

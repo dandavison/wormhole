@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 
 use hyper::{Body, Response};
 
-use crate::{config, hammerspoon, projects, util::debug};
+use crate::{config, hammerspoon, projects, task, util::debug};
 
 /// Return JSON with current and available projects
 pub fn list_projects() -> Response<Body> {
@@ -26,6 +26,26 @@ pub fn list_projects() -> Response<Body> {
         "current": current,
         "available": available
     });
+
+    Response::builder()
+        .header("Content-Type", "application/json")
+        .body(Body::from(json.to_string()))
+        .unwrap()
+}
+
+pub fn list_tasks() -> Response<Body> {
+    let tasks: Vec<_> = task::list_tasks()
+        .into_iter()
+        .map(|t| {
+            serde_json::json!({
+                "id": t.id,
+                "home_repo": t.home_repo.to_string_lossy(),
+                "worktree_path": t.worktree_path.to_string_lossy()
+            })
+        })
+        .collect();
+
+    let json = serde_json::json!({ "tasks": tasks });
 
     Response::builder()
         .header("Content-Type", "application/json")

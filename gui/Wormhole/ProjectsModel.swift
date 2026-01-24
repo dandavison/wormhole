@@ -6,11 +6,34 @@ struct ProjectsResponse: Codable {
     let available: [String]
 }
 
+struct TasksResponse: Codable {
+    let tasks: [TaskInfo]
+}
+
+struct TaskInfo: Codable {
+    let id: String
+    let home_repo: String
+    let worktree_path: String
+}
+
+enum SelectorMode: Int, CaseIterable {
+    case current = 0
+    case available = 1
+    case tasks = 2
+
+    func next() -> SelectorMode {
+        let allCases = SelectorMode.allCases
+        let nextIndex = (self.rawValue + 1) % allCases.count
+        return allCases[nextIndex]
+    }
+}
+
 final class ProjectsModel: ObservableObject {
     var currentProjects: [String] = []
     var availableProjects: [String] = []
+    var tasks: [String] = []
 
-    @Published var showingAvailable: Bool = false
+    @Published var mode: SelectorMode = .current
     @Published var currentText: String = ""
     @Published var projects: [Project<String>] = []
     @Published var currentProject: String?
@@ -18,7 +41,18 @@ final class ProjectsModel: ObservableObject {
     private var cancellables: Set<AnyCancellable> = []
 
     var activeProjectList: [String] {
-        showingAvailable ? availableProjects : currentProjects
+        switch mode {
+        case .current:
+            return currentProjects
+        case .available:
+            return availableProjects
+        case .tasks:
+            return tasks
+        }
+    }
+
+    var isTaskMode: Bool {
+        mode == .tasks
     }
 
     func fetchProjects() async throws -> ProjectsResponse {
@@ -27,9 +61,15 @@ final class ProjectsModel: ObservableObject {
         return try JSONDecoder().decode(ProjectsResponse.self, from: data)
     }
 
+    func fetchTasks() async throws -> TasksResponse {
+        let url = URL(string: "http://localhost:7117/list-tasks/")!
+        let (data, _) = try await URLSession.shared.data(from: url)
+        return try JSONDecoder().decode(TasksResponse.self, from: data)
+    }
+
     func toggleMode() {
         DispatchQueue.main.async {
-            self.showingAvailable.toggle()
+            self.mode = self.mode.next()
             self.updateProjectsList()
         }
     }
@@ -44,10 +84,15 @@ final class ProjectsModel: ObservableObject {
     init() {
         Task {
             do {
-                let response = try await fetchProjects()
+                async let projectsTask = fetchProjects()
+                async let tasksTask = fetchTasks()
+
+                let (projectsResponse, tasksResponse) = try await (projectsTask, tasksTask)
+
                 await MainActor.run {
-                    self.currentProjects = response.current
-                    self.availableProjects = response.available
+                    self.currentProjects = projectsResponse.current
+                    self.availableProjects = projectsResponse.available
+                    self.tasks = tasksResponse.tasks.map { $0.id }
                     self.updateProjectsList()
                 }
 
@@ -59,7 +104,7 @@ final class ProjectsModel: ObservableObject {
                     }
                     .store(in: &cancellables)
 
-                self.$showingAvailable
+                self.$mode
                     .receive(on: DispatchQueue.main)
                     .sink { [weak self] _ in
                         self?.updateProjectsList()
@@ -76,7 +121,7 @@ final class ProjectsModel: ObservableObject {
                     .assign(to: \ProjectsModel.currentProject, on: self)
                     .store(in: &cancellables)
             } catch {
-                print("Error while fetching projects: \(error)")
+                print("Error while fetching data: \(error)")
             }
         }
     }

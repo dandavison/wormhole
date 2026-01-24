@@ -62,7 +62,9 @@ impl ProjectPath {
                 let editor_thread = thread::spawn(open_editor);
                 terminal_thread.join().unwrap();
                 editor_thread.join().unwrap();
-                config::EDITOR.focus(); // default
+                thread::spawn(move || {
+                    hammerspoon::launch_or_focus(config::EDITOR.application_name())
+                });
             }
         }
         projects.apply(mutation, &self.project.name);

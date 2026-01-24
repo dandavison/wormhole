@@ -16,44 +16,44 @@ fn test_open_project() {
     std::fs::create_dir_all(&dir_a).unwrap();
     std::fs::create_dir_all(&dir_b).unwrap();
 
-    // Create projects using unified /project/ endpoint (upsert behavior)
+    // Create projects using /project/switch/ endpoint (upsert behavior)
     // Small delay between calls since project opening is async and uses Hammerspoon
-    test.hs_get(&format!("/project/{}?name={}", dir_a, proj_a))
+    test.hs_get(&format!("/project/switch/{}?name={}", dir_a, proj_a))
         .unwrap();
     std::thread::sleep(std::time::Duration::from_millis(500));
-    test.hs_get(&format!("/project/{}?name={}", dir_b, proj_b))
+    test.hs_get(&format!("/project/switch/{}?name={}", dir_b, proj_b))
         .unwrap();
     std::thread::sleep(std::time::Duration::from_millis(500));
 
     // Initially, editor gains focus.
-    test.hs_get(&format!("/project/{}", proj_a)).unwrap();
+    test.hs_get(&format!("/project/switch/{}", proj_a)).unwrap();
     test.assert_focus(Editor(&proj_a));
 
     // Switching stays with editor.
-    test.hs_get(&format!("/project/{}", proj_b)).unwrap();
+    test.hs_get(&format!("/project/switch/{}", proj_b)).unwrap();
     test.assert_focus(Editor(&proj_b));
 
     // Now focus the terminal.
     test.focus_terminal();
 
     // Switching now stays with terminal.
-    test.hs_get(&format!("/project/{}", proj_a)).unwrap();
+    test.hs_get(&format!("/project/switch/{}", proj_a)).unwrap();
     test.assert_focus(Terminal(&proj_a));
 
     // land-in=editor overrides: even though we're in terminal, we land in editor
-    test.hs_get(&format!("/project/{}?land-in=editor", proj_b))
+    test.hs_get(&format!("/project/switch/{}?land-in=editor", proj_b))
         .unwrap();
     test.assert_focus(Editor(&proj_b));
 
     // land-in=terminal overrides: even though we're now in editor, we land in terminal
-    test.hs_get(&format!("/project/{}?land-in=terminal", proj_a))
+    test.hs_get(&format!("/project/switch/{}?land-in=terminal", proj_a))
         .unwrap();
     test.assert_focus(Terminal(&proj_a));
 
     // land-in is also respected from project kv store.
     test.hs_put(&format!("/kv/{}/land-in", proj_b), "editor")
         .unwrap();
-    test.hs_get(&format!("/project/{}", proj_b)).unwrap();
+    test.hs_get(&format!("/project/switch/{}", proj_b)).unwrap();
     test.assert_focus(Editor(&proj_b));
 }
 
@@ -69,21 +69,21 @@ fn test_previous_project_and_next_project() {
     std::fs::create_dir_all(&dir_a).unwrap();
     std::fs::create_dir_all(&dir_b).unwrap();
 
-    // Create projects using unified /project/ endpoint
+    // Create projects using /project/switch/ endpoint
     // Small delay between calls since project opening is async and uses Hammerspoon
-    test.hs_get(&format!("/project/{}?name={}", dir_a, proj_a))
+    test.hs_get(&format!("/project/switch/{}?name={}", dir_a, proj_a))
         .unwrap();
     std::thread::sleep(std::time::Duration::from_millis(500));
-    test.hs_get(&format!("/project/{}?name={}", dir_b, proj_b))
+    test.hs_get(&format!("/project/switch/{}?name={}", dir_b, proj_b))
         .unwrap();
     std::thread::sleep(std::time::Duration::from_millis(500));
 
     // Start in (a, editor)
-    test.hs_get(&format!("/project/{}", proj_a)).unwrap();
+    test.hs_get(&format!("/project/switch/{}", proj_a)).unwrap();
     test.assert_focus(Editor(&proj_a));
 
     // Transition to (b, editor)
-    test.hs_get(&format!("/project/{}", proj_b)).unwrap();
+    test.hs_get(&format!("/project/switch/{}", proj_b)).unwrap();
     test.assert_focus(Editor(&proj_b));
 
     for _ in 0..2 {
@@ -118,15 +118,15 @@ fn test_close_project() {
 
     std::fs::create_dir_all(&dir).unwrap();
 
-    // Create project using unified /project/ endpoint
-    test.hs_get(&format!("/project/{}?name={}", dir, proj))
+    // Create project using /project/switch/ endpoint
+    test.hs_get(&format!("/project/switch/{}?name={}", dir, proj))
         .unwrap();
     std::thread::sleep(std::time::Duration::from_millis(500));
 
-    test.hs_get(&format!("/project/{}", proj)).unwrap();
+    test.hs_get(&format!("/project/switch/{}", proj)).unwrap();
     test.assert_focus(Editor(&proj));
 
-    test.hs_post(&format!("/project/{}/close", proj)).unwrap();
+    test.hs_post(&format!("/project/close/{}", proj)).unwrap();
 
     assert!(
         test.wait_until(|| !test.window_exists(&proj), 5),
@@ -145,8 +145,8 @@ fn test_open_github_url() {
     std::fs::create_dir_all(format!("{}/src", dir)).unwrap();
     std::fs::write(&file, "fn main() {}").unwrap();
 
-    // Create project using unified /project/ endpoint
-    test.hs_get(&format!("/project/{}?name={}", dir, proj))
+    // Create project using /project/switch/ endpoint
+    test.hs_get(&format!("/project/switch/{}?name={}", dir, proj))
         .unwrap();
 
     // GitHub URL format: /<owner>/<repo>/blob/<branch>/<path>
@@ -167,8 +167,8 @@ fn test_open_file() {
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(&file, "fn main() {}").unwrap();
 
-    // Create project using unified /project/ endpoint
-    test.hs_get(&format!("/project/{}?name={}", dir, proj))
+    // Create project using /project/switch/ endpoint
+    test.hs_get(&format!("/project/switch/{}?name={}", dir, proj))
         .unwrap();
     std::thread::sleep(std::time::Duration::from_millis(500));
     test.hs_get(&format!("/file/{}", file)).unwrap();
@@ -186,13 +186,13 @@ fn test_pin() {
 
     std::fs::create_dir_all(&dir).unwrap();
 
-    // Create project using unified /project/ endpoint
-    test.hs_get(&format!("/project/{}?name={}", dir, proj))
+    // Create project using /project/switch/ endpoint
+    test.hs_get(&format!("/project/switch/{}?name={}", dir, proj))
         .unwrap();
     std::thread::sleep(std::time::Duration::from_millis(500));
 
     // Go to project in editor
-    test.hs_get(&format!("/project/{}", proj)).unwrap();
+    test.hs_get(&format!("/project/switch/{}", proj)).unwrap();
     test.assert_focus(Editor(&proj));
 
     // Pin while in editor - should set land-in=editor

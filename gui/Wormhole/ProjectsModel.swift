@@ -17,9 +17,9 @@ struct TaskInfo: Codable {
 }
 
 enum SelectorMode: Int, CaseIterable {
-    case current = 0
-    case available = 1
-    case tasks = 2
+    case tasks = 0
+    case current = 1
+    case available = 2
 
     func next() -> SelectorMode {
         let allCases = SelectorMode.allCases
@@ -33,7 +33,7 @@ final class ProjectsModel: ObservableObject {
     var availableProjects: [String] = []
     var tasks: [String] = []
 
-    @Published var mode: SelectorMode = .current
+    @Published var mode: SelectorMode = .tasks
     @Published var currentText: String = ""
     @Published var projects: [Project<String>] = []
     @Published var currentProject: String?

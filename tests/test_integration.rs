@@ -1,6 +1,7 @@
 mod harness;
 use harness::Focus::*;
 use harness::TEST_PREFIX;
+use std::process::Command;
 
 #[test]
 fn test_open_project() {
@@ -190,4 +191,63 @@ fn test_pin() {
         test.wait_for_kv(&proj, "land-in", "terminal", 5),
         "Expected land-in=terminal after pinning in terminal"
     );
+}
+
+#[test]
+fn test_task_switching() {
+    let test = harness::WormholeTest::new(8937);
+
+    let home_proj = format!("{}task-home", TEST_PREFIX);
+    let home_dir = format!("/tmp/{}", home_proj);
+    let task_1 = format!("{}TASK-1", TEST_PREFIX);
+    let task_2 = format!("{}TASK-2", TEST_PREFIX);
+
+    // Create home project as a git repo
+    let _ = std::fs::remove_dir_all(&home_dir);
+    std::fs::create_dir_all(&home_dir).unwrap();
+    Command::new("git")
+        .args(["init"])
+        .current_dir(&home_dir)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["commit", "--allow-empty", "-m", "initial"])
+        .current_dir(&home_dir)
+        .output()
+        .unwrap();
+
+    // Register home project with wormhole
+    test.create_project(&home_dir, &home_proj);
+
+    // Create two tasks based on the home project
+    test.create_task(&task_1, &home_proj);
+    test.create_task(&task_2, &home_proj);
+
+    let task_1_dir = format!("{}/.git/wormhole/worktrees/{}", home_dir, task_1);
+    let task_2_dir = format!("{}/.git/wormhole/worktrees/{}", home_dir, task_2);
+
+    // Switch to home project
+    test.hs_get(&format!("/project/{}", home_proj)).unwrap();
+    test.assert_focus(Editor(&home_proj));
+    test.assert_tmux_cwd(&home_dir);
+
+    // Switch to task 1
+    test.hs_get(&format!("/task/{}", task_1)).unwrap();
+    test.assert_focus(Editor(&task_1));
+    test.assert_tmux_cwd(&task_1_dir);
+
+    // Switch to task 2
+    test.hs_get(&format!("/task/{}", task_2)).unwrap();
+    test.assert_focus(Editor(&task_2));
+    test.assert_tmux_cwd(&task_2_dir);
+
+    // Switch back to home project
+    test.hs_get(&format!("/project/{}", home_proj)).unwrap();
+    test.assert_focus(Editor(&home_proj));
+    test.assert_tmux_cwd(&home_dir);
+
+    // Switch to task 1 again
+    test.hs_get(&format!("/task/{}", task_1)).unwrap();
+    test.assert_focus(Editor(&task_1));
+    test.assert_tmux_cwd(&task_1_dir);
 }

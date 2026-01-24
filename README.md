@@ -1,3 +1,19 @@
+Wormhole manages a collection of 'projects'.
+
+Each project is a git repo: it has a tmux window with that repo as the CWD, and it has an IDE workspace in that repo.
+
+`wormhole project switch my-project` communicates with tmux and your OS window manager so that the tmux window and IDE workspace are selected. You have control over which of the two applications is focused.
+
+Some projects are 'tasks'. A task is a project for which the CWD is a git worktree directory, rather than the "real" project directory.
+
+
+A task, but not a project, should evolve through a state machine to reach a terminal state. This is called "working"; wormhole does not do it for you yet. In the future, wormhole will report on what stage the task is at in that state machine. Rather than modeling the state machine explicitly over a finite set of states and storing the current state value, it will do this by reading relevant state and reporting on it to the user (e.g. does a plan.md exist for the task? Have auxiliary repos been identified that will provide LLM context for the work? Is there a JIRA ticket and if so what state is it in? Is there a PR yet? Is it in draft or open-for-review mode? Have you added explanatory comments to the PR to help reviewers?)
+
+
+
+
+## Switching projects
+
 When you switch between projects, two things should happen:
 
 1. Your editor should switch to the new project workspace.
@@ -45,40 +61,45 @@ Edit `src/config.rs` for editor/terminal settings.
 
 ```bash
 wormhole serve                          # Start server (port 7117)
-wormhole project myapp                  # Switch to project by name
-wormhole project /path/to/repo          # Open/create project at path
+wormhole project switch myapp           # Switch to project by name
+wormhole project switch /path/to/repo   # Open/create project at path
+wormhole project switch ACT-1234 --home-project myrepo  # Open task (creates worktree)
+wormhole project list                   # List projects (includes tasks)
+wormhole project previous               # Previous project
+wormhole project next                   # Next project
+wormhole project close myapp            # Close project windows
+wormhole project remove myapp           # Remove project/task
+wormhole project pin                    # Pin current (project, app) state
+wormhole project debug                  # Debug info for all projects
 wormhole file /path/to/file.rs:42       # Open file at line
-wormhole previous                       # Previous project
-wormhole next                           # Next project
-wormhole pin                            # Pin current (project, app) state
-wormhole list                           # List projects
 wormhole kv get myapp land-in           # Get KV
 wormhole kv set myapp land-in editor    # Set KV
-wormhole close myapp                    # Close project windows
-wormhole remove myapp                   # Remove from wormhole
+wormhole jira sprint                    # List JIRA sprint issues
+wormhole kill-session                   # Kill tmux session and clean up
+wormhole completion bash                # Generate shell completions
 ```
 
 ## HTTP API
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/project/<name_or_path>` | Switch/create project |
-| GET | `/previous-project/` | Previous project |
-| GET | `/next-project/` | Next project |
-| POST | `/pin/` | Pin current (project, app) state |
-| GET | `/file/<path>` | Open file (path:line supported) |
-| GET | `/<github_blob_path>?line=N` | Open GitHub file locally |
-| GET | `/list-projects/` | List projects (JSON) |
-| GET | `/debug-projects/` | Debug info |
-| POST | `/close-project/<name>` | Close project windows |
-| POST | `/remove-project/<name>` | Remove project |
-| GET | `/kv/<project>/<key>` | Get value |
-| PUT | `/kv/<project>/<key>` | Set value (body) |
-| DELETE | `/kv/<project>/<key>` | Delete key |
-| GET | `/kv/<project>` | List project KV |
-| GET | `/kv` | List all KV |
+| Method | Endpoint                    | Description                       |
+|--------|-----------------------------|-----------------------------------|
+| GET    | `/project/switch/<name>`    | Switch/create project or task     |
+| GET    | `/project/list`             | List projects (JSON, includes tasks) |
+| GET    | `/project/previous`         | Previous project                  |
+| GET    | `/project/next`             | Next project                      |
+| POST   | `/project/close/<name>`     | Close project windows             |
+| POST   | `/project/remove/<name>`    | Remove project/task               |
+| POST   | `/project/pin`              | Pin current (project, app) state  |
+| GET    | `/project/debug`            | Debug info                        |
+| GET    | `/file/<path>`              | Open file (path:line supported)   |
+| GET    | `/<github_blob_path>?line=N`| Open GitHub file locally          |
+| GET    | `/kv/<project>/<key>`       | Get value                         |
+| PUT    | `/kv/<project>/<key>`       | Set value (body)                  |
+| DELETE | `/kv/<project>/<key>`       | Delete key                        |
+| GET    | `/kv/<project>`             | List project KV                   |
+| GET    | `/kv`                       | List all KV                       |
 
-Query params: `land-in=terminal|editor`, `name=<project_name>`, `line=N`
+Query params: `land-in=terminal|editor`, `name=<project_name>`, `line=N`, `home-project=<project>` (for tasks)
 
 ## Example Workflows
 

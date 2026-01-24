@@ -112,7 +112,18 @@ impl<'a> Projects<'a> {
                 aliases: names,
                 kv: std::collections::HashMap::new(),
                 last_application: None,
+                home_project: None,
             });
+        }
+    }
+
+    pub fn add_project(&mut self, project: Project) {
+        if Some(project.path.as_path()) == dirs::home_dir().as_deref() {
+            return;
+        }
+        if !self.contains(&project.name) {
+            ps!("projects::add_project");
+            self.0.push_front(project);
         }
     }
 
@@ -213,15 +224,12 @@ pub fn load() {
         let canonical = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
 
         // Use the disambiguated name if available, otherwise derive from directory
-        let name = path_to_name
-            .get(&canonical)
-            .cloned()
-            .unwrap_or_else(|| {
-                path.file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("unknown")
-                    .to_string()
-            });
+        let name = path_to_name.get(&canonical).cloned().unwrap_or_else(|| {
+            path.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("unknown")
+                .to_string()
+        });
 
         // Skip if a project with this name already exists
         if !projects.contains(&name) {
@@ -231,6 +239,7 @@ pub fn load() {
                 aliases: vec![],
                 kv: std::collections::HashMap::new(),
                 last_application: None,
+                home_project: None,
             });
         }
     }

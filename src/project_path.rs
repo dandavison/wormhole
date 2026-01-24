@@ -29,8 +29,13 @@ impl ProjectPath {
         }
         let land_in = land_in.or_else(|| match mutation {
             Mutation::RotateLeft | Mutation::RotateRight => self.project.last_application.clone(),
-            _ => parse_application(self.project.kv.get("land-in"))
-                .or_else(|| if is_already_open { current_app } else { None }),
+            _ => parse_application(self.project.kv.get("land-in")).or_else(|| {
+                if is_already_open {
+                    current_app
+                } else {
+                    None
+                }
+            }),
         });
         let open_terminal = move || {
             config::TERMINAL.open(&project).unwrap_or_else(|err| {

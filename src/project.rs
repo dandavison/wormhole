@@ -13,6 +13,7 @@ pub struct Project {
     pub aliases: Vec<String>,
     pub kv: HashMap<String, String>,
     pub last_application: Option<Application>,
+    pub home_project: Option<String>,
 }
 
 impl Project {

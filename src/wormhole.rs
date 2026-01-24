@@ -30,6 +30,7 @@ pub struct QueryParams {
     pub land_in: Option<Application>,
     pub line: Option<usize>,
     pub names: Vec<String>,
+    pub home_project: Option<String>,
 }
 
 pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
@@ -40,59 +41,106 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         return Ok(Response::new(Body::from("")));
     }
     let params = QueryParams::from_query(uri.query());
-    if &path != "/list-projects/" {
+    if &path != "/project/list" {
         ps!("{} {} {:?}", method, uri, params);
     }
-    if &path == "/list-projects/" {
+    if &path == "/project/list" {
         Ok(endpoints::list_projects())
-    } else if &path == "/debug-projects/" {
+    } else if &path == "/project/debug" {
         Ok(endpoints::debug_projects())
-    } else if let Some(name) = path.strip_prefix("/remove-project/") {
+    } else if &path == "/project/previous" {
+        let p = {
+            let projects = projects::lock();
+            projects.previous().map(|p| p.as_project_path())
+        };
+        if let Some(project_path) = p {
+            let land_in = params.land_in.clone();
+            thread::spawn(move || project_path.open(Mutation::RotateLeft, land_in));
+        }
+        Ok(Response::new(Body::from("")))
+    } else if &path == "/project/next" {
+        let p = {
+            let projects = projects::lock();
+            projects.next().map(|p| p.as_project_path())
+        };
+        if let Some(project_path) = p {
+            let land_in = params.land_in.clone();
+            thread::spawn(move || project_path.open(Mutation::RotateRight, land_in));
+        }
+        Ok(Response::new(Body::from("")))
+    } else if let Some(name) = path.strip_prefix("/project/remove/") {
         if method != &Method::POST {
             return Ok(Response::builder()
                 .status(StatusCode::METHOD_NOT_ALLOWED)
-                .body(Body::from(
-                    "Method not allowed. Use POST for /remove-project/",
-                ))
+                .body(Body::from("Method not allowed. Use POST for /project/remove/"))
                 .unwrap());
         }
-        Ok(endpoints::remove_project(&name.trim()))
-    } else if let Some(name) = path.strip_prefix("/close-project/") {
+        let name = name.trim();
+        if let Some(task) = crate::task::get_task(name) {
+            if task.home_project.is_some() {
+                match crate::task::remove_task(name) {
+                    Ok(()) => return Ok(Response::new(Body::from(format!("Removed task: {}", name)))),
+                    Err(e) => return Ok(Response::builder()
+                        .status(StatusCode::BAD_REQUEST)
+                        .body(Body::from(e))
+                        .unwrap()),
+                }
+            }
+        }
+        Ok(endpoints::remove_project(name))
+    } else if let Some(name) = path.strip_prefix("/project/close/") {
         if method != &Method::POST {
             return Ok(Response::builder()
                 .status(StatusCode::METHOD_NOT_ALLOWED)
-                .body(Body::from(
-                    "Method not allowed. Use POST for /close-project/",
-                ))
+                .body(Body::from("Method not allowed. Use POST for /project/close/"))
                 .unwrap());
         }
         let name = name.trim().to_string();
         thread::spawn(move || endpoints::close_project(&name));
         Ok(Response::new(Body::from("")))
-    } else if path == "/pin/" || path == "/pin" {
+    } else if path == "/project/pin" {
         if method != &Method::POST {
             return Ok(Response::builder()
                 .status(StatusCode::METHOD_NOT_ALLOWED)
-                .body(Body::from("Method not allowed. Use POST for /pin/"))
+                .body(Body::from("Method not allowed. Use POST for /project/pin"))
                 .unwrap());
         }
         thread::spawn(move || endpoints::pin_current());
         Ok(Response::new(Body::from("Pinning current state...")))
+    } else if let Some(name_or_path) = path.strip_prefix("/project/switch/") {
+        let name_or_path = name_or_path.trim().to_string();
+        let home_project = params.home_project.clone();
+        let land_in = params.land_in.clone();
+        let names = params.names.clone();
+        thread::spawn(move || {
+            if home_project.is_some() || crate::task::get_task(&name_or_path).is_some() {
+                if let Err(e) = crate::task::open_task(&name_or_path, home_project.as_deref(), land_in) {
+                    crate::util::error(&e);
+                }
+            } else {
+                let project_path = {
+                    let mut projects = projects::lock();
+                    resolve_project(&mut projects, &name_or_path, names)
+                };
+                if let Some(pp) = project_path {
+                    pp.open(Mutation::Insert, land_in);
+                }
+            }
+        });
+        Ok(Response::builder()
+            .header("Content-Type", "text/html")
+            .body(Body::from(
+                "<html><body><script>window.close()</script>Sent into wormhole.</body></html>",
+            ))
+            .unwrap())
     } else if path == "/kv" {
         Ok(crate::kv::get_all_kv())
     } else if let Some(kv_path) = path.strip_prefix("/kv/") {
         handle_kv_request(&method, kv_path, req).await
     } else {
-        // wormhole uses the `hs` client to make a call to the hammerspoon
-        // service. But one might also want to use hammerspoon to configure a
-        // key binding to make a call to the wormhole service. In practice I
-        // found that hammerspoon did not support this concurrency: it was
-        // unable to handle the `hs` call from wormhole when it was still
-        // waiting for its originating HTTP request to return. Instead the `hs`
-        // call blocked until the HTTP request timed out. So, wormhole returns
-        // immediately, performing its actions asynchronously.
+        // Handle /file/ and GitHub blob URLs
         if let Some((Some(project_path), mutation, land_in)) =
-            determine_requested_operation(&path, params.line, params.land_in, params.names)
+            determine_requested_operation(&path, params.line, params.land_in)
         {
             thread::spawn(move || project_path.open(mutation, land_in));
             Ok(Response::builder()
@@ -117,61 +165,41 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
     }
 }
 
+fn resolve_project(
+    projects: &mut projects::Projects,
+    name_or_path: &str,
+    names: Vec<String>,
+) -> Option<ProjectPath> {
+    if let Some(project) = projects.by_name(name_or_path) {
+        Some(project.as_project_path())
+    } else if name_or_path.starts_with('/') {
+        let path = std::path::PathBuf::from(name_or_path);
+        if let Some(project) = projects.by_exact_path(&path) {
+            Some(project.as_project_path())
+        } else {
+            projects.add(name_or_path, names);
+            projects.by_exact_path(&path).map(|p| p.as_project_path())
+        }
+    } else if let Some(path) = config::resolve_project_name(name_or_path) {
+        let path_str = path.to_string_lossy().to_string();
+        let mut project_names = names;
+        if project_names.is_empty() {
+            project_names = vec![name_or_path.to_string()];
+        }
+        projects.add(&path_str, project_names);
+        projects.by_exact_path(&path).map(|p| p.as_project_path())
+    } else {
+        None
+    }
+}
+
 fn determine_requested_operation(
     url_path: &str,
     line: Option<usize>,
     land_in: Option<Application>,
-    names: Vec<String>,
 ) -> Option<(Option<ProjectPath>, Mutation, Option<Application>)> {
-    let mut projects = projects::lock();
-    if url_path == "/previous-project/" {
-        let p = projects.previous().map(|p| p.as_project_path());
-        Some((p, Mutation::RotateLeft, land_in))
-    } else if url_path == "/next-project/" {
-        let p = projects.next().map(|p| p.as_project_path());
-        Some((p, Mutation::RotateRight, land_in))
-    } else if let Some(name_or_path) = url_path.strip_prefix("/project/") {
-        // Try lookup by name, then path, then insert as new
-        let name_or_path = name_or_path.trim();
-        if let Some(project) = projects.by_name(name_or_path) {
-            Some((Some(project.as_project_path()), Mutation::Insert, land_in))
-        } else if name_or_path.starts_with('/') {
-            let path = std::path::PathBuf::from(name_or_path);
-            if let Some(project) = projects.by_exact_path(&path) {
-                Some((Some(project.as_project_path()), Mutation::Insert, land_in))
-            } else {
-                projects.add(name_or_path, names);
-                let project = projects.by_exact_path(&path);
-                Some((
-                    project.map(|p| p.as_project_path()),
-                    Mutation::Insert,
-                    land_in,
-                ))
-            }
-        } else {
-            // Search WORMHOLE_PATH for a directory matching this name
-            // This handles both simple names like "temporal" and prefixed names
-            // like "devenv-temporal" for disambiguating clashing directory names.
-            if let Some(path) = config::resolve_project_name(name_or_path) {
-                let path_str = path.to_string_lossy().to_string();
-                // Use the requested name (e.g. "devenv-temporal") as the project name,
-                // not the directory name, to avoid conflicts with existing projects.
-                let mut project_names = names;
-                if project_names.is_empty() {
-                    project_names = vec![name_or_path.to_string()];
-                }
-                projects.add(&path_str, project_names);
-                let project = projects.by_exact_path(&path);
-                Some((
-                    project.map(|p| p.as_project_path()),
-                    Mutation::Insert,
-                    land_in,
-                ))
-            } else {
-                Some((None, Mutation::Insert, land_in))
-            }
-        }
-    } else if let Some(absolute_path) = url_path.strip_prefix("/file/") {
+    let projects = projects::lock();
+    if let Some(absolute_path) = url_path.strip_prefix("/file/") {
         let p = ProjectPath::from_absolute_path(absolute_path, &projects);
         Some((p, Mutation::Insert, land_in))
     } else if let Some(project_path) = ProjectPath::from_github_url(&url_path, line, &projects) {
@@ -240,25 +268,28 @@ impl QueryParams {
             land_in: None,
             line: None,
             names: vec![],
+            home_project: None,
         };
         if let Some(query) = query {
-            for (key, val) in
-                form_urlencoded::parse(query.to_lowercase().as_bytes()).collect::<Vec<(_, _)>>()
-            {
-                if key == "land-in" {
-                    if val == "terminal" {
+            for (key, val) in form_urlencoded::parse(query.as_bytes()).collect::<Vec<(_, _)>>() {
+                let key_lower = key.to_lowercase();
+                if key_lower == "land-in" {
+                    let val_lower = val.to_lowercase();
+                    if val_lower == "terminal" {
                         params.land_in = Some(Application::Terminal);
-                    } else if val == "editor" {
+                    } else if val_lower == "editor" {
                         params.land_in = Some(Application::Editor);
                     }
-                } else if key == "line" {
+                } else if key_lower == "line" {
                     params.line = val.parse::<usize>().ok();
-                } else if key == "name" {
+                } else if key_lower == "name" {
                     params.names = val
                         .to_string()
                         .split(",")
                         .map(|s| s.trim().to_string())
                         .collect();
+                } else if key_lower == "home-project" {
+                    params.home_project = Some(val.to_string());
                 }
             }
         }

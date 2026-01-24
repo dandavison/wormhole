@@ -2,24 +2,53 @@ use std::collections::VecDeque;
 
 use hyper::{Body, Response};
 
-use crate::{config, hammerspoon, projects, util::debug};
+use crate::{config, hammerspoon, projects, task, util::debug};
 
-/// Return JSON with current and available projects
+/// Return JSON with current and available projects (including tasks)
 pub fn list_projects() -> Response<Body> {
+    let tasks = task::discover_tasks();
+
     // Get currently open projects
     let mut current: VecDeque<_> = projects::lock()
         .open()
         .into_iter()
-        .map(|p| p.name)
+        .map(|p| {
+            let is_task = p.home_project.is_some();
+            let mut obj = serde_json::json!({
+                "name": p.name,
+                "is_task": is_task
+            });
+            if let Some(home) = &p.home_project {
+                obj["home_project"] = serde_json::json!(home);
+            }
+            obj
+        })
         .collect();
     if !current.is_empty() {
-        // Rotate so current project is last (for selector UIs)
         current.rotate_left(1);
     }
 
-    let available = config::available_projects();
+    // Add discovered tasks that aren't already open
+    let open_names: std::collections::HashSet<_> = current
+        .iter()
+        .filter_map(|v| v.get("name").and_then(|n| n.as_str()))
+        .map(|s| s.to_string())
+        .collect();
 
-    let current: Vec<&str> = current.iter().map(|s| s.as_str()).collect();
+    for (task_name, task_project) in &tasks {
+        if !open_names.contains(task_name) {
+            let mut obj = serde_json::json!({
+                "name": task_name,
+                "is_task": true
+            });
+            if let Some(home) = &task_project.home_project {
+                obj["home_project"] = serde_json::json!(home);
+            }
+            current.push_back(obj);
+        }
+    }
+
+    let available = config::available_projects();
     let available: Vec<&str> = available.keys().map(|s| s.as_str()).collect();
 
     let json = serde_json::json!({

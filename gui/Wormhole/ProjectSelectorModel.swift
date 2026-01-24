@@ -125,8 +125,7 @@ internal final class ProjectSelectorModel<V: Equatable>: ObservableObject {
     }
 
     internal func openProject(name: String, landInTerminal: Bool) async throws {
-        var url = "http://localhost:7117/project/" + name
-        // Only add land-in if modifier key was pressed (for terminal)
+        var url = "http://localhost:7117/project/switch/" + name
         if landInTerminal {
             url = url + "?land-in=terminal"
         }

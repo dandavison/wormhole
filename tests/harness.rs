@@ -64,7 +64,7 @@ impl WormholeTest {
         let test = WormholeTest { port, tmux_socket };
 
         for _ in 0..20 {
-            if test.hs_get("/list-projects/").is_ok() {
+            if test.hs_get("/project/list").is_ok() {
                 break;
             }
             thread::sleep(Duration::from_millis(250));
@@ -192,12 +192,22 @@ impl WormholeTest {
     }
 
     pub fn create_project(&self, dir: &str, name: &str) {
-        self.hs_get(&format!("/project/{}?name={}", dir, name))
+        self.hs_get(&format!("/project/switch/{}?name={}", dir, name))
             .unwrap();
         assert!(
             self.wait_for_window_containing(name, 10),
             "Project window '{}' did not appear",
             name
+        );
+    }
+
+    pub fn create_task(&self, task_id: &str, home_project: &str) {
+        self.hs_get(&format!("/project/switch/{}?home-project={}", task_id, home_project))
+            .unwrap();
+        assert!(
+            self.wait_for_window_containing(task_id, 10),
+            "Task window '{}' did not appear",
+            task_id
         );
     }
 

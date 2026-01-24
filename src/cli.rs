@@ -30,6 +30,18 @@ pub enum Command {
         land_in: Option<String>,
     },
 
+    /// Switch to a task (creates git worktree if needed)
+    Task {
+        /// Task identifier (e.g., JIRA ID like ACT-1234)
+        task_id: String,
+        /// Home repository name (required for new tasks)
+        #[arg(long)]
+        home: Option<String>,
+        /// Which application to focus: editor or terminal
+        #[arg(long, value_name = "APP")]
+        land_in: Option<String>,
+    },
+
     /// Open a file in the appropriate project
     File {
         /// Absolute file path (optionally with :line suffix)
@@ -202,6 +214,27 @@ pub fn run(command: Command) -> Result<(), String> {
             let query = build_query(&land_in, &name);
             let path = format!("/project/{}{}", name_or_path, query);
             client.get(&path)?;
+            Ok(())
+        }
+
+        Command::Task {
+            task_id,
+            home,
+            land_in,
+        } => {
+            let mut params = vec![];
+            if let Some(h) = home {
+                params.push(format!("home={}", h));
+            }
+            if let Some(app) = land_in {
+                params.push(format!("land-in={}", app));
+            }
+            let query = if params.is_empty() {
+                String::new()
+            } else {
+                format!("?{}", params.join("&"))
+            };
+            client.get(&format!("/task/{}{}", task_id, query))?;
             Ok(())
         }
 

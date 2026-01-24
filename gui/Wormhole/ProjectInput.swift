@@ -28,6 +28,7 @@ struct ProjectInput<V: Equatable>: View {
             }
         }
         model.textBinding = self.$text
+        model.projectsModel = self.projectsModel
 
         return ProjectTextField(text: self.$text, model: model, projectsModel: projectsModel)
             .borderlessWindow(isVisible: Binding<Bool>(get: { model.projectsVisible && !model.projects.isEmpty }, set: { model.projectsVisible = $0 }),

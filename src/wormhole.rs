@@ -30,6 +30,7 @@ pub struct QueryParams {
     pub land_in: Option<Application>,
     pub line: Option<usize>,
     pub names: Vec<String>,
+    pub home: Option<String>,
 }
 
 pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
@@ -45,6 +46,8 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
     }
     if &path == "/list-projects/" {
         Ok(endpoints::list_projects())
+    } else if &path == "/list-tasks/" {
+        Ok(endpoints::list_tasks())
     } else if &path == "/debug-projects/" {
         Ok(endpoints::debug_projects())
     } else if let Some(name) = path.strip_prefix("/remove-project/") {
@@ -78,6 +81,16 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         }
         thread::spawn(move || endpoints::pin_current());
         Ok(Response::new(Body::from("Pinning current state...")))
+    } else if let Some(task_id) = path.strip_prefix("/task/") {
+        let task_id = task_id.trim().to_string();
+        let home = params.home.clone();
+        let land_in = params.land_in.clone();
+        thread::spawn(move || {
+            if let Err(e) = crate::task::open_task(&task_id, home.as_deref(), land_in) {
+                crate::util::error(&e);
+            }
+        });
+        Ok(Response::new(Body::from("")))
     } else if path == "/kv" {
         Ok(crate::kv::get_all_kv())
     } else if let Some(kv_path) = path.strip_prefix("/kv/") {
@@ -240,25 +253,28 @@ impl QueryParams {
             land_in: None,
             line: None,
             names: vec![],
+            home: None,
         };
         if let Some(query) = query {
-            for (key, val) in
-                form_urlencoded::parse(query.to_lowercase().as_bytes()).collect::<Vec<(_, _)>>()
-            {
-                if key == "land-in" {
-                    if val == "terminal" {
+            for (key, val) in form_urlencoded::parse(query.as_bytes()).collect::<Vec<(_, _)>>() {
+                let key_lower = key.to_lowercase();
+                if key_lower == "land-in" {
+                    let val_lower = val.to_lowercase();
+                    if val_lower == "terminal" {
                         params.land_in = Some(Application::Terminal);
-                    } else if val == "editor" {
+                    } else if val_lower == "editor" {
                         params.land_in = Some(Application::Editor);
                     }
-                } else if key == "line" {
+                } else if key_lower == "line" {
                     params.line = val.parse::<usize>().ok();
-                } else if key == "name" {
+                } else if key_lower == "name" {
                     params.names = val
                         .to_string()
                         .split(",")
                         .map(|s| s.trim().to_string())
                         .collect();
+                } else if key_lower == "home" {
+                    params.home = Some(val.to_string());
                 }
             }
         }

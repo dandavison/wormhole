@@ -176,6 +176,86 @@ fn test_open_file() {
 }
 
 #[test]
+fn test_previous_skips_closed_projects() {
+    // previous should skip closed projects and navigate to the first open one
+    let test = harness::WormholeTest::new(8936);
+
+    let proj_a = format!("{}skip-a", TEST_PREFIX);
+    let proj_b = format!("{}skip-b", TEST_PREFIX);
+    let proj_c = format!("{}skip-c", TEST_PREFIX);
+    let dir_a = format!("/tmp/{}", proj_a);
+    let dir_b = format!("/tmp/{}", proj_b);
+    let dir_c = format!("/tmp/{}", proj_c);
+
+    std::fs::create_dir_all(&dir_a).unwrap();
+    std::fs::create_dir_all(&dir_b).unwrap();
+    std::fs::create_dir_all(&dir_c).unwrap();
+
+    // Create projects: A, then B, then C
+    // After this, ring order is: [C, B, A] (C is current, B is previous, A is next)
+    test.hs_get(&format!("/project/switch/{}?name={}", dir_a, proj_a))
+        .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    test.hs_get(&format!("/project/switch/{}?name={}", dir_b, proj_b))
+        .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    test.hs_get(&format!("/project/switch/{}?name={}", dir_c, proj_c))
+        .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+
+    // Verify we're at C
+    test.assert_focus(Editor(&proj_c));
+
+    // Close B (this closes its tmux window, making it "not open")
+    test.hs_post(&format!("/project/close/{}", proj_b)).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+
+    // Now call previous - should skip B (closed) and go to A
+    test.hs_get("/project/previous").unwrap();
+    test.assert_focus(Editor(&proj_a));
+}
+
+#[test]
+fn test_next_skips_closed_projects() {
+    // next should skip closed projects and navigate to the first open one
+    let test = harness::WormholeTest::new(8937);
+
+    let proj_a = format!("{}skipn-a", TEST_PREFIX);
+    let proj_b = format!("{}skipn-b", TEST_PREFIX);
+    let proj_c = format!("{}skipn-c", TEST_PREFIX);
+    let dir_a = format!("/tmp/{}", proj_a);
+    let dir_b = format!("/tmp/{}", proj_b);
+    let dir_c = format!("/tmp/{}", proj_c);
+
+    std::fs::create_dir_all(&dir_a).unwrap();
+    std::fs::create_dir_all(&dir_b).unwrap();
+    std::fs::create_dir_all(&dir_c).unwrap();
+
+    // Create projects: A, then B, then C
+    // Ring: [C, B, A] - C current, B previous, A at back (next)
+    test.hs_get(&format!("/project/switch/{}?name={}", dir_a, proj_a))
+        .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    test.hs_get(&format!("/project/switch/{}?name={}", dir_b, proj_b))
+        .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    test.hs_get(&format!("/project/switch/{}?name={}", dir_c, proj_c))
+        .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+
+    // Verify we're at C
+    test.assert_focus(Editor(&proj_c));
+
+    // Close A (which is the "next" project)
+    test.hs_post(&format!("/project/close/{}", proj_a)).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+
+    // Now call next - should skip A (closed) and go to B
+    test.hs_get("/project/next").unwrap();
+    test.assert_focus(Editor(&proj_b));
+}
+
+#[test]
 fn test_pin() {
     // Test that /pin sets the land-in KV based on current application.
     // The actual effect of land-in on navigation is tested in test_open_project.

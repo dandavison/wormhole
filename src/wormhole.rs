@@ -116,24 +116,24 @@ async fn handle_project_request(
         return Ok(endpoints::list_projects());
     }
 
-    // /project/previous - navigate to previous project
+    // /project/previous - navigate to previous open project
     if rest == "previous" {
         let projects = projects::lock();
-        if let Some(project) = projects.previous() {
+        if let Some(project) = projects.previous_open() {
             let project_path = project.as_project_path();
             let land_in = params.land_in.clone();
-            thread::spawn(move || project_path.open(Mutation::RotateLeft, land_in));
+            thread::spawn(move || project_path.open(Mutation::Jump, land_in));
         }
         return Ok(Response::new(Body::from("")));
     }
 
-    // /project/next - navigate to next project
+    // /project/next - navigate to next open project
     if rest == "next" {
         let projects = projects::lock();
-        if let Some(project) = projects.next() {
+        if let Some(project) = projects.next_open() {
             let project_path = project.as_project_path();
             let land_in = params.land_in.clone();
-            thread::spawn(move || project_path.open(Mutation::RotateRight, land_in));
+            thread::spawn(move || project_path.open(Mutation::Jump, land_in));
         }
         return Ok(Response::new(Body::from("")));
     }

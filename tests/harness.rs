@@ -185,6 +185,13 @@ impl WormholeTest {
         );
     }
 
+    /// Assert only that the tmux window switched to the expected project.
+    /// Use this when GUI focus assertions are unreliable.
+    #[track_caller]
+    pub fn assert_tmux_only(&self, expected: &str) {
+        self.assert_tmux_window(expected);
+    }
+
     fn run_hs(&self, lua: &str) -> Result<String, String> {
         let output = Command::new("hs")
             .args(["-c", lua])

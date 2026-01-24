@@ -138,44 +138,52 @@ async fn handle_project_request(
         return Ok(Response::new(Body::from("")));
     }
 
-    // Check for verb suffix: /project/<name>/remove or /project/<name>/close
-    if let Some(name) = rest.strip_suffix("/remove") {
+    // /project/remove/<name>
+    if let Some(name) = rest.strip_prefix("remove/") {
         if method != &Method::POST {
-            return Ok(method_not_allowed("POST", &format!("/project/{}/remove", name)));
+            return Ok(method_not_allowed("POST", &format!("/project/remove/{}", name)));
         }
         return Ok(endpoints::remove_project(name.trim()));
     }
 
-    if let Some(name) = rest.strip_suffix("/close") {
+    // /project/close/<name>
+    if let Some(name) = rest.strip_prefix("close/") {
         if method != &Method::POST {
-            return Ok(method_not_allowed("POST", &format!("/project/{}/close", name)));
+            return Ok(method_not_allowed("POST", &format!("/project/close/{}", name)));
         }
         let name = name.trim().to_string();
         thread::spawn(move || endpoints::close_project(&name));
         return Ok(Response::new(Body::from("")));
     }
 
-    // Default: /project/<name> - open project
-    let name_or_path = rest.trim();
-    let land_in = params.land_in.clone();
-    let names = params.names.clone();
+    // /project/switch/<name> - open project
+    if let Some(name_or_path) = rest.strip_prefix("switch/") {
+        let name_or_path = name_or_path.trim();
+        let land_in = params.land_in.clone();
+        let names = params.names.clone();
 
-    if let Some((Some(project_path), mutation, land_in)) =
-        open_project_by_name(name_or_path, land_in, names)
-    {
-        thread::spawn(move || project_path.open(mutation, land_in));
-        Ok(Response::builder()
-            .header("Content-Type", "text/html")
-            .body(Body::from(
-                "<html><body><script>window.close()</script>Sent into wormhole.</body></html>",
-            ))
-            .unwrap())
-    } else {
-        Ok(Response::builder()
-            .status(StatusCode::NOT_FOUND)
-            .body(Body::from(format!("Project not found: {}", name_or_path)))
-            .unwrap())
+        if let Some((Some(project_path), mutation, land_in)) =
+            open_project_by_name(name_or_path, land_in, names)
+        {
+            thread::spawn(move || project_path.open(mutation, land_in));
+            return Ok(Response::builder()
+                .header("Content-Type", "text/html")
+                .body(Body::from(
+                    "<html><body><script>window.close()</script>Sent into wormhole.</body></html>",
+                ))
+                .unwrap());
+        } else {
+            return Ok(Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(Body::from(format!("Project not found: {}", name_or_path)))
+                .unwrap());
+        }
     }
+
+    Ok(Response::builder()
+        .status(StatusCode::NOT_FOUND)
+        .body(Body::from(format!("Unknown project endpoint: {}", rest)))
+        .unwrap())
 }
 
 fn handle_task_request(
@@ -188,10 +196,10 @@ fn handle_task_request(
         return Ok(endpoints::list_tasks());
     }
 
-    // Check for verb suffix: /task/<id>/delete
-    if let Some(task_id) = rest.strip_suffix("/delete") {
+    // /task/delete/<id>
+    if let Some(task_id) = rest.strip_prefix("delete/") {
         if method != &Method::POST {
-            return Ok(method_not_allowed("POST", &format!("/task/{}/delete", task_id)));
+            return Ok(method_not_allowed("POST", &format!("/task/delete/{}", task_id)));
         }
         let task_id = task_id.trim().to_string();
         return match crate::task::delete_task(&task_id) {
@@ -203,16 +211,23 @@ fn handle_task_request(
         };
     }
 
-    // Default: /task/<id> - open task
-    let task_id = rest.trim().to_string();
-    let home = params.home.clone();
-    let land_in = params.land_in.clone();
-    thread::spawn(move || {
-        if let Err(e) = crate::task::open_task(&task_id, home.as_deref(), land_in) {
-            crate::util::error(&e);
-        }
-    });
-    Ok(Response::new(Body::from("")))
+    // /task/switch/<id> - open task
+    if let Some(task_id) = rest.strip_prefix("switch/") {
+        let task_id = task_id.trim().to_string();
+        let home = params.home.clone();
+        let land_in = params.land_in.clone();
+        thread::spawn(move || {
+            if let Err(e) = crate::task::open_task(&task_id, home.as_deref(), land_in) {
+                crate::util::error(&e);
+            }
+        });
+        return Ok(Response::new(Body::from("")));
+    }
+
+    Ok(Response::builder()
+        .status(StatusCode::NOT_FOUND)
+        .body(Body::from(format!("Unknown task endpoint: {}", rest)))
+        .unwrap())
 }
 
 fn open_project_by_name(

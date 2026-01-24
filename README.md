@@ -45,40 +45,46 @@ Edit `src/config.rs` for editor/terminal settings.
 
 ```bash
 wormhole serve                          # Start server (port 7117)
-wormhole project myapp                  # Switch to project by name
-wormhole project /path/to/repo          # Open/create project at path
+wormhole project switch myapp           # Switch to project by name
+wormhole project switch /path/to/repo   # Open/create project at path
+wormhole project list                   # List projects
+wormhole project previous               # Previous project
+wormhole project next                   # Next project
+wormhole project close myapp            # Close project windows
+wormhole project remove myapp           # Remove from wormhole
+wormhole task switch ACT-1234           # Switch to task
+wormhole task list                      # List tasks
+wormhole task delete ACT-1234           # Delete task
 wormhole file /path/to/file.rs:42       # Open file at line
-wormhole previous                       # Previous project
-wormhole next                           # Next project
 wormhole pin                            # Pin current (project, app) state
-wormhole list                           # List projects
 wormhole kv get myapp land-in           # Get KV
 wormhole kv set myapp land-in editor    # Set KV
-wormhole close myapp                    # Close project windows
-wormhole remove myapp                   # Remove from wormhole
 ```
 
 ## HTTP API
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/project/<name_or_path>` | Switch/create project |
-| GET | `/previous-project/` | Previous project |
-| GET | `/next-project/` | Next project |
-| POST | `/pin/` | Pin current (project, app) state |
+| GET | `/project/switch/<name_or_path>` | Switch/create project |
+| GET | `/project/list` | List projects (JSON) |
+| GET | `/project/previous` | Previous project |
+| GET | `/project/next` | Next project |
+| POST | `/project/close/<name>` | Close project windows |
+| POST | `/project/remove/<name>` | Remove project |
+| GET | `/task/switch/<id>` | Switch to task |
+| GET | `/task/list` | List tasks (JSON) |
+| POST | `/task/delete/<id>` | Delete task |
 | GET | `/file/<path>` | Open file (path:line supported) |
 | GET | `/<github_blob_path>?line=N` | Open GitHub file locally |
-| GET | `/list-projects/` | List projects (JSON) |
-| GET | `/debug-projects/` | Debug info |
-| POST | `/close-project/<name>` | Close project windows |
-| POST | `/remove-project/<name>` | Remove project |
+| POST | `/pin` | Pin current (project, app) state |
+| GET | `/debug` | Debug info |
 | GET | `/kv/<project>/<key>` | Get value |
 | PUT | `/kv/<project>/<key>` | Set value (body) |
 | DELETE | `/kv/<project>/<key>` | Delete key |
 | GET | `/kv/<project>` | List project KV |
 | GET | `/kv` | List all KV |
 
-Query params: `land-in=terminal|editor`, `name=<project_name>`, `line=N`
+Query params: `land-in=terminal|editor`, `name=<project_name>`, `line=N`, `home=<repo>`
 
 ## Example Workflows
 

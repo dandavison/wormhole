@@ -5,6 +5,6 @@ build:
 	cargo build --release
 
 test:
-	cargo test --test test_integration -- --test-threads=1 --nocapture
+	cargo nextest run --test test_integration --fail-fast --no-capture
 
 .PHONY: test serve serve-tmux build

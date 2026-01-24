@@ -20,6 +20,26 @@ pub enum JiraCommand {
 }
 
 #[derive(Subcommand)]
+pub enum TaskCommand {
+    /// Open a task (creates git worktree if needed)
+    Open {
+        /// Task identifier (e.g., JIRA ID like ACT-1234)
+        task_id: String,
+        /// Home repository name (required for new tasks)
+        #[arg(long)]
+        home: Option<String>,
+        /// Which application to focus: editor or terminal
+        #[arg(long, value_name = "APP")]
+        land_in: Option<String>,
+    },
+    /// Remove a task (removes git worktree, keeps branch)
+    Remove {
+        /// Task identifier to remove
+        task_id: String,
+    },
+}
+
+#[derive(Subcommand)]
 pub enum Command {
     /// Start the wormhole server
     Serve,
@@ -35,6 +55,12 @@ pub enum Command {
         /// Which application to focus: editor or terminal
         #[arg(long, value_name = "APP")]
         land_in: Option<String>,
+    },
+
+    /// Task operations (git worktree-based)
+    Task {
+        #[command(subcommand)]
+        command: TaskCommand,
     },
 
     /// Open a file in the appropriate project
@@ -216,6 +242,33 @@ pub fn run(command: Command) -> Result<(), String> {
             let path = format!("/project/{}{}", name_or_path, query);
             client.get(&path)?;
             Ok(())
+        }
+
+        Command::Task { command } => match command {
+            TaskCommand::Open {
+                task_id,
+                home,
+                land_in,
+            } => {
+                let mut params = vec![];
+                if let Some(h) = home {
+                    params.push(format!("home={}", h));
+                }
+                if let Some(app) = land_in {
+                    params.push(format!("land-in={}", app));
+                }
+                let query = if params.is_empty() {
+                    String::new()
+                } else {
+                    format!("?{}", params.join("&"))
+                };
+                client.get(&format!("/task/{}{}", task_id, query))?;
+                Ok(())
+            }
+            TaskCommand::Remove { task_id } => {
+                client.post(&format!("/remove-task/{}", task_id))?;
+                Ok(())
+            }
         }
 
         Command::File { path, land_in } => {

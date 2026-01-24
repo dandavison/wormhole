@@ -201,6 +201,16 @@ impl WormholeTest {
         );
     }
 
+    pub fn create_task(&self, task_id: &str, home_project: &str) {
+        self.hs_get(&format!("/task/{}?home={}", task_id, home_project))
+            .unwrap();
+        assert!(
+            self.wait_for_window_containing(task_id, 10),
+            "Task window '{}' did not appear",
+            task_id
+        );
+    }
+
     pub fn wait_for_kv(&self, project: &str, key: &str, expected: &str, timeout_secs: u64) -> bool {
         let url = format!("http://127.0.0.1:{}/kv/{}/{}", self.port, project, key);
         self.wait_until(

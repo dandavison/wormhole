@@ -12,6 +12,7 @@ pub fn is_git_repo(path: &Path) -> bool {
 
 pub struct Worktree {
     pub path: PathBuf,
+    #[allow(dead_code)]
     pub branch: Option<String>,
 }
 
@@ -93,6 +94,36 @@ pub fn create_worktree(
 
 pub fn worktree_base_path(repo_path: &Path) -> PathBuf {
     repo_path.join(".tmp").join("worktrees")
+}
+
+pub fn remove_worktree(repo_path: &Path, worktree_path: &Path) -> Result<(), String> {
+    let output = Command::new("git")
+        .args(["worktree", "remove", worktree_path.to_str().unwrap()])
+        .current_dir(repo_path)
+        .output()
+        .map_err(|e| format!("Failed to run git worktree remove: {}", e))?;
+
+    if output.status.success() {
+        Ok(())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(format!("git worktree remove failed: {}", stderr.trim()))
+    }
+}
+
+pub fn delete_branch(repo_path: &Path, branch_name: &str) -> Result<(), String> {
+    let output = Command::new("git")
+        .args(["branch", "-d", branch_name])
+        .current_dir(repo_path)
+        .output()
+        .map_err(|e| format!("Failed to run git branch -d: {}", e))?;
+
+    if output.status.success() {
+        Ok(())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(format!("git branch -d failed: {}", stderr.trim()))
+    }
 }
 
 #[cfg(test)]

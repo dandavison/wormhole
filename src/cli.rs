@@ -42,6 +42,12 @@ pub enum Command {
         land_in: Option<String>,
     },
 
+    /// Delete a task (removes git worktree and branch)
+    DeleteTask {
+        /// Task identifier to delete
+        task_id: String,
+    },
+
     /// Open a file in the appropriate project
     File {
         /// Absolute file path (optionally with :line suffix)
@@ -235,6 +241,11 @@ pub fn run(command: Command) -> Result<(), String> {
                 format!("?{}", params.join("&"))
             };
             client.get(&format!("/task/{}{}", task_id, query))?;
+            Ok(())
+        }
+
+        Command::DeleteTask { task_id } => {
+            client.post(&format!("/delete-task/{}", task_id))?;
             Ok(())
         }
 

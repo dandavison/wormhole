@@ -91,6 +91,21 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
             }
         });
         Ok(Response::new(Body::from("")))
+    } else if let Some(task_id) = path.strip_prefix("/delete-task/") {
+        if method != &Method::POST {
+            return Ok(Response::builder()
+                .status(StatusCode::METHOD_NOT_ALLOWED)
+                .body(Body::from("Method not allowed. Use POST for /delete-task/"))
+                .unwrap());
+        }
+        let task_id = task_id.trim().to_string();
+        match crate::task::delete_task(&task_id) {
+            Ok(()) => Ok(Response::new(Body::from(format!("Deleted task: {}", task_id)))),
+            Err(e) => Ok(Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body(Body::from(e))
+                .unwrap()),
+        }
     } else if path == "/kv" {
         Ok(crate::kv::get_all_kv())
     } else if let Some(kv_path) = path.strip_prefix("/kv/") {

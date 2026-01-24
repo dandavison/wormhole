@@ -168,3 +168,18 @@ pub fn open_task(
 
     Ok(())
 }
+
+pub fn delete_task(task_id: &str) -> Result<(), String> {
+    let task = get_task(task_id)
+        .ok_or_else(|| format!("Task '{}' not found", task_id))?;
+
+    git::remove_worktree(&task.home_repo, &task.worktree_path)?;
+
+    if let Err(e) = git::delete_branch(&task.home_repo, task_id) {
+        warn(&format!("Could not delete branch {}: {}", task_id, e));
+    }
+
+    refresh_cache();
+
+    Ok(())
+}

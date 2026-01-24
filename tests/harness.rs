@@ -42,7 +42,7 @@ impl WormholeTest {
         let test = WormholeTest { port, tmux_socket };
 
         for _ in 0..20 {
-            if test.hs_get("/list-projects/").is_ok() {
+            if test.hs_get("/projects").is_ok() {
                 break;
             }
             thread::sleep(Duration::from_millis(250));

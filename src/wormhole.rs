@@ -41,71 +41,27 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         return Ok(Response::new(Body::from("")));
     }
     let params = QueryParams::from_query(uri.query());
-    if &path != "/list-projects/" {
+    if &path != "/projects" {
         ps!("{} {} {:?}", method, uri, params);
     }
-    if &path == "/list-projects/" {
+
+    // Collection endpoints
+    if path == "/projects" {
         Ok(endpoints::list_projects())
-    } else if &path == "/list-tasks/" {
+    } else if path == "/tasks" {
         Ok(endpoints::list_tasks())
-    } else if &path == "/debug-projects/" {
+    } else if path == "/debug" {
         Ok(endpoints::debug_projects())
-    } else if let Some(name) = path.strip_prefix("/remove-project/") {
-        if method != &Method::POST {
-            return Ok(Response::builder()
-                .status(StatusCode::METHOD_NOT_ALLOWED)
-                .body(Body::from(
-                    "Method not allowed. Use POST for /remove-project/",
-                ))
-                .unwrap());
-        }
-        Ok(endpoints::remove_project(&name.trim()))
-    } else if let Some(name) = path.strip_prefix("/close-project/") {
-        if method != &Method::POST {
-            return Ok(Response::builder()
-                .status(StatusCode::METHOD_NOT_ALLOWED)
-                .body(Body::from(
-                    "Method not allowed. Use POST for /close-project/",
-                ))
-                .unwrap());
-        }
-        let name = name.trim().to_string();
-        thread::spawn(move || endpoints::close_project(&name));
-        Ok(Response::new(Body::from("")))
-    } else if path == "/pin/" || path == "/pin" {
-        if method != &Method::POST {
-            return Ok(Response::builder()
-                .status(StatusCode::METHOD_NOT_ALLOWED)
-                .body(Body::from("Method not allowed. Use POST for /pin/"))
-                .unwrap());
+    } else if path == "/pin" {
+        if method != Method::POST {
+            return Ok(method_not_allowed("POST", "/pin"));
         }
         thread::spawn(move || endpoints::pin_current());
         Ok(Response::new(Body::from("Pinning current state...")))
-    } else if let Some(task_id) = path.strip_prefix("/task/") {
-        let task_id = task_id.trim().to_string();
-        let home = params.home.clone();
-        let land_in = params.land_in.clone();
-        thread::spawn(move || {
-            if let Err(e) = crate::task::open_task(&task_id, home.as_deref(), land_in) {
-                crate::util::error(&e);
-            }
-        });
-        Ok(Response::new(Body::from("")))
-    } else if let Some(task_id) = path.strip_prefix("/delete-task/") {
-        if method != &Method::POST {
-            return Ok(Response::builder()
-                .status(StatusCode::METHOD_NOT_ALLOWED)
-                .body(Body::from("Method not allowed. Use POST for /delete-task/"))
-                .unwrap());
-        }
-        let task_id = task_id.trim().to_string();
-        match crate::task::delete_task(&task_id) {
-            Ok(()) => Ok(Response::new(Body::from(format!("Deleted task: {}", task_id)))),
-            Err(e) => Ok(Response::builder()
-                .status(StatusCode::BAD_REQUEST)
-                .body(Body::from(e))
-                .unwrap()),
-        }
+    } else if let Some(rest) = path.strip_prefix("/project/") {
+        handle_project_request(&method, rest, &params).await
+    } else if let Some(rest) = path.strip_prefix("/task/") {
+        handle_task_request(&method, rest, &params)
     } else if path == "/kv" {
         Ok(crate::kv::get_all_kv())
     } else if let Some(kv_path) = path.strip_prefix("/kv/") {
@@ -120,7 +76,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         // call blocked until the HTTP request timed out. So, wormhole returns
         // immediately, performing its actions asynchronously.
         if let Some((Some(project_path), mutation, land_in)) =
-            determine_requested_operation(&path, params.line, params.land_in, params.names)
+            determine_requested_operation(&path, params.line, params.land_in)
         {
             thread::spawn(move || project_path.open(mutation, land_in));
             Ok(Response::builder()
@@ -145,61 +101,164 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
     }
 }
 
-fn determine_requested_operation(
-    url_path: &str,
-    line: Option<usize>,
+fn method_not_allowed(expected: &str, path: &str) -> Response<Body> {
+    Response::builder()
+        .status(StatusCode::METHOD_NOT_ALLOWED)
+        .body(Body::from(format!(
+            "Method not allowed. Use {} for {}",
+            expected, path
+        )))
+        .unwrap()
+}
+
+async fn handle_project_request(
+    method: &Method,
+    rest: &str,
+    params: &QueryParams,
+) -> Result<Response<Body>, Infallible> {
+    // /project/previous - navigate to previous project
+    if rest == "previous" {
+        let projects = projects::lock();
+        if let Some(project) = projects.previous() {
+            let project_path = project.as_project_path();
+            let land_in = params.land_in.clone();
+            thread::spawn(move || project_path.open(Mutation::RotateLeft, land_in));
+        }
+        return Ok(Response::new(Body::from("")));
+    }
+
+    // /project/next - navigate to next project
+    if rest == "next" {
+        let projects = projects::lock();
+        if let Some(project) = projects.next() {
+            let project_path = project.as_project_path();
+            let land_in = params.land_in.clone();
+            thread::spawn(move || project_path.open(Mutation::RotateRight, land_in));
+        }
+        return Ok(Response::new(Body::from("")));
+    }
+
+    // Check for verb suffix: /project/<name>/remove or /project/<name>/close
+    if let Some(name) = rest.strip_suffix("/remove") {
+        if method != &Method::POST {
+            return Ok(method_not_allowed("POST", &format!("/project/{}/remove", name)));
+        }
+        return Ok(endpoints::remove_project(name.trim()));
+    }
+
+    if let Some(name) = rest.strip_suffix("/close") {
+        if method != &Method::POST {
+            return Ok(method_not_allowed("POST", &format!("/project/{}/close", name)));
+        }
+        let name = name.trim().to_string();
+        thread::spawn(move || endpoints::close_project(&name));
+        return Ok(Response::new(Body::from("")));
+    }
+
+    // Default: /project/<name> - open project
+    let name_or_path = rest.trim();
+    let land_in = params.land_in.clone();
+    let names = params.names.clone();
+
+    if let Some((Some(project_path), mutation, land_in)) =
+        open_project_by_name(name_or_path, land_in, names)
+    {
+        thread::spawn(move || project_path.open(mutation, land_in));
+        Ok(Response::builder()
+            .header("Content-Type", "text/html")
+            .body(Body::from(
+                "<html><body><script>window.close()</script>Sent into wormhole.</body></html>",
+            ))
+            .unwrap())
+    } else {
+        Ok(Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(Body::from(format!("Project not found: {}", name_or_path)))
+            .unwrap())
+    }
+}
+
+fn handle_task_request(
+    method: &Method,
+    rest: &str,
+    params: &QueryParams,
+) -> Result<Response<Body>, Infallible> {
+    // Check for verb suffix: /task/<id>/delete
+    if let Some(task_id) = rest.strip_suffix("/delete") {
+        if method != &Method::POST {
+            return Ok(method_not_allowed("POST", &format!("/task/{}/delete", task_id)));
+        }
+        let task_id = task_id.trim().to_string();
+        return match crate::task::delete_task(&task_id) {
+            Ok(()) => Ok(Response::new(Body::from(format!("Deleted task: {}", task_id)))),
+            Err(e) => Ok(Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body(Body::from(e))
+                .unwrap()),
+        };
+    }
+
+    // Default: /task/<id> - open task
+    let task_id = rest.trim().to_string();
+    let home = params.home.clone();
+    let land_in = params.land_in.clone();
+    thread::spawn(move || {
+        if let Err(e) = crate::task::open_task(&task_id, home.as_deref(), land_in) {
+            crate::util::error(&e);
+        }
+    });
+    Ok(Response::new(Body::from("")))
+}
+
+fn open_project_by_name(
+    name_or_path: &str,
     land_in: Option<Application>,
     names: Vec<String>,
 ) -> Option<(Option<ProjectPath>, Mutation, Option<Application>)> {
     let mut projects = projects::lock();
-    if url_path == "/previous-project/" {
-        let p = projects.previous().map(|p| p.as_project_path());
-        Some((p, Mutation::RotateLeft, land_in))
-    } else if url_path == "/next-project/" {
-        let p = projects.next().map(|p| p.as_project_path());
-        Some((p, Mutation::RotateRight, land_in))
-    } else if let Some(name_or_path) = url_path.strip_prefix("/project/") {
-        // Try lookup by name, then path, then insert as new
-        let name_or_path = name_or_path.trim();
-        if let Some(project) = projects.by_name(name_or_path) {
+    if let Some(project) = projects.by_name(name_or_path) {
+        Some((Some(project.as_project_path()), Mutation::Insert, land_in))
+    } else if name_or_path.starts_with('/') {
+        let path = std::path::PathBuf::from(name_or_path);
+        if let Some(project) = projects.by_exact_path(&path) {
             Some((Some(project.as_project_path()), Mutation::Insert, land_in))
-        } else if name_or_path.starts_with('/') {
-            let path = std::path::PathBuf::from(name_or_path);
-            if let Some(project) = projects.by_exact_path(&path) {
-                Some((Some(project.as_project_path()), Mutation::Insert, land_in))
-            } else {
-                projects.add(name_or_path, names);
-                let project = projects.by_exact_path(&path);
-                Some((
-                    project.map(|p| p.as_project_path()),
-                    Mutation::Insert,
-                    land_in,
-                ))
-            }
         } else {
-            // Search WORMHOLE_PATH for a directory matching this name
-            // This handles both simple names like "temporal" and prefixed names
-            // like "devenv-temporal" for disambiguating clashing directory names.
-            if let Some(path) = config::resolve_project_name(name_or_path) {
-                let path_str = path.to_string_lossy().to_string();
-                // Use the requested name (e.g. "devenv-temporal") as the project name,
-                // not the directory name, to avoid conflicts with existing projects.
-                let mut project_names = names;
-                if project_names.is_empty() {
-                    project_names = vec![name_or_path.to_string()];
-                }
-                projects.add(&path_str, project_names);
-                let project = projects.by_exact_path(&path);
-                Some((
-                    project.map(|p| p.as_project_path()),
-                    Mutation::Insert,
-                    land_in,
-                ))
-            } else {
-                Some((None, Mutation::Insert, land_in))
-            }
+            projects.add(name_or_path, names);
+            let project = projects.by_exact_path(&path);
+            Some((
+                project.map(|p| p.as_project_path()),
+                Mutation::Insert,
+                land_in,
+            ))
         }
-    } else if let Some(absolute_path) = url_path.strip_prefix("/file/") {
+    } else {
+        // Search WORMHOLE_PATH for a directory matching this name
+        if let Some(path) = config::resolve_project_name(name_or_path) {
+            let path_str = path.to_string_lossy().to_string();
+            let mut project_names = names;
+            if project_names.is_empty() {
+                project_names = vec![name_or_path.to_string()];
+            }
+            projects.add(&path_str, project_names);
+            let project = projects.by_exact_path(&path);
+            Some((
+                project.map(|p| p.as_project_path()),
+                Mutation::Insert,
+                land_in,
+            ))
+        } else {
+            Some((None, Mutation::Insert, land_in))
+        }
+    }
+}
+
+fn determine_requested_operation(
+    url_path: &str,
+    line: Option<usize>,
+    land_in: Option<Application>,
+) -> Option<(Option<ProjectPath>, Mutation, Option<Application>)> {
+    let projects = projects::lock();
+    if let Some(absolute_path) = url_path.strip_prefix("/file/") {
         let p = ProjectPath::from_absolute_path(absolute_path, &projects);
         Some((p, Mutation::Insert, land_in))
     } else if let Some(project_path) = ProjectPath::from_github_url(&url_path, line, &projects) {

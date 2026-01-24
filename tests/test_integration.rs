@@ -88,11 +88,11 @@ fn test_previous_project_and_next_project() {
 
     for _ in 0..2 {
         // Previous should transition to (a, editor)
-        test.hs_get("/previous-project/").unwrap();
+        test.hs_get("/project/previous").unwrap();
         test.assert_focus(Editor(&proj_a));
 
         // Next should transition to (b, editor)
-        test.hs_get("/next-project/").unwrap();
+        test.hs_get("/project/next").unwrap();
         test.assert_focus(Editor(&proj_b));
     }
 
@@ -105,7 +105,7 @@ fn test_previous_project_and_next_project() {
         .unwrap();
 
     // Previous should transition to (a, editor)
-    test.hs_get("/previous-project/").unwrap();
+    test.hs_get("/project/previous").unwrap();
     test.assert_focus(Editor(&proj_a));
 }
 
@@ -126,7 +126,7 @@ fn test_close_project() {
     test.hs_get(&format!("/project/{}", proj)).unwrap();
     test.assert_focus(Editor(&proj));
 
-    test.hs_post(&format!("/close-project/{}", proj)).unwrap();
+    test.hs_post(&format!("/project/{}/close", proj)).unwrap();
 
     assert!(
         test.wait_until(|| !test.window_exists(&proj), 5),
@@ -177,7 +177,7 @@ fn test_open_file() {
 
 #[test]
 fn test_pin() {
-    // Test that /pin/ sets the land-in KV based on current application.
+    // Test that /pin sets the land-in KV based on current application.
     // The actual effect of land-in on navigation is tested in test_open_project.
     let test = harness::WormholeTest::new(8935);
 
@@ -196,7 +196,7 @@ fn test_pin() {
     test.assert_focus(Editor(&proj));
 
     // Pin while in editor - should set land-in=editor
-    test.hs_post("/pin/").unwrap();
+    test.hs_post("/pin").unwrap();
     std::thread::sleep(std::time::Duration::from_millis(500));
 
     // Verify KV was set
@@ -210,7 +210,7 @@ fn test_pin() {
     test.focus_terminal();
     test.assert_focus(Terminal(&proj));
 
-    test.hs_post("/pin/").unwrap();
+    test.hs_post("/pin").unwrap();
     std::thread::sleep(std::time::Duration::from_millis(500));
 
     // Verify KV was updated

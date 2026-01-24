@@ -1,5 +1,5 @@
 use clap::builder::ValueHint;
-use clap::{CommandFactory, Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::{generate, Shell};
 use std::io;
 
@@ -12,16 +12,33 @@ pub struct Cli {
     pub command: Option<Command>,
 }
 
+#[derive(Clone, ValueEnum)]
+pub enum ProjectAction {
+    /// Remove project from wormhole
+    Remove,
+    /// Close project windows
+    Close,
+}
+
+#[derive(Clone, ValueEnum)]
+pub enum TaskAction {
+    /// Delete task (remove worktree and branch)
+    Delete,
+}
+
 #[derive(Subcommand)]
 pub enum Command {
     /// Start the wormhole server
     Serve,
 
-    /// Switch to a project by name, or open/create a project at a path
+    /// Project operations: open, remove, close, previous, next
     Project {
-        /// Project name or absolute path
+        /// Project name, absolute path, or 'previous'/'next'
         #[arg(value_hint = ValueHint::DirPath)]
         name_or_path: String,
+        /// Action: remove, close (default: open)
+        #[arg(value_enum)]
+        action: Option<ProjectAction>,
         /// Optional project name (when creating from path)
         #[arg(long)]
         name: Option<String>,
@@ -30,10 +47,20 @@ pub enum Command {
         land_in: Option<String>,
     },
 
-    /// Switch to a task (creates git worktree if needed)
+    /// List all projects
+    Projects {
+        /// Output format: text (default) or json
+        #[arg(long, default_value = "text")]
+        format: String,
+    },
+
+    /// Task operations: open, delete
     Task {
         /// Task identifier (e.g., JIRA ID like ACT-1234)
         task_id: String,
+        /// Action: delete (default: open)
+        #[arg(value_enum)]
+        action: Option<TaskAction>,
         /// Home repository name (required for new tasks)
         #[arg(long)]
         home: Option<String>,
@@ -42,11 +69,8 @@ pub enum Command {
         land_in: Option<String>,
     },
 
-    /// Delete a task (removes git worktree and branch)
-    DeleteTask {
-        /// Task identifier to delete
-        task_id: String,
-    },
+    /// List all tasks
+    Tasks,
 
     /// Open a file in the appropriate project
     File {
@@ -58,39 +82,6 @@ pub enum Command {
         land_in: Option<String>,
     },
 
-    /// Switch to the previous project
-    Previous {
-        /// Which application to focus: editor or terminal
-        #[arg(long, value_name = "APP")]
-        land_in: Option<String>,
-    },
-
-    /// Switch to the next project
-    Next {
-        /// Which application to focus: editor or terminal
-        #[arg(long, value_name = "APP")]
-        land_in: Option<String>,
-    },
-
-    /// List projects (current and available)
-    List {
-        /// Output format: text (default) or json
-        #[arg(long, default_value = "text")]
-        format: String,
-    },
-
-    /// Close a project (editor and terminal windows)
-    Close {
-        /// Project name
-        name: String,
-    },
-
-    /// Remove a project from wormhole
-    Remove {
-        /// Project name
-        name: String,
-    },
-
     /// Pin current (project, application) state
     Pin,
 
@@ -100,7 +91,7 @@ pub enum Command {
         command: KvCommand,
     },
 
-    /// Show debug information about all projects
+    /// Show debug information
     Debug,
 
     /// Generate shell completions
@@ -214,62 +205,28 @@ pub fn run(command: Command) -> Result<(), String> {
 
         Command::Project {
             name_or_path,
+            action,
             name,
             land_in,
         } => {
             let query = build_query(&land_in, &name);
-            let path = format!("/project/{}{}", name_or_path, query);
-            client.get(&path)?;
-            Ok(())
-        }
-
-        Command::Task {
-            task_id,
-            home,
-            land_in,
-        } => {
-            let mut params = vec![];
-            if let Some(h) = home {
-                params.push(format!("home={}", h));
+            match action {
+                Some(ProjectAction::Remove) => {
+                    client.post(&format!("/project/{}/remove", name_or_path))?;
+                }
+                Some(ProjectAction::Close) => {
+                    client.post(&format!("/project/{}/close", name_or_path))?;
+                }
+                None => {
+                    // Default action: open (handles 'previous', 'next', or project name)
+                    client.get(&format!("/project/{}{}", name_or_path, query))?;
+                }
             }
-            if let Some(app) = land_in {
-                params.push(format!("land-in={}", app));
-            }
-            let query = if params.is_empty() {
-                String::new()
-            } else {
-                format!("?{}", params.join("&"))
-            };
-            client.get(&format!("/task/{}{}", task_id, query))?;
             Ok(())
         }
 
-        Command::DeleteTask { task_id } => {
-            client.post(&format!("/delete-task/{}", task_id))?;
-            Ok(())
-        }
-
-        Command::File { path, land_in } => {
-            let query = build_query(&land_in, &None);
-            let url_path = format!("/file/{}{}", path, query);
-            client.get(&url_path)?;
-            Ok(())
-        }
-
-        Command::Previous { land_in } => {
-            let query = build_query(&land_in, &None);
-            client.get(&format!("/previous-project/{}", query))?;
-            Ok(())
-        }
-
-        Command::Next { land_in } => {
-            let query = build_query(&land_in, &None);
-            client.get(&format!("/next-project/{}", query))?;
-            Ok(())
-        }
-
-        Command::List { format } => {
-            let response = client.get("/list-projects/")?;
+        Command::Projects { format } => {
+            let response = client.get("/projects")?;
             if format == "json" {
                 println!("{}", response);
             } else {
@@ -287,18 +244,59 @@ pub fn run(command: Command) -> Result<(), String> {
             Ok(())
         }
 
-        Command::Close { name } => {
-            client.post(&format!("/close-project/{}", name))?;
+        Command::Task {
+            task_id,
+            action,
+            home,
+            land_in,
+        } => {
+            match action {
+                Some(TaskAction::Delete) => {
+                    client.post(&format!("/task/{}/delete", task_id))?;
+                }
+                None => {
+                    // Default action: open
+                    let mut params = vec![];
+                    if let Some(h) = home {
+                        params.push(format!("home={}", h));
+                    }
+                    if let Some(app) = land_in {
+                        params.push(format!("land-in={}", app));
+                    }
+                    let query = if params.is_empty() {
+                        String::new()
+                    } else {
+                        format!("?{}", params.join("&"))
+                    };
+                    client.get(&format!("/task/{}{}", task_id, query))?;
+                }
+            }
             Ok(())
         }
 
-        Command::Remove { name } => {
-            client.post(&format!("/remove-project/{}", name))?;
+        Command::Tasks => {
+            let response = client.get("/tasks")?;
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response) {
+                if let Some(tasks) = json.get("tasks").and_then(|v| v.as_array()) {
+                    for task in tasks {
+                        if let Some(id) = task.get("id").and_then(|v| v.as_str()) {
+                            println!("{}", id);
+                        }
+                    }
+                }
+            }
+            Ok(())
+        }
+
+        Command::File { path, land_in } => {
+            let query = build_query(&land_in, &None);
+            let url_path = format!("/file/{}{}", path, query);
+            client.get(&url_path)?;
             Ok(())
         }
 
         Command::Pin => {
-            client.post("/pin/")?;
+            client.post("/pin")?;
             Ok(())
         }
 
@@ -332,7 +330,7 @@ pub fn run(command: Command) -> Result<(), String> {
         },
 
         Command::Debug => {
-            let response = client.get("/debug-projects/")?;
+            let response = client.get("/debug")?;
             println!("{}", response);
             Ok(())
         }

@@ -38,9 +38,9 @@ pub enum Command {
     /// Start the wormhole server
     Serve,
 
-    /// Project operations: open, remove, close, previous, next
+    /// Project operations: list, open, remove, close, previous, next
     Project {
-        /// Project name, absolute path, or 'previous'/'next'
+        /// Project name, path, or 'list'/'previous'/'next'
         #[arg(value_hint = ValueHint::DirPath)]
         name_or_path: String,
         /// Action: remove, close (default: open)
@@ -52,18 +52,14 @@ pub enum Command {
         /// Which application to focus: editor or terminal
         #[arg(long, value_name = "APP")]
         land_in: Option<String>,
-    },
-
-    /// List all projects
-    Projects {
-        /// Output format: text (default) or json
+        /// Output format for list: text (default) or json
         #[arg(long, default_value = "text")]
         format: String,
     },
 
-    /// Task operations: open, delete
+    /// Task operations: list, open, delete
     Task {
-        /// Task identifier (e.g., JIRA ID like ACT-1234)
+        /// Task identifier or 'list'
         task_id: String,
         /// Action: delete (default: open)
         #[arg(value_enum)]
@@ -75,9 +71,6 @@ pub enum Command {
         #[arg(long, value_name = "APP")]
         land_in: Option<String>,
     },
-
-    /// List all tasks
-    Tasks,
 
     /// Open a file in the appropriate project
     File {
@@ -221,7 +214,25 @@ pub fn run(command: Command) -> Result<(), String> {
             action,
             name,
             land_in,
+            format,
         } => {
+            if name_or_path == "list" {
+                let response = client.get("/project/list")?;
+                if format == "json" {
+                    println!("{}", response);
+                } else {
+                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response) {
+                        if let Some(current) = json.get("current").and_then(|v| v.as_array()) {
+                            for name in current {
+                                if let Some(s) = name.as_str() {
+                                    println!("{}", s);
+                                }
+                            }
+                        }
+                    }
+                }
+                return Ok(());
+            }
             let query = build_query(&land_in, &name);
             match action {
                 Some(ProjectAction::Remove) => {
@@ -231,27 +242,7 @@ pub fn run(command: Command) -> Result<(), String> {
                     client.post(&format!("/project/{}/close", name_or_path))?;
                 }
                 None => {
-                    // Default action: open (handles 'previous', 'next', or project name)
                     client.get(&format!("/project/{}{}", name_or_path, query))?;
-                }
-            }
-            Ok(())
-        }
-
-        Command::Projects { format } => {
-            let response = client.get("/projects")?;
-            if format == "json" {
-                println!("{}", response);
-            } else {
-                // Parse JSON and print current projects as plain text
-                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response) {
-                    if let Some(current) = json.get("current").and_then(|v| v.as_array()) {
-                        for name in current {
-                            if let Some(s) = name.as_str() {
-                                println!("{}", s);
-                            }
-                        }
-                    }
                 }
             }
             Ok(())
@@ -263,12 +254,24 @@ pub fn run(command: Command) -> Result<(), String> {
             home,
             land_in,
         } => {
+            if task_id == "list" {
+                let response = client.get("/task/list")?;
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response) {
+                    if let Some(tasks) = json.get("tasks").and_then(|v| v.as_array()) {
+                        for task in tasks {
+                            if let Some(id) = task.get("id").and_then(|v| v.as_str()) {
+                                println!("{}", id);
+                            }
+                        }
+                    }
+                }
+                return Ok(());
+            }
             match action {
                 Some(TaskAction::Delete) => {
                     client.post(&format!("/task/{}/delete", task_id))?;
                 }
                 None => {
-                    // Default action: open
                     let mut params = vec![];
                     if let Some(h) = home {
                         params.push(format!("home={}", h));
@@ -282,20 +285,6 @@ pub fn run(command: Command) -> Result<(), String> {
                         format!("?{}", params.join("&"))
                     };
                     client.get(&format!("/task/{}{}", task_id, query))?;
-                }
-            }
-            Ok(())
-        }
-
-        Command::Tasks => {
-            let response = client.get("/tasks")?;
-            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response) {
-                if let Some(tasks) = json.get("tasks").and_then(|v| v.as_array()) {
-                    for task in tasks {
-                        if let Some(id) = task.get("id").and_then(|v| v.as_str()) {
-                            println!("{}", id);
-                        }
-                    }
                 }
             }
             Ok(())

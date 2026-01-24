@@ -41,16 +41,11 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         return Ok(Response::new(Body::from("")));
     }
     let params = QueryParams::from_query(uri.query());
-    if &path != "/projects" {
+    if &path != "/project/list" {
         ps!("{} {} {:?}", method, uri, params);
     }
 
-    // Collection endpoints
-    if path == "/projects" {
-        Ok(endpoints::list_projects())
-    } else if path == "/tasks" {
-        Ok(endpoints::list_tasks())
-    } else if path == "/debug" {
+    if path == "/debug" {
         Ok(endpoints::debug_projects())
     } else if path == "/pin" {
         if method != Method::POST {
@@ -116,6 +111,11 @@ async fn handle_project_request(
     rest: &str,
     params: &QueryParams,
 ) -> Result<Response<Body>, Infallible> {
+    // /project/list - list all projects
+    if rest == "list" {
+        return Ok(endpoints::list_projects());
+    }
+
     // /project/previous - navigate to previous project
     if rest == "previous" {
         let projects = projects::lock();
@@ -183,6 +183,11 @@ fn handle_task_request(
     rest: &str,
     params: &QueryParams,
 ) -> Result<Response<Body>, Infallible> {
+    // /task/list - list all tasks
+    if rest == "list" {
+        return Ok(endpoints::list_tasks());
+    }
+
     // Check for verb suffix: /task/<id>/delete
     if let Some(task_id) = rest.strip_suffix("/delete") {
         if method != &Method::POST {

@@ -56,13 +56,13 @@ final class ProjectsModel: ObservableObject {
     }
 
     func fetchProjects() async throws -> ProjectsResponse {
-        let url = URL(string: "http://localhost:7117/projects")!
+        let url = URL(string: "http://localhost:7117/project/list")!
         let (data, _) = try await URLSession.shared.data(from: url)
         return try JSONDecoder().decode(ProjectsResponse.self, from: data)
     }
 
     func fetchTasks() async throws -> TasksResponse {
-        let url = URL(string: "http://localhost:7117/tasks")!
+        let url = URL(string: "http://localhost:7117/task/list")!
         let (data, _) = try await URLSession.shared.data(from: url)
         return try JSONDecoder().decode(TasksResponse.self, from: data)
     }

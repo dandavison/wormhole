@@ -4,6 +4,7 @@ mod editor;
 mod endpoints;
 mod git;
 mod hammerspoon;
+mod jira;
 mod kv;
 mod project;
 mod project_path;

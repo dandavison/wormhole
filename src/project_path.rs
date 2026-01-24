@@ -25,8 +25,8 @@ impl ProjectPath {
             editor::open_workspace(&project);
         }
         let land_in = land_in.or_else(|| match mutation {
-            Mutation::RotateLeft | Mutation::RotateRight => self.project.last_application.clone(),
-            _ => parse_application(self.project.kv.get("land-in")),
+            Mutation::Jump => self.project.last_application.clone(),
+            Mutation::Insert => parse_application(self.project.kv.get("land-in")),
         });
         let open_terminal = move || {
             config::TERMINAL.open(&project).unwrap_or_else(|err| {

@@ -196,24 +196,23 @@ fn test_previous_skips_closed_projects() {
     // After this, ring order is: [C, B, A] (C is current, B is previous, A is next)
     test.hs_get(&format!("/project/switch/{}?name={}", dir_a, proj_a))
         .unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(500));
+    test.assert_tmux_only(&proj_a);
+
     test.hs_get(&format!("/project/switch/{}?name={}", dir_b, proj_b))
         .unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(500));
+    test.assert_tmux_only(&proj_b);
+
     test.hs_get(&format!("/project/switch/{}?name={}", dir_c, proj_c))
         .unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(500));
-
-    // Verify we're at C
-    test.assert_focus(Editor(&proj_c));
+    test.assert_tmux_only(&proj_c);
 
     // Close B (this closes its tmux window, making it "not open")
     test.hs_post(&format!("/project/close/{}", proj_b)).unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(500));
+    std::thread::sleep(std::time::Duration::from_millis(1000));
 
     // Now call previous - should skip B (closed) and go to A
     test.hs_get("/project/previous").unwrap();
-    test.assert_focus(Editor(&proj_a));
+    test.assert_tmux_only(&proj_a);
 }
 
 #[test]
@@ -236,24 +235,23 @@ fn test_next_skips_closed_projects() {
     // Ring: [C, B, A] - C current, B previous, A at back (next)
     test.hs_get(&format!("/project/switch/{}?name={}", dir_a, proj_a))
         .unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(500));
+    test.assert_tmux_only(&proj_a);
+
     test.hs_get(&format!("/project/switch/{}?name={}", dir_b, proj_b))
         .unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(500));
+    test.assert_tmux_only(&proj_b);
+
     test.hs_get(&format!("/project/switch/{}?name={}", dir_c, proj_c))
         .unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(500));
-
-    // Verify we're at C
-    test.assert_focus(Editor(&proj_c));
+    test.assert_tmux_only(&proj_c);
 
     // Close A (which is the "next" project)
     test.hs_post(&format!("/project/close/{}", proj_a)).unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(500));
+    std::thread::sleep(std::time::Duration::from_millis(1000));
 
     // Now call next - should skip A (closed) and go to B
     test.hs_get("/project/next").unwrap();
-    test.assert_focus(Editor(&proj_b));
+    test.assert_tmux_only(&proj_b);
 }
 
 #[test]

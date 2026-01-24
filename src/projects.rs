@@ -14,16 +14,10 @@ use std::time::Duration;
 
     - The currently active project is at index 0.
 
-    - When adding a new project, we insert it to the right of the current project,
-      i.e. at index 1 (if there is a current project).
+    - When adding a new project or jumping to one, we move it to the back
+      and rotate right, bringing it to index 0 (current).
 
-    - When jumping to a project, we remove it and insert it to the right of the
-      current project.
-
-    - When switching to the previous project, we rotate right.
-
-    - When switching to the next project, or selecting one we just added, or are jumping to,
-      we rotate left.
+    - previous/next only navigate to open projects (those with tmux windows).
 
     - Write to disk asynchronously after every mutation.
 */
@@ -42,9 +36,8 @@ pub fn lock<'a>() -> Projects<'a> {
 
 #[derive(Debug)]
 pub enum Mutation {
-    RotateLeft,
-    RotateRight,
     Insert,
+    Jump, // Like Insert but preserves last_application for land_in (used by previous/next)
 }
 
 impl<'a> Projects<'a> {
@@ -64,6 +57,15 @@ impl<'a> Projects<'a> {
         self.0.get(1).cloned()
     }
 
+    pub fn previous_open(&self) -> Option<Project> {
+        let terminal_windows = config::TERMINAL.window_names();
+        self.0
+            .iter()
+            .skip(1)
+            .find(|p| terminal_windows.contains(&p.name))
+            .cloned()
+    }
+
     pub fn current(&self) -> Option<Project> {
         self.0.get(0).cloned()
     }
@@ -72,14 +74,22 @@ impl<'a> Projects<'a> {
         self.0.back().cloned()
     }
 
+    pub fn next_open(&self) -> Option<Project> {
+        let terminal_windows = config::TERMINAL.window_names();
+        self.0
+            .iter()
+            .skip(1)
+            .rev()
+            .find(|p| terminal_windows.contains(&p.name))
+            .cloned()
+    }
+
     pub fn apply(&mut self, mutation: Mutation, name: &str) {
         match mutation {
-            Mutation::Insert => {
+            Mutation::Insert | Mutation::Jump => {
                 self.move_to_back(name);
                 self.0.rotate_right(1);
             }
-            Mutation::RotateLeft => self.0.rotate_left(1),
-            Mutation::RotateRight => self.0.rotate_right(1),
         };
     }
 

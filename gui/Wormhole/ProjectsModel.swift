@@ -12,7 +12,7 @@ struct TasksResponse: Codable {
 
 struct TaskInfo: Codable {
     let id: String
-    let home_repo: String
+    let project: String
     let worktree_path: String
 }
 

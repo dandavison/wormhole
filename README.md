@@ -77,6 +77,8 @@ wormhole file /path/to/file.rs:42       # Open file at line
 wormhole kv get myapp land-in           # Get KV
 wormhole kv set myapp land-in editor    # Set KV
 wormhole jira sprint                    # List JIRA sprint issues
+wormhole jira sprint create             # Create tasks for all sprint issues
+wormhole jira sprint create ACT-123 myrepo  # With home project override
 wormhole kill-session                   # Kill tmux session and clean up
 wormhole completion bash                # Generate shell completions
 ```
@@ -112,6 +114,7 @@ Query params: `land-in=terminal|editor`, `name=<project_name>`, `line=N`, `home-
 | `JIRA_EMAIL` | JIRA account email |
 | `JIRA_TOKEN` | JIRA API token |
 | `GITHUB_REPO` | GitHub repo (e.g., `owner/repo`) for PR lookup in `jira sprint` |
+| `WORMHOLE_DEFAULT_HOME` | Default home project for `jira sprint create` |
 
 ## Example Workflows
 

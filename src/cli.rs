@@ -15,8 +15,22 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum JiraCommand {
-    /// List current sprint issues
-    Sprint,
+    /// Sprint operations
+    Sprint {
+        #[command(subcommand)]
+        command: Option<SprintCommand>,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum SprintCommand {
+    /// Create tasks for sprint issues
+    Create {
+        /// Override pairs: <ticket> <home-project> ...
+        /// Tickets not listed use WORMHOLE_DEFAULT_HOME_PROJECT
+        #[arg(trailing_var_arg = true)]
+        overrides: Vec<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -353,7 +367,12 @@ pub fn run(command: Command) -> Result<(), String> {
         },
 
         Command::Jira { command } => match command {
-            JiraCommand::Sprint => jira::print_sprint_issues(),
+            JiraCommand::Sprint { command } => match command {
+                None => jira::print_sprint_issues(),
+                Some(SprintCommand::Create { overrides }) => {
+                    create_sprint_tasks(&client, overrides)
+                }
+            },
         },
 
         Command::Completion { shell } => {
@@ -370,4 +389,68 @@ pub fn run(command: Command) -> Result<(), String> {
             Ok(())
         }
     }
+}
+
+fn create_sprint_tasks(client: &Client, overrides: Vec<String>) -> Result<(), String> {
+    use std::collections::HashMap;
+    use std::env;
+
+    let default_home = env::var("WORMHOLE_DEFAULT_HOME_PROJECT").ok();
+
+    // Parse override pairs
+    let mut home_overrides: HashMap<String, String> = HashMap::new();
+    let mut iter = overrides.iter();
+    while let Some(ticket) = iter.next() {
+        let home = iter
+            .next()
+            .ok_or_else(|| format!("Missing home project for ticket {}", ticket))?;
+        home_overrides.insert(ticket.clone(), home.clone());
+    }
+
+    // Get sprint issues
+    let issues = jira::get_sprint_issues()?;
+
+    // Get existing tasks
+    let response = client.get("/project/list")?;
+    let existing: std::collections::HashSet<String> =
+        serde_json::from_str::<serde_json::Value>(&response)
+            .ok()
+            .and_then(|v| v.get("current")?.as_array().cloned())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.get("name")?.as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+    let mut created = 0;
+    let mut skipped = 0;
+
+    for issue in &issues {
+        if existing.contains(&issue.key) {
+            skipped += 1;
+            continue;
+        }
+
+        let home = home_overrides
+            .get(&issue.key)
+            .or(default_home.as_ref())
+            .ok_or_else(|| {
+                format!(
+                    "No home project for {} (set WORMHOLE_DEFAULT_HOME_PROJECT or provide override)",
+                    issue.key
+                )
+            })?;
+
+        let path = format!("/project/switch/{}?home-project={}", issue.key, home);
+        client.get(&path)?;
+        println!("Created task {} (home: {})", issue.key, home);
+        created += 1;
+    }
+
+    println!(
+        "\nCreated {} tasks, skipped {} (already exist)",
+        created, skipped
+    );
+    Ok(())
 }

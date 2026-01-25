@@ -265,7 +265,11 @@ pub fn run(command: Command) -> Result<(), String> {
                         if let Some(current) = json.get("current").and_then(|v| v.as_array()) {
                             for item in current {
                                 if let Some(name) = item.get("name").and_then(|n| n.as_str()) {
-                                    println!("{}", name);
+                                    if let Some(home) = item.get("home_project").and_then(|h| h.as_str()) {
+                                        println!("{} ({})", name, home);
+                                    } else {
+                                        println!("{}", name);
+                                    }
                                 }
                             }
                         }

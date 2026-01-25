@@ -18,6 +18,10 @@ pub struct WormholeTest {
 
 impl WormholeTest {
     pub fn new(port: u16) -> Self {
+        Self::with_wormhole_path(port, None)
+    }
+
+    pub fn with_wormhole_path(port: u16, wormhole_path: Option<&str>) -> Self {
         let tmux_socket = format!("wormhole-test-{}", port);
         let _ = Command::new("tmux")
             .args(["-L", &tmux_socket, "kill-server"])
@@ -25,6 +29,16 @@ impl WormholeTest {
 
         let current_dir =
             std::env::current_dir().unwrap_or_else(|_| panic!("Failed to get current directory"));
+
+        let wormhole_cmd = if let Some(path) = wormhole_path {
+            format!(
+                "WORMHOLE_PORT={} WORMHOLE_PATH={} ./target/debug/wormhole",
+                port, path
+            )
+        } else {
+            format!("WORMHOLE_PORT={} ./target/debug/wormhole", port)
+        };
+
         Command::new("tmux")
             .args([
                 "-L",
@@ -33,9 +47,8 @@ impl WormholeTest {
                 "-d",
                 "-c",
                 current_dir.to_str().unwrap(),
-                "./target/debug/wormhole",
+                &wormhole_cmd,
             ])
-            .env("WORMHOLE_PORT", port.to_string())
             .output()
             .unwrap_or_else(|_| panic!("Failed to start wormhole in tmux"));
 
@@ -172,6 +185,38 @@ impl WormholeTest {
             .output()
             .unwrap();
         String::from_utf8_lossy(&output.stdout).trim().to_string()
+    }
+
+    pub fn get_tmux_pane_cwd(&self) -> String {
+        let output = Command::new("tmux")
+            .args([
+                "-L",
+                &self.tmux_socket,
+                "display-message",
+                "-p",
+                "#{pane_current_path}",
+            ])
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
+    }
+
+    #[track_caller]
+    pub fn assert_tmux_cwd(&self, expected_path: &str) {
+        let expected = expected_path.to_string();
+        assert!(
+            self.wait_until(|| self.get_tmux_pane_cwd() == expected, 5),
+            "Expected tmux pane cwd '{}', got '{}'",
+            expected,
+            self.get_tmux_pane_cwd()
+        );
+    }
+
+    pub fn tmux_send_keys(&self, keys: &str) {
+        Command::new("tmux")
+            .args(["-L", &self.tmux_socket, "send-keys", keys, "Enter"])
+            .output()
+            .unwrap();
     }
 
     #[track_caller]

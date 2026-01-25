@@ -1,6 +1,7 @@
 mod harness;
 use harness::Focus::*;
 use harness::TEST_PREFIX;
+use std::process::Command;
 
 #[test]
 fn test_open_project() {
@@ -219,4 +220,150 @@ fn test_pin() {
         kv, "terminal",
         "Expected land-in=terminal after pinning in terminal"
     );
+}
+
+#[test]
+fn test_task_switch_changes_terminal_cwd() {
+    let repo_name = format!("{}task-repo", TEST_PREFIX);
+    let repo_dir = format!("/private/tmp/{}", repo_name);
+    let worktrees_dir = format!("{}/.tmp/worktrees", repo_dir);
+    let task_a = format!("{}task-a", TEST_PREFIX);
+    let task_b = format!("{}task-b", TEST_PREFIX);
+    let task_a_dir = format!("{}/{}", worktrees_dir, task_a);
+    let task_b_dir = format!("{}/{}", worktrees_dir, task_b);
+
+    let _ = std::fs::remove_dir_all(&repo_dir);
+    std::fs::create_dir_all(&repo_dir).unwrap();
+
+    Command::new("git")
+        .args(["init"])
+        .current_dir(&repo_dir)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["config", "user.email", "test@test.com"])
+        .current_dir(&repo_dir)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["config", "user.name", "Test"])
+        .current_dir(&repo_dir)
+        .output()
+        .unwrap();
+    std::fs::write(format!("{}/README.md", repo_dir), "# Test").unwrap();
+    Command::new("git")
+        .args(["add", "."])
+        .current_dir(&repo_dir)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["commit", "-m", "Initial commit"])
+        .current_dir(&repo_dir)
+        .output()
+        .unwrap();
+
+    std::fs::create_dir_all(&worktrees_dir).unwrap();
+    Command::new("git")
+        .args(["worktree", "add", "-b", &task_a, &task_a_dir, "HEAD"])
+        .current_dir(&repo_dir)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["worktree", "add", "-b", &task_b, &task_b_dir, "HEAD"])
+        .current_dir(&repo_dir)
+        .output()
+        .unwrap();
+
+    let wormhole_path = "/private/tmp";
+    let test = harness::WormholeTest::with_wormhole_path(8936, Some(wormhole_path));
+
+    test.hs_get(&format!("/task/switch/{}", task_a)).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    test.assert_tmux_window(&task_a);
+    test.assert_tmux_cwd(&task_a_dir);
+
+    test.hs_get(&format!("/task/switch/{}", task_b)).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    test.assert_tmux_window(&task_b);
+    test.assert_tmux_cwd(&task_b_dir);
+
+    test.hs_get(&format!("/task/switch/{}", task_a)).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    test.assert_tmux_window(&task_a);
+    test.assert_tmux_cwd(&task_a_dir);
+}
+
+#[test]
+fn test_task_switch_restores_cwd_after_manual_cd() {
+    let repo_name = format!("{}task-cd-repo", TEST_PREFIX);
+    let repo_dir = format!("/private/tmp/{}", repo_name);
+    let worktrees_dir = format!("{}/.tmp/worktrees", repo_dir);
+    let task_a = format!("{}task-cd-a", TEST_PREFIX);
+    let task_b = format!("{}task-cd-b", TEST_PREFIX);
+    let task_a_dir = format!("{}/{}", worktrees_dir, task_a);
+    let task_b_dir = format!("{}/{}", worktrees_dir, task_b);
+
+    let _ = std::fs::remove_dir_all(&repo_dir);
+    std::fs::create_dir_all(&repo_dir).unwrap();
+
+    Command::new("git")
+        .args(["init"])
+        .current_dir(&repo_dir)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["config", "user.email", "test@test.com"])
+        .current_dir(&repo_dir)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["config", "user.name", "Test"])
+        .current_dir(&repo_dir)
+        .output()
+        .unwrap();
+    std::fs::write(format!("{}/README.md", repo_dir), "# Test").unwrap();
+    Command::new("git")
+        .args(["add", "."])
+        .current_dir(&repo_dir)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["commit", "-m", "Initial commit"])
+        .current_dir(&repo_dir)
+        .output()
+        .unwrap();
+
+    std::fs::create_dir_all(&worktrees_dir).unwrap();
+    Command::new("git")
+        .args(["worktree", "add", "-b", &task_a, &task_a_dir, "HEAD"])
+        .current_dir(&repo_dir)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["worktree", "add", "-b", &task_b, &task_b_dir, "HEAD"])
+        .current_dir(&repo_dir)
+        .output()
+        .unwrap();
+
+    let wormhole_path = "/private/tmp";
+    let test = harness::WormholeTest::with_wormhole_path(8937, Some(wormhole_path));
+
+    test.hs_get(&format!("/task/switch/{}", task_a)).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    test.assert_tmux_window(&task_a);
+    test.assert_tmux_cwd(&task_a_dir);
+
+    test.tmux_send_keys(&format!("cd {}", task_b_dir));
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    test.assert_tmux_cwd(&task_b_dir);
+
+    test.hs_get(&format!("/task/switch/{}", task_b)).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    test.assert_tmux_window(&task_b);
+    test.assert_tmux_cwd(&task_b_dir);
+
+    test.hs_get(&format!("/task/switch/{}", task_a)).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    test.assert_tmux_window(&task_a);
+    test.assert_tmux_cwd(&task_a_dir);
 }

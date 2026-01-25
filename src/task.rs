@@ -74,6 +74,35 @@ pub fn get_task(id: &str) -> Option<Project> {
     tasks().get(id).cloned()
 }
 
+pub fn create_task(task_id: &str, home: &str) -> Result<Project, String> {
+    if let Some(task) = get_task(task_id) {
+        return Ok(task);
+    }
+
+    let home_path = resolve_project_path(home)?;
+
+    if !git::is_git_repo(&home_path) {
+        return Err(format!("'{}' is not a git repository", home));
+    }
+
+    let worktree_path = git::worktree_base_path(&home_path).join(task_id);
+
+    if !worktree_path.exists() {
+        git::create_worktree(&home_path, &worktree_path, task_id)?;
+    }
+
+    refresh_cache();
+
+    Ok(Project {
+        name: task_id.to_string(),
+        path: worktree_path,
+        aliases: vec![],
+        kv: HashMap::new(),
+        last_application: None,
+        home_project: Some(home.to_string()),
+    })
+}
+
 pub fn open_task(
     task_id: &str,
     home: Option<&str>,
@@ -84,29 +113,7 @@ pub fn open_task(
     } else {
         let home = home
             .ok_or_else(|| format!("Task '{}' not found. Specify --home to create it.", task_id))?;
-
-        let home_path = resolve_project_path(home)?;
-
-        if !git::is_git_repo(&home_path) {
-            return Err(format!("'{}' is not a git repository", home));
-        }
-
-        let worktree_path = git::worktree_base_path(&home_path).join(task_id);
-
-        if !worktree_path.exists() {
-            git::create_worktree(&home_path, &worktree_path, task_id)?;
-        }
-
-        refresh_cache();
-
-        Project {
-            name: task_id.to_string(),
-            path: worktree_path,
-            aliases: vec![],
-            kv: HashMap::new(),
-            last_application: None,
-            home_project: Some(home.to_string()),
-        }
+        create_task(task_id, home)?
     };
 
     let open_terminal = {

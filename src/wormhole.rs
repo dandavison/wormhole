@@ -143,6 +143,24 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
                 .body(Body::from("Project not found"))
                 .unwrap()),
         }
+    } else if let Some(task_id) = path.strip_prefix("/project/create/") {
+        let task_id = task_id.trim();
+        let home = match params.home_project.as_deref() {
+            Some(h) => h,
+            None => {
+                return Ok(Response::builder()
+                    .status(StatusCode::BAD_REQUEST)
+                    .body(Body::from("home-project query param required"))
+                    .unwrap())
+            }
+        };
+        match crate::task::create_task(task_id, home) {
+            Ok(_) => Ok(Response::new(Body::from(format!("Created task: {}", task_id)))),
+            Err(e) => Ok(Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body(Body::from(e))
+                .unwrap()),
+        }
     } else if let Some(name_or_path) = path.strip_prefix("/project/switch/") {
         let name_or_path = name_or_path.trim().to_string();
         let home_project = params.home_project.clone();

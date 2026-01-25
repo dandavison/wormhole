@@ -580,7 +580,7 @@ fn sprint_create(client: &Client, overrides: Vec<String>, output: &str) -> Resul
             }
         };
 
-        let path = format!("/project/switch/{}?home-project={}", issue.key, home);
+        let path = format!("/project/create/{}?home-project={}", issue.key, home);
         client.get(&path)?;
         result.created.push(format!("{} ({})", issue.key, home));
     }

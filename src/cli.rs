@@ -24,8 +24,10 @@ pub enum JiraCommand {
 
 #[derive(Subcommand)]
 pub enum SprintCommand {
-    /// List sprint issues with status
+    /// List sprint issues
     List,
+    /// Show detailed status for each sprint issue
+    Show,
     /// Create tasks for sprint issues
     Create {
         /// Override pairs: <ticket> <home-project> ...
@@ -375,7 +377,8 @@ pub fn run(command: Command) -> Result<(), String> {
 
         Command::Jira { command } => match command {
             JiraCommand::Sprint { command } => match command {
-                None | Some(SprintCommand::List) => print_sprint_status(&client),
+                None | Some(SprintCommand::List) => print_sprint_list(),
+                Some(SprintCommand::Show) => print_sprint_status(),
                 Some(SprintCommand::Create { overrides }) => {
                     create_sprint_tasks(&client, overrides)
                 }
@@ -475,7 +478,15 @@ fn create_sprint_tasks(client: &Client, overrides: Vec<String>) -> Result<(), St
     Ok(())
 }
 
-fn print_sprint_status(_client: &Client) -> Result<(), String> {
+fn print_sprint_list() -> Result<(), String> {
+    let issues = jira::get_sprint_issues()?;
+    for issue in &issues {
+        println!("{} {}: {}", issue.status_emoji(), issue.key, issue.summary);
+    }
+    Ok(())
+}
+
+fn print_sprint_status() -> Result<(), String> {
     use std::thread;
 
     let issues = jira::get_sprint_issues()?;

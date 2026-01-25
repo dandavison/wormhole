@@ -668,7 +668,7 @@ fn sprint_show(output: &str) -> Result<(), String> {
         for item in &items {
             match item {
                 SprintShowItem::Task(task) => {
-                    print_task_status_text(task);
+                    print!("{}", task.render_terminal());
                 }
                 SprintShowItem::Issue(issue) => {
                     println!("{} {}: {}", issue.status_emoji(), issue.key, issue.summary);
@@ -681,52 +681,3 @@ fn sprint_show(output: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn print_task_status_text(status: &crate::status::TaskStatus) {
-    let jira_instance = std::env::var("JIRA_INSTANCE").ok();
-
-    let name_linked = if let Some(ref instance) = jira_instance {
-        let url = format!("https://{}.atlassian.net/browse/{}", instance, status.name);
-        crate::format_osc8_hyperlink(&url, &status.name)
-    } else {
-        status.name.clone()
-    };
-
-    let title = if let Some(ref jira) = status.jira {
-        format!("{}: {}", name_linked, jira.summary)
-    } else {
-        name_linked.clone()
-    };
-    let title_len = if let Some(ref jira) = status.jira {
-        status.name.len() + 2 + jira.summary.len()
-    } else {
-        status.name.len()
-    };
-    println!("{}", title);
-    println!("{}", "─".repeat(title_len.min(60)));
-
-    if let Some(ref jira) = status.jira {
-        println!("JIRA:      {} {}", jira.status_emoji(), jira.status);
-    } else if status.home_project.is_some() {
-        println!("JIRA:      ✗");
-    }
-
-    if let Some(ref pr) = status.pr {
-        let pr_linked = crate::format_osc8_hyperlink(&pr.url, &pr.display());
-        println!("PR:        {}", pr_linked);
-    } else {
-        println!("PR:        ✗");
-    }
-
-    if let Some(ref url) = status.plan_url {
-        let plan_linked = crate::format_osc8_hyperlink(url, "✓ plan.md");
-        println!("Plan:      {}", plan_linked);
-    } else {
-        println!("Plan:      ✗");
-    }
-
-    if let Some(ref repos) = status.aux_repos {
-        println!("Aux repos: {}", repos);
-    } else {
-        println!("Aux repos: ✗");
-    }
-}

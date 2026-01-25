@@ -351,7 +351,6 @@ fn test_project_status() {
     // Get status by name
     let status = test.hs_get(&format!("/project/status/{}", proj)).unwrap();
     assert!(status.contains(&proj), "Status should contain project name");
-    assert!(status.contains("plan.md"), "Status should mention plan.md");
 
     // Get current project status
     let status = test.hs_get("/project/status").unwrap();

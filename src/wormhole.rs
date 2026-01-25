@@ -133,9 +133,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
                         .body(Body::from(json))
                         .unwrap())
                 } else {
-                    let mut output = Vec::new();
-                    format_status_text(&s, &mut output);
-                    Ok(Response::new(Body::from(output)))
+                    Ok(Response::new(Body::from(s.render_terminal())))
                 }
             }
             None => Ok(Response::builder()
@@ -221,62 +219,6 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
                 .unwrap();
             return Ok(response);
         }
-    }
-}
-
-fn format_status_text(status: &crate::status::TaskStatus, output: &mut Vec<u8>) {
-    use std::io::Write;
-
-    let jira_instance = std::env::var("JIRA_INSTANCE").ok();
-
-    let name_linked = if let Some(ref instance) = jira_instance {
-        let url = format!("https://{}.atlassian.net/browse/{}", instance, status.name);
-        crate::format_osc8_hyperlink(&url, &status.name)
-    } else {
-        status.name.clone()
-    };
-
-    let title = if let Some(ref jira) = status.jira {
-        format!("{}: {}", name_linked, jira.summary)
-    } else {
-        name_linked.clone()
-    };
-    let title_len = if let Some(ref jira) = status.jira {
-        status.name.len() + 2 + jira.summary.len()
-    } else {
-        status.name.len()
-    };
-    let _ = writeln!(output, "{}", title);
-    let _ = writeln!(output, "{}", "─".repeat(title_len.min(60)));
-
-    if let Some(ref home) = status.home_project {
-        let _ = writeln!(output, "Home:      {}", home);
-    }
-
-    if let Some(ref jira) = status.jira {
-        let _ = writeln!(output, "JIRA:      {} {}", jira.status_emoji(), jira.status);
-    } else if status.home_project.is_some() {
-        let _ = writeln!(output, "JIRA:      ✗");
-    }
-
-    if let Some(ref pr) = status.pr {
-        let pr_linked = crate::format_osc8_hyperlink(&pr.url, &pr.display());
-        let _ = writeln!(output, "PR:        {}", pr_linked);
-    } else {
-        let _ = writeln!(output, "PR:        ✗");
-    }
-
-    if let Some(ref url) = status.plan_url {
-        let plan_linked = crate::format_osc8_hyperlink(url, "✓ plan.md");
-        let _ = writeln!(output, "Plan:      {}", plan_linked);
-    } else {
-        let _ = writeln!(output, "Plan:      ✗");
-    }
-
-    if let Some(ref repos) = status.aux_repos {
-        let _ = writeln!(output, "Aux repos: {}", repos);
-    } else {
-        let _ = writeln!(output, "Aux repos: ✗");
     }
 }
 

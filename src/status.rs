@@ -80,3 +80,61 @@ pub fn get_current_status() -> Option<TaskStatus> {
     let project = projects.current()?;
     Some(get_status(&project))
 }
+
+impl TaskStatus {
+    pub fn render_terminal(&self) -> String {
+        let jira_instance = std::env::var("JIRA_INSTANCE").ok();
+
+        let name_linked = if let Some(ref instance) = jira_instance {
+            let url = format!("https://{}.atlassian.net/browse/{}", instance, self.name);
+            crate::format_osc8_hyperlink(&url, &self.name)
+        } else {
+            self.name.clone()
+        };
+
+        let title = if let Some(ref jira) = self.jira {
+            format!("{}: {}", name_linked, jira.summary)
+        } else {
+            name_linked.clone()
+        };
+        let title_len = if let Some(ref jira) = self.jira {
+            self.name.len() + 2 + jira.summary.len()
+        } else {
+            self.name.len()
+        };
+
+        let mut lines = vec![title, "─".repeat(title_len.min(60))];
+
+        if let Some(ref home) = self.home_project {
+            lines.push(format!("Home:      {}", home));
+        }
+
+        if let Some(ref jira) = self.jira {
+            lines.push(format!("JIRA:      {} {}", jira.status_emoji(), jira.status));
+        } else if self.home_project.is_some() {
+            lines.push("JIRA:      ✗".to_string());
+        }
+
+        if let Some(ref pr) = self.pr {
+            let pr_linked = crate::format_osc8_hyperlink(&pr.url, &pr.display());
+            lines.push(format!("PR:        {}", pr_linked));
+        } else {
+            lines.push("PR:        ✗".to_string());
+        }
+
+        if let Some(ref url) = self.plan_url {
+            let plan_linked = crate::format_osc8_hyperlink(url, "✓ plan.md");
+            lines.push(format!("Plan:      {}", plan_linked));
+        } else {
+            lines.push("Plan:      ✗".to_string());
+        }
+
+        if let Some(ref repos) = self.aux_repos {
+            lines.push(format!("Aux repos: {}", repos));
+        } else {
+            lines.push("Aux repos: ✗".to_string());
+        }
+
+        lines.join("\n")
+    }
+}

@@ -128,8 +128,11 @@ pub enum Command {
     /// Generate shell completions
     Completion {
         /// Shell to generate completions for
-        #[arg(value_enum)]
-        shell: Shell,
+        #[arg(value_enum, required_unless_present = "projects")]
+        shell: Option<Shell>,
+        /// Output project names (for dynamic completion)
+        #[arg(long)]
+        projects: bool,
     },
 
     /// Kill tmux session and clean up
@@ -375,8 +378,21 @@ pub fn run(command: Command) -> Result<(), String> {
             },
         },
 
-        Command::Completion { shell } => {
-            generate(shell, &mut Cli::command(), "wormhole", &mut io::stdout());
+        Command::Completion { shell, projects } => {
+            if projects {
+                let response = client.get("/project/list")?;
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response) {
+                    if let Some(current) = json.get("current").and_then(|v| v.as_array()) {
+                        for item in current {
+                            if let Some(name) = item.get("name").and_then(|n| n.as_str()) {
+                                println!("{}", name);
+                            }
+                        }
+                    }
+                }
+            } else if let Some(shell) = shell {
+                generate(shell, &mut Cli::command(), "wormhole", &mut io::stdout());
+            }
             Ok(())
         }
 

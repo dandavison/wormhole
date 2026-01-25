@@ -6,16 +6,9 @@ use std::thread;
 use crate::wormhole::Application;
 use crate::{config, editor, git, project::Project, projects, util::warn};
 
-#[derive(Clone, Debug)]
-pub struct Task {
-    pub id: String,
-    pub project_name: String,
-    pub worktree_path: PathBuf,
-}
+static TASK_CACHE: RwLock<Option<HashMap<String, Project>>> = RwLock::new(None);
 
-static TASK_CACHE: RwLock<Option<HashMap<String, Task>>> = RwLock::new(None);
-
-pub fn discover_tasks() -> HashMap<String, Task> {
+pub fn discover_tasks() -> HashMap<String, Project> {
     let mut tasks = HashMap::new();
 
     let mut project_name_to_path: HashMap<String, PathBuf> =
@@ -41,10 +34,13 @@ pub fn discover_tasks() -> HashMap<String, Task> {
             if let Some(task_id) = worktree.path.file_name().and_then(|n| n.to_str()) {
                 tasks.insert(
                     task_id.to_string(),
-                    Task {
-                        id: task_id.to_string(),
-                        project_name: project_name.clone(),
-                        worktree_path: worktree.path,
+                    Project {
+                        name: task_id.to_string(),
+                        path: worktree.path,
+                        aliases: vec![],
+                        kv: HashMap::new(),
+                        last_application: None,
+                        home_project: Some(project_name.clone()),
                     },
                 );
             }
@@ -54,7 +50,7 @@ pub fn discover_tasks() -> HashMap<String, Task> {
     tasks
 }
 
-fn get_cached_tasks() -> HashMap<String, Task> {
+fn get_cached_tasks() -> HashMap<String, Project> {
     let cache = TASK_CACHE.read().unwrap();
     if let Some(tasks) = cache.as_ref() {
         return tasks.clone();
@@ -67,14 +63,14 @@ fn get_cached_tasks() -> HashMap<String, Task> {
     tasks
 }
 
-fn refresh_cache() -> HashMap<String, Task> {
+fn refresh_cache() -> HashMap<String, Project> {
     let tasks = discover_tasks();
     let mut cache = TASK_CACHE.write().unwrap();
     *cache = Some(tasks.clone());
     tasks
 }
 
-pub fn get_task(id: &str) -> Option<Task> {
+pub fn get_task(id: &str) -> Option<Project> {
     let tasks = get_cached_tasks();
     if let Some(task) = tasks.get(id) {
         return Some(task.clone());
@@ -84,48 +80,43 @@ pub fn get_task(id: &str) -> Option<Task> {
     tasks.get(id).cloned()
 }
 
-pub fn list_tasks() -> Vec<Task> {
+pub fn list_tasks() -> Vec<Project> {
     get_cached_tasks().into_values().collect()
 }
 
 pub fn open_task(
     task_id: &str,
-    project_name: Option<&str>,
+    home: Option<&str>,
     land_in: Option<Application>,
 ) -> Result<(), String> {
-    let task = if let Some(task) = get_task(task_id) {
+    let project = if let Some(task) = get_task(task_id) {
         task
     } else {
-        let project_name = project_name
+        let home = home
             .ok_or_else(|| format!("Task '{}' not found. Specify --home to create it.", task_id))?;
 
-        let project_path = resolve_project_path(project_name)?;
+        let home_path = resolve_project_path(home)?;
 
-        if !git::is_git_repo(&project_path) {
-            return Err(format!("'{}' is not a git repository", project_name));
+        if !git::is_git_repo(&home_path) {
+            return Err(format!("'{}' is not a git repository", home));
         }
 
-        let worktree_path = git::worktree_base_path(&project_path).join(task_id);
+        let worktree_path = git::worktree_base_path(&home_path).join(task_id);
 
         if !worktree_path.exists() {
-            git::create_worktree(&project_path, &worktree_path, task_id)?;
+            git::create_worktree(&home_path, &worktree_path, task_id)?;
         }
 
         refresh_cache();
 
-        Task {
-            id: task_id.to_string(),
-            project_name: project_name.to_string(),
-            worktree_path,
+        Project {
+            name: task_id.to_string(),
+            path: worktree_path,
+            aliases: vec![],
+            kv: HashMap::new(),
+            last_application: None,
+            home_project: Some(home.to_string()),
         }
-    };
-
-    let project = Project {
-        name: task.id.clone(),
-        path: task.worktree_path.clone(),
-        aliases: vec![],
-        kv: std::collections::HashMap::new(),
-        last_application: None,
     };
 
     let open_terminal = {
@@ -168,8 +159,8 @@ pub fn open_task(
     }
 
     let mut projects = projects::lock();
-    if projects.by_name(&task.id).is_none() {
-        projects.add(&task.worktree_path.to_string_lossy(), vec![task.id.clone()]);
+    if projects.by_name(&project.name).is_none() {
+        projects.add_project(project);
     }
 
     Ok(())
@@ -177,9 +168,13 @@ pub fn open_task(
 
 pub fn remove_task(task_id: &str) -> Result<(), String> {
     let task = get_task(task_id).ok_or_else(|| format!("Task '{}' not found", task_id))?;
-    let project_path = resolve_project_path(&task.project_name)?;
+    let home = task
+        .home_project
+        .as_ref()
+        .ok_or_else(|| format!("'{}' is not a task", task_id))?;
+    let home_path = resolve_project_path(home)?;
 
-    git::remove_worktree(&project_path, &task.worktree_path)?;
+    git::remove_worktree(&home_path, &task.path)?;
     refresh_cache();
 
     Ok(())

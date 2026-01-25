@@ -272,7 +272,7 @@ pub fn run(command: Command) -> Result<(), String> {
                 client.post(&format!("/remove-task/{}", task_id))?;
                 Ok(())
             }
-        }
+        },
 
         Command::File { path, land_in } => {
             let query = build_query(&land_in, &None);

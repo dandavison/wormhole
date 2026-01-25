@@ -57,15 +57,20 @@ pub fn exists(project: &Project) -> bool {
 }
 
 pub fn open(project: &Project) -> Result<(), String> {
+    let project_path = project.path.to_str().unwrap();
     if let Some(window) = get_window(&project.name) {
         tmux(["select-window", "-t", &window.id]);
+        let current_dir = tmux(["display-message", "-t", &window.id, "-p", "#{pane_current_path}"]);
+        if current_dir.trim() != project_path {
+            tmux(["send-keys", "-t", &window.id, &format!("cd {}", project_path), "Enter"]);
+        }
     } else {
         tmux([
             "new-window",
             "-n",
             &project.name,
             "-c",
-            project.path.to_str().unwrap(),
+            project_path,
         ]);
     }
     let project = project.clone();

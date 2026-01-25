@@ -1,6 +1,8 @@
 use hyper::{Body, Response, StatusCode};
 use std::collections::HashMap;
+use std::path::PathBuf;
 
+use crate::project::Project;
 use crate::projects;
 
 pub fn get_value(project_name: &str, key: &str) -> Response<Body> {
@@ -36,7 +38,7 @@ pub async fn set_value(project_name: &str, key: &str, body: Body) -> Response<Bo
         projects.all_mut()[project_idx]
             .kv
             .insert(key.to_string(), value.clone());
-        save_kv_data(&projects);
+        save_project_kv(&projects.all()[project_idx]);
         Response::new(Body::empty())
     } else {
         Response::builder()
@@ -53,7 +55,7 @@ pub fn set_value_sync(project_name: &str, key: &str, value: &str) {
         projects.all_mut()[project_idx]
             .kv
             .insert(key.to_string(), value.to_string());
-        save_kv_data(&projects);
+        save_project_kv(&projects.all()[project_idx]);
     }
 }
 
@@ -62,7 +64,7 @@ pub fn delete_value(project_name: &str, key: &str) -> Response<Body> {
 
     if let Some(project_idx) = projects.all().iter().position(|p| p.name == project_name) {
         if projects.all_mut()[project_idx].kv.remove(key).is_some() {
-            save_kv_data(&projects);
+            save_project_kv(&projects.all()[project_idx]);
             Response::new(Body::empty())
         } else {
             Response::builder()
@@ -109,46 +111,57 @@ pub fn get_all_kv() -> Response<Body> {
     Response::new(Body::from(json))
 }
 
-fn save_kv_data(projects: &projects::Projects) {
-    // For now, we'll save to a JSON file. In the future this could be SQLite or another storage backend
+fn wormhole_dir(project: &Project) -> PathBuf {
+    let path_str = project.path.to_string_lossy();
+    if let Some(idx) = path_str.find("/.git/wormhole/worktrees/") {
+        PathBuf::from(&path_str[..idx]).join(".git/wormhole")
+    } else {
+        project.path.join(".git/wormhole")
+    }
+}
+
+fn kv_file(project: &Project) -> PathBuf {
+    wormhole_dir(project)
+        .join("kv")
+        .join(format!("{}.json", project.name))
+}
+
+fn save_project_kv(project: &Project) {
     use std::fs;
-    use std::path::Path;
 
-    let kv_file = Path::new("/tmp/wormhole-kv.json");
-    let mut data = HashMap::new();
-
-    for project in projects.all() {
-        if !project.kv.is_empty() {
-            data.insert(&project.name, &project.kv);
-        }
+    if project.kv.is_empty() {
+        let path = kv_file(project);
+        let _ = fs::remove_file(path);
+        return;
     }
 
-    let json = serde_json::to_string_pretty(&data).unwrap();
-    fs::write(kv_file, json).unwrap_or_else(|e| {
-        eprintln!("Failed to save KV data: {}", e);
+    let path = kv_file(project);
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+
+    let json = serde_json::to_string_pretty(&project.kv).unwrap();
+    fs::write(&path, json).unwrap_or_else(|e| {
+        eprintln!("Failed to save KV data for {}: {}", project.name, e);
     });
 }
 
 pub fn load_kv_data(projects: &mut projects::Projects) {
     use std::fs;
-    use std::path::Path;
-
-    let kv_file = Path::new("/tmp/wormhole-kv.json");
-    if !kv_file.exists() {
-        return;
-    }
-
-    let data = fs::read_to_string(kv_file).unwrap_or_default();
-    if data.is_empty() {
-        return;
-    }
-
-    let kv_data: HashMap<String, HashMap<String, String>> =
-        serde_json::from_str(&data).unwrap_or_default();
 
     for project in projects.all_mut() {
-        if let Some(kv) = kv_data.get(&project.name) {
-            project.kv = kv.clone();
+        let path = kv_file(project);
+        if !path.exists() {
+            continue;
+        }
+
+        let data = match fs::read_to_string(&path) {
+            Ok(d) => d,
+            Err(_) => continue,
+        };
+
+        if let Ok(kv) = serde_json::from_str::<HashMap<String, String>>(&data) {
+            project.kv = kv;
         }
     }
 }

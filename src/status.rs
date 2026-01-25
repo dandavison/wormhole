@@ -1,6 +1,6 @@
 use std::thread;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::github::{self, PrStatus};
 use crate::jira::{self, IssueStatus};
@@ -8,6 +8,15 @@ use crate::project::Project;
 use crate::projects;
 
 #[derive(Clone, Debug, Serialize)]
+#[serde(tag = "type")]
+pub enum SprintShowItem {
+    #[serde(rename = "task")]
+    Task(TaskStatus),
+    #[serde(rename = "issue")]
+    Issue(IssueStatus),
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TaskStatus {
     pub name: String,
     pub home_project: Option<String>,

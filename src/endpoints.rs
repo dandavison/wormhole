@@ -57,24 +57,26 @@ pub fn list_projects() -> Response<Body> {
 
 pub fn debug_projects() -> Response<Body> {
     let projects = projects::lock();
-    let mut output = Vec::new();
 
-    for (i, project) in projects.all().iter().enumerate() {
-        let aliases = if project.aliases.is_empty() {
-            "none".to_string()
-        } else {
-            project.aliases.join(", ")
-        };
-        output.push(format!(
-            "[{}] name: {}, path: {}, aliases: [{}]",
-            i,
-            project.name,
-            project.path.display(),
-            aliases
-        ));
-    }
+    let output: Vec<serde_json::Value> = projects
+        .all()
+        .iter()
+        .enumerate()
+        .map(|(i, project)| {
+            serde_json::json!({
+                "index": i,
+                "name": project.name,
+                "path": project.path.display().to_string(),
+                "aliases": project.aliases,
+                "home_project": project.home_project,
+            })
+        })
+        .collect();
 
-    Response::new(Body::from(output.join("\n")))
+    Response::builder()
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string_pretty(&output).unwrap()))
+        .unwrap()
 }
 
 pub fn remove_project(name: &str) -> Response<Body> {

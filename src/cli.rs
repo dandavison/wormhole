@@ -1,10 +1,34 @@
 use clap::builder::ValueHint;
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Shell};
+use serde::Serialize;
 use std::io;
 
 use crate::config;
 use crate::jira;
+
+#[derive(Serialize)]
+struct SprintCreateResult {
+    created: Vec<String>,
+    skipped: Vec<String>,
+    no_home: Vec<String>,
+}
+
+#[derive(Serialize, serde::Deserialize)]
+struct ProjectDebug {
+    index: usize,
+    name: String,
+    path: String,
+    aliases: Vec<String>,
+    home_project: Option<String>,
+}
+
+#[derive(Serialize)]
+struct KvValue {
+    project: String,
+    key: String,
+    value: Option<String>,
+}
 
 #[derive(Parser)]
 #[command(name = "wormhole")]
@@ -25,11 +49,22 @@ pub enum JiraCommand {
 #[derive(Subcommand)]
 pub enum SprintCommand {
     /// List sprint issues
-    List,
+    List {
+        /// Output format: text (default) or json
+        #[arg(short, long, default_value = "text")]
+        output: String,
+    },
     /// Show detailed status for each sprint issue
-    Show,
+    Show {
+        /// Output format: text (default) or json
+        #[arg(short, long, default_value = "text")]
+        output: String,
+    },
     /// Create tasks for sprint issues
     Create {
+        /// Output format: text (default) or json
+        #[arg(short, long, default_value = "text")]
+        output: String,
         /// Override pairs: <ticket> <home-project> ...
         /// Tickets not listed use WORMHOLE_DEFAULT_HOME_PROJECT
         #[arg(trailing_var_arg = true)]
@@ -85,7 +120,11 @@ pub enum ProjectCommand {
     /// Pin current (project, application) state
     Pin,
     /// Show debug information about all projects
-    Debug,
+    Debug {
+        /// Output format: text (default) or json
+        #[arg(short, long, default_value = "text")]
+        output: String,
+    },
     /// Show status of a project/task (JIRA, PR, etc.)
     Status {
         /// Project name (defaults to current project)
@@ -151,6 +190,9 @@ pub enum KvCommand {
         project: String,
         /// Key name
         key: String,
+        /// Output format: text (default) or json
+        #[arg(short, long, default_value = "text")]
+        output: String,
     },
     /// Set a value
     Set {
@@ -172,6 +214,9 @@ pub enum KvCommand {
     List {
         /// Project name (optional, lists all if omitted)
         project: Option<String>,
+        /// Output format: text (default) or json
+        #[arg(short, long, default_value = "text")]
+        output: String,
     },
 }
 
@@ -322,9 +367,26 @@ pub fn run(command: Command) -> Result<(), String> {
                 client.post("/project/pin")?;
                 Ok(())
             }
-            ProjectCommand::Debug => {
+            ProjectCommand::Debug { output } => {
                 let response = client.get("/project/debug")?;
-                println!("{}", response);
+                if output == "json" {
+                    println!("{}", response);
+                } else {
+                    // Parse JSON and render text
+                    let projects: Vec<ProjectDebug> = serde_json::from_str(&response)
+                        .map_err(|e| format!("Failed to parse debug response: {}", e))?;
+                    for p in &projects {
+                        let aliases = if p.aliases.is_empty() {
+                            "none".to_string()
+                        } else {
+                            p.aliases.join(", ")
+                        };
+                        println!(
+                            "[{}] name: {}, path: {}, aliases: [{}]",
+                            p.index, p.name, p.path, aliases
+                        );
+                    }
+                }
                 Ok(())
             }
             ProjectCommand::Status { name, output } => {
@@ -347,9 +409,25 @@ pub fn run(command: Command) -> Result<(), String> {
         }
 
         Command::Kv { command } => match command {
-            KvCommand::Get { project, key } => {
-                let response = client.get(&format!("/kv/{}/{}", project, key))?;
-                println!("{}", response);
+            KvCommand::Get {
+                project,
+                key,
+                output,
+            } => {
+                let response = client.get(&format!("/kv/{}/{}", project, key));
+                if output == "json" {
+                    let kv = KvValue {
+                        project: project.clone(),
+                        key: key.clone(),
+                        value: response.ok(),
+                    };
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&kv).map_err(|e| e.to_string())?
+                    );
+                } else {
+                    println!("{}", response?);
+                }
                 Ok(())
             }
             KvCommand::Set {
@@ -364,23 +442,35 @@ pub fn run(command: Command) -> Result<(), String> {
                 client.delete(&format!("/kv/{}/{}", project, key))?;
                 Ok(())
             }
-            KvCommand::List { project } => {
-                let path = match project {
+            KvCommand::List { project, output } => {
+                let path = match &project {
                     Some(p) => format!("/kv/{}", p),
                     None => "/kv".to_string(),
                 };
                 let response = client.get(&path)?;
-                println!("{}", response);
+                if output == "json" {
+                    println!("{}", response);
+                } else {
+                    // Parse JSON and render text
+                    if let Ok(kv) = serde_json::from_str::<std::collections::HashMap<String, String>>(&response) {
+                        for (k, v) in &kv {
+                            println!("{}: {}", k, v);
+                        }
+                    } else {
+                        println!("{}", response);
+                    }
+                }
                 Ok(())
             }
         },
 
         Command::Jira { command } => match command {
             JiraCommand::Sprint { command } => match command {
-                None | Some(SprintCommand::List) => print_sprint_list(),
-                Some(SprintCommand::Show) => print_sprint_status(),
-                Some(SprintCommand::Create { overrides }) => {
-                    create_sprint_tasks(&client, overrides)
+                None => sprint_list("text"),
+                Some(SprintCommand::List { output }) => sprint_list(&output),
+                Some(SprintCommand::Show { output }) => sprint_show(&output),
+                Some(SprintCommand::Create { output, overrides }) => {
+                    sprint_create(&client, overrides, &output)
                 }
             },
         },
@@ -414,7 +504,7 @@ pub fn run(command: Command) -> Result<(), String> {
     }
 }
 
-fn create_sprint_tasks(client: &Client, overrides: Vec<String>) -> Result<(), String> {
+fn sprint_create(client: &Client, overrides: Vec<String>, output: &str) -> Result<(), String> {
     use std::collections::HashMap;
     use std::env;
 
@@ -446,60 +536,85 @@ fn create_sprint_tasks(client: &Client, overrides: Vec<String>) -> Result<(), St
             })
             .unwrap_or_default();
 
-    let mut created = 0;
-    let mut skipped = 0;
+    let mut result = SprintCreateResult {
+        created: Vec::new(),
+        skipped: Vec::new(),
+        no_home: Vec::new(),
+    };
 
     for issue in &issues {
         if existing.contains(&issue.key) {
-            skipped += 1;
+            result.skipped.push(issue.key.clone());
             continue;
         }
 
         let home = match home_overrides.get(&issue.key).or(default_home.as_ref()) {
             Some(h) => h,
             None => {
-                println!("Skipping {} (no home project)", issue.key);
+                result.no_home.push(issue.key.clone());
                 continue;
             }
         };
 
         let path = format!("/project/switch/{}?home-project={}", issue.key, home);
         client.get(&path)?;
-        println!("Created task {} (home: {})", issue.key, home);
-        created += 1;
+        result.created.push(format!("{} ({})", issue.key, home));
     }
 
-    println!(
-        "\nCreated {} tasks, skipped {} (already exist)",
-        created, skipped
-    );
+    if output == "json" {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&result).map_err(|e| e.to_string())?
+        );
+    } else {
+        for task in &result.created {
+            println!("Created task {}", task);
+        }
+        for key in &result.no_home {
+            println!("Skipping {} (no home project)", key);
+        }
+        println!(
+            "\nCreated {} tasks, skipped {} (already exist)",
+            result.created.len(),
+            result.skipped.len()
+        );
+    }
     Ok(())
 }
 
-fn print_sprint_list() -> Result<(), String> {
+fn sprint_list(output: &str) -> Result<(), String> {
     let issues = jira::get_sprint_issues()?;
-    for issue in &issues {
-        println!("{} {}: {}", issue.status_emoji(), issue.key, issue.summary);
+    if output == "json" {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&issues).map_err(|e| e.to_string())?
+        );
+    } else {
+        for issue in &issues {
+            println!("{} {}: {}", issue.status_emoji(), issue.key, issue.summary);
+        }
     }
     Ok(())
 }
 
-fn print_sprint_status() -> Result<(), String> {
+fn sprint_show(output: &str) -> Result<(), String> {
+    use crate::status::{SprintShowItem, TaskStatus};
     use std::thread;
 
     let issues = jira::get_sprint_issues()?;
 
-    // Fetch status for each issue concurrently
+    // Fetch status for each issue concurrently (as JSON)
     let statuses: Vec<_> = issues
         .iter()
         .map(|issue| {
             let key = issue.key.clone();
             let client_url = format!("http://127.0.0.1:{}", crate::config::wormhole_port());
             thread::spawn(move || {
-                ureq::get(&format!("{}/project/status/{}", client_url, key))
+                ureq::get(&format!("{}/project/status/{}?format=json", client_url, key))
                     .call()
                     .ok()
                     .and_then(|r| r.into_string().ok())
+                    .and_then(|s| serde_json::from_str::<TaskStatus>(&s).ok())
             })
         })
         .collect::<Vec<_>>()
@@ -507,16 +622,80 @@ fn print_sprint_status() -> Result<(), String> {
         .map(|h| h.join().ok().flatten())
         .collect();
 
-    for (issue, status) in issues.iter().zip(statuses.iter()) {
-        match status {
-            Some(s) => print!("{}", s),
-            None => {
-                // No task exists - show basic JIRA info
-                println!("{} {}: {}", issue.status_emoji(), issue.key, issue.summary);
-                println!("  (no wormhole task)");
+    // Build SprintShowItem list
+    let items: Vec<SprintShowItem> = issues
+        .into_iter()
+        .zip(statuses.into_iter())
+        .map(|(issue, status)| match status {
+            Some(task) => SprintShowItem::Task(task),
+            None => SprintShowItem::Issue(issue),
+        })
+        .collect();
+
+    if output == "json" {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&items).map_err(|e| e.to_string())?
+        );
+    } else {
+        for item in &items {
+            match item {
+                SprintShowItem::Task(task) => {
+                    print_task_status_text(task);
+                }
+                SprintShowItem::Issue(issue) => {
+                    println!("{} {}: {}", issue.status_emoji(), issue.key, issue.summary);
+                    println!("  (no wormhole task)");
+                }
             }
+            println!();
         }
-        println!();
     }
     Ok(())
+}
+
+fn print_task_status_text(status: &crate::status::TaskStatus) {
+    let jira_instance = std::env::var("JIRA_INSTANCE").ok();
+
+    let name_linked = if let Some(ref instance) = jira_instance {
+        let url = format!("https://{}.atlassian.net/browse/{}", instance, status.name);
+        crate::format_osc8_hyperlink(&url, &status.name)
+    } else {
+        status.name.clone()
+    };
+
+    let title = if let Some(ref jira) = status.jira {
+        format!("{}: {}", name_linked, jira.summary)
+    } else {
+        name_linked.clone()
+    };
+    let title_len = if let Some(ref jira) = status.jira {
+        status.name.len() + 2 + jira.summary.len()
+    } else {
+        status.name.len()
+    };
+    println!("{}", title);
+    println!("{}", "─".repeat(title_len.min(60)));
+
+    if let Some(ref jira) = status.jira {
+        println!("JIRA:      {} {}", jira.status_emoji(), jira.status);
+    } else if status.home_project.is_some() {
+        println!("JIRA:      ✗ no ticket");
+    }
+
+    if let Some(ref pr) = status.pr {
+        let pr_linked = crate::format_osc8_hyperlink(&pr.url, &pr.display());
+        println!("PR:        {}", pr_linked);
+    } else {
+        println!("PR:        ✗ none");
+    }
+
+    let plan_status = if status.plan_exists { "✓" } else { "✗" };
+    println!("Plan:      {} plan.md", plan_status);
+
+    if let Some(ref repos) = status.aux_repos {
+        println!("Aux repos: {}", repos);
+    } else {
+        println!("Aux repos: ✗ not set");
+    }
 }

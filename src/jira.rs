@@ -24,7 +24,7 @@ struct Status {
     name: String,
 }
 
-#[derive(Clone, Debug, serde::Serialize)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct IssueStatus {
     pub key: String,
     pub summary: String,

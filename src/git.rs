@@ -134,6 +134,51 @@ pub fn remove_worktree(repo_path: &Path, worktree_path: &Path) -> Result<(), Str
     }
 }
 
+pub fn github_file_url(repo_path: &Path, file_path: &str) -> Option<String> {
+    let remote = Command::new("git")
+        .args(["remote", "get-url", "origin"])
+        .current_dir(repo_path)
+        .output()
+        .ok()?;
+    if !remote.status.success() {
+        return None;
+    }
+    let remote_url = String::from_utf8_lossy(&remote.stdout).trim().to_string();
+
+    let branch = Command::new("git")
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .current_dir(repo_path)
+        .output()
+        .ok()?;
+    if !branch.status.success() {
+        return None;
+    }
+    let branch_name = String::from_utf8_lossy(&branch.stdout).trim().to_string();
+
+    // Convert git URL to GitHub blob URL
+    // Handles: git@github.com:owner/repo.git, https://github.com/owner/repo.git
+    let github_base = if remote_url.starts_with("git@github.com:") {
+        remote_url
+            .strip_prefix("git@github.com:")?
+            .strip_suffix(".git")
+            .or(Some(remote_url.strip_prefix("git@github.com:")?))?
+            .to_string()
+    } else if remote_url.starts_with("https://github.com/") {
+        remote_url
+            .strip_prefix("https://github.com/")?
+            .strip_suffix(".git")
+            .or(Some(remote_url.strip_prefix("https://github.com/")?))?
+            .to_string()
+    } else {
+        return None;
+    };
+
+    Some(format!(
+        "https://github.com/{}/blob/{}/{}",
+        github_base, branch_name, file_path
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

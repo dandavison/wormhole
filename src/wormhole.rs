@@ -155,7 +155,10 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
             }
         };
         match crate::task::create_task(task_id, home) {
-            Ok(_) => Ok(Response::new(Body::from(format!("Created task: {}", task_id)))),
+            Ok(_) => Ok(Response::new(Body::from(format!(
+                "Created task: {}",
+                task_id
+            )))),
             Err(e) => Ok(Response::builder()
                 .status(StatusCode::BAD_REQUEST)
                 .body(Body::from(e))
@@ -253,23 +256,27 @@ fn format_status_text(status: &crate::status::TaskStatus, output: &mut Vec<u8>) 
     if let Some(ref jira) = status.jira {
         let _ = writeln!(output, "JIRA:      {} {}", jira.status_emoji(), jira.status);
     } else if status.home_project.is_some() {
-        let _ = writeln!(output, "JIRA:      ✗ no ticket");
+        let _ = writeln!(output, "JIRA:      ✗");
     }
 
     if let Some(ref pr) = status.pr {
         let pr_linked = crate::format_osc8_hyperlink(&pr.url, &pr.display());
         let _ = writeln!(output, "PR:        {}", pr_linked);
     } else {
-        let _ = writeln!(output, "PR:        ✗ none");
+        let _ = writeln!(output, "PR:        ✗");
     }
 
-    let plan_status = if status.plan_exists { "✓" } else { "✗" };
-    let _ = writeln!(output, "Plan:      {} plan.md", plan_status);
+    if let Some(ref url) = status.plan_url {
+        let plan_linked = crate::format_osc8_hyperlink(url, "✓ plan.md");
+        let _ = writeln!(output, "Plan:      {}", plan_linked);
+    } else {
+        let _ = writeln!(output, "Plan:      ✗");
+    }
 
     if let Some(ref repos) = status.aux_repos {
         let _ = writeln!(output, "Aux repos: {}", repos);
     } else {
-        let _ = writeln!(output, "Aux repos: ✗ not set");
+        let _ = writeln!(output, "Aux repos: ✗");
     }
 }
 

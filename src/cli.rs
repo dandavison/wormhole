@@ -707,22 +707,26 @@ fn print_task_status_text(status: &crate::status::TaskStatus) {
     if let Some(ref jira) = status.jira {
         println!("JIRA:      {} {}", jira.status_emoji(), jira.status);
     } else if status.home_project.is_some() {
-        println!("JIRA:      ✗ no ticket");
+        println!("JIRA:      ✗");
     }
 
     if let Some(ref pr) = status.pr {
         let pr_linked = crate::format_osc8_hyperlink(&pr.url, &pr.display());
         println!("PR:        {}", pr_linked);
     } else {
-        println!("PR:        ✗ none");
+        println!("PR:        ✗");
     }
 
-    let plan_status = if status.plan_exists { "✓" } else { "✗" };
-    println!("Plan:      {} plan.md", plan_status);
+    if let Some(ref url) = status.plan_url {
+        let plan_linked = crate::format_osc8_hyperlink(url, "✓ plan.md");
+        println!("Plan:      {}", plan_linked);
+    } else {
+        println!("Plan:      ✗");
+    }
 
     if let Some(ref repos) = status.aux_repos {
         println!("Aux repos: {}", repos);
     } else {
-        println!("Aux repos: ✗ not set");
+        println!("Aux repos: ✗");
     }
 }

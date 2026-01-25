@@ -23,6 +23,7 @@ pub struct TaskStatus {
     pub jira: Option<IssueStatus>,
     pub pr: Option<PrStatus>,
     pub plan_exists: bool,
+    pub plan_url: Option<String>,
     pub aux_repos: Option<String>,
 }
 
@@ -47,6 +48,11 @@ pub fn get_status(project: &Project) -> TaskStatus {
     };
 
     let plan_exists = path.join("plan.md").exists();
+    let plan_url = if plan_exists {
+        crate::git::github_file_url(&path, "plan.md")
+    } else {
+        None
+    };
     let aux_repos = kv.get("aux-repos").cloned();
 
     let jira = jira_handle.and_then(|h| h.join().ok()).flatten();
@@ -58,6 +64,7 @@ pub fn get_status(project: &Project) -> TaskStatus {
         jira,
         pr,
         plan_exists,
+        plan_url,
         aux_repos,
     }
 }

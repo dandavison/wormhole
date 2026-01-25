@@ -39,7 +39,7 @@ pub fn list_tasks() -> Response<Body> {
         .map(|t| {
             serde_json::json!({
                 "id": t.id,
-                "home_repo": t.home_repo.to_string_lossy(),
+                "project": t.project_name,
                 "worktree_path": t.worktree_path.to_string_lossy()
             })
         })

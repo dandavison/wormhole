@@ -225,6 +225,20 @@ impl WormholeTest {
         String::from_utf8_lossy(&output.stdout).trim().to_string()
     }
 
+    pub fn get_tmux_pane_cwd(&self) -> String {
+        let output = Command::new("tmux")
+            .args([
+                "-L",
+                &self.tmux_socket,
+                "display-message",
+                "-p",
+                "#{pane_current_path}",
+            ])
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
+    }
+
     #[track_caller]
     pub fn assert_tmux_window(&self, expected: &str) {
         let expected = expected.to_string();
@@ -233,6 +247,28 @@ impl WormholeTest {
             "Expected tmux window containing '{}', got '{}'",
             expected,
             self.get_tmux_window_name()
+        );
+    }
+
+    #[track_caller]
+    pub fn assert_tmux_cwd(&self, expected_path: &str) {
+        let expected = std::fs::canonicalize(expected_path)
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|_| expected_path.to_string());
+        assert!(
+            self.wait_until(
+                || {
+                    let actual = self.get_tmux_pane_cwd();
+                    std::fs::canonicalize(&actual)
+                        .map(|p| p.to_string_lossy().to_string())
+                        .unwrap_or(actual)
+                        == expected
+                },
+                5
+            ),
+            "Expected tmux cwd '{}', got '{}'",
+            expected,
+            self.get_tmux_pane_cwd()
         );
     }
 

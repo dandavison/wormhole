@@ -13,11 +13,7 @@ pub fn list_projects() -> Response<Body> {
         .open()
         .into_iter()
         .map(|p| {
-            let is_task = p.home_project.is_some();
-            let mut obj = serde_json::json!({
-                "name": p.name,
-                "is_task": is_task
-            });
+            let mut obj = serde_json::json!({ "name": p.name });
             if let Some(home) = &p.home_project {
                 obj["home_project"] = serde_json::json!(home);
             }
@@ -37,10 +33,7 @@ pub fn list_projects() -> Response<Body> {
 
     for (task_name, task_project) in &tasks {
         if !open_names.contains(task_name) {
-            let mut obj = serde_json::json!({
-                "name": task_name,
-                "is_task": true
-            });
+            let mut obj = serde_json::json!({ "name": task_name });
             if let Some(home) = &task_project.home_project {
                 obj["home_project"] = serde_json::json!(home);
             }

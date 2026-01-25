@@ -3,8 +3,9 @@ import Combine
 
 struct ProjectInfo: Codable {
     let name: String
-    let is_task: Bool
     let home_project: String?
+
+    var isTask: Bool { home_project != nil }
 }
 
 struct ProjectsResponse: Codable {

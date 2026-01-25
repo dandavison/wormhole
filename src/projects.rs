@@ -213,15 +213,12 @@ pub fn load() {
         let canonical = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
 
         // Use the disambiguated name if available, otherwise derive from directory
-        let name = path_to_name
-            .get(&canonical)
-            .cloned()
-            .unwrap_or_else(|| {
-                path.file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("unknown")
-                    .to_string()
-            });
+        let name = path_to_name.get(&canonical).cloned().unwrap_or_else(|| {
+            path.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("unknown")
+                .to_string()
+        });
 
         // Skip if a project with this name already exists
         if !projects.contains(&name) {

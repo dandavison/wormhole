@@ -1,10 +1,63 @@
 #![allow(dead_code)]
 
+use std::path::Path;
 use std::process::Command;
 use std::thread;
 use std::time::{Duration, Instant};
 
 pub const TEST_PREFIX: &str = "wh-test-";
+
+pub fn init_git_repo(path: &Path) {
+    Command::new("git")
+        .args(["init"])
+        .current_dir(path)
+        .output()
+        .expect("Failed to init git repo");
+
+    Command::new("git")
+        .args(["config", "user.email", "test@test.com"])
+        .current_dir(path)
+        .output()
+        .expect("Failed to set git email");
+
+    Command::new("git")
+        .args(["config", "user.name", "Test"])
+        .current_dir(path)
+        .output()
+        .expect("Failed to set git name");
+
+    std::fs::write(path.join("README.md"), "# Test").unwrap();
+
+    Command::new("git")
+        .args(["add", "."])
+        .current_dir(path)
+        .output()
+        .expect("Failed to git add");
+
+    Command::new("git")
+        .args(["commit", "-m", "Initial commit"])
+        .current_dir(path)
+        .output()
+        .expect("Failed to git commit");
+
+    Command::new("git")
+        .args(["checkout", "-b", "main"])
+        .current_dir(path)
+        .output()
+        .ok();
+
+    Command::new("git")
+        .args(["remote", "add", "origin", "https://example.com/fake.git"])
+        .current_dir(path)
+        .output()
+        .ok();
+
+    Command::new("git")
+        .args(["update-ref", "refs/remotes/origin/main", "HEAD"])
+        .current_dir(path)
+        .output()
+        .expect("Failed to create origin/main ref");
+}
 
 pub enum Focus<'a> {
     Editor(&'a str),
@@ -174,6 +227,31 @@ impl WormholeTest {
         String::from_utf8_lossy(&output.stdout).trim().to_string()
     }
 
+    pub fn get_tmux_pane_pwd(&self, window_name: &str) -> Option<String> {
+        let output = Command::new("tmux")
+            .args([
+                "-L",
+                &self.tmux_socket,
+                "list-panes",
+                "-t",
+                window_name,
+                "-F",
+                "#{pane_current_path}",
+            ])
+            .output()
+            .ok()?;
+        if output.status.success() {
+            let pwd = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if pwd.is_empty() {
+                None
+            } else {
+                pwd.lines().next().map(|s| s.to_string())
+            }
+        } else {
+            None
+        }
+    }
+
     #[track_caller]
     pub fn assert_tmux_window(&self, expected: &str) {
         let expected = expected.to_string();
@@ -182,6 +260,25 @@ impl WormholeTest {
             "Expected tmux window containing '{}', got '{}'",
             expected,
             self.get_tmux_window_name()
+        );
+    }
+
+    #[track_caller]
+    pub fn assert_tmux_pwd(&self, window_name: &str, expected_path: &str) {
+        let window = window_name.to_string();
+        let expected = expected_path.to_string();
+        assert!(
+            self.wait_until(
+                || {
+                    self.get_tmux_pane_pwd(&window)
+                        .map(|pwd| pwd == expected)
+                        .unwrap_or(false)
+                },
+                5
+            ),
+            "Expected tmux pane pwd '{}', got '{:?}'",
+            expected,
+            self.get_tmux_pane_pwd(&window)
         );
     }
 

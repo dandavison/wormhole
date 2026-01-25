@@ -1,6 +1,7 @@
 mod harness;
 use harness::Focus::*;
-use harness::TEST_PREFIX;
+use harness::{init_git_repo, TEST_PREFIX};
+use std::path::PathBuf;
 
 #[test]
 fn test_open_project() {
@@ -219,4 +220,109 @@ fn test_pin() {
         kv, "terminal",
         "Expected land-in=terminal after pinning in terminal"
     );
+}
+
+#[test]
+fn test_task_creation_and_switching() {
+    let test = harness::WormholeTest::new(8936);
+
+    let home_repo = format!("{}task-home", TEST_PREFIX);
+    let home_dir = format!("/tmp/{}", home_repo);
+    let task_a = format!("{}TASK-001", TEST_PREFIX);
+    let task_b = format!("{}TASK-002", TEST_PREFIX);
+
+    std::fs::create_dir_all(&home_dir).unwrap();
+    init_git_repo(&PathBuf::from(&home_dir));
+
+    test.hs_get(&format!("/project/{}?name={}", home_dir, home_repo))
+        .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+
+    test.hs_get(&format!("/task/{}?home={}", task_a, home_repo))
+        .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(1000));
+    test.assert_focus(Editor(&task_a));
+
+    let worktree_a = format!("{}/.git/wormhole/worktrees/{}", home_dir, task_a);
+    assert!(
+        PathBuf::from(&worktree_a).exists(),
+        "Worktree for task_a should exist at {}",
+        worktree_a
+    );
+
+    test.hs_get(&format!("/task/{}?home={}", task_b, home_repo))
+        .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(1000));
+    test.assert_focus(Editor(&task_b));
+
+    let worktree_b = format!("{}/.git/wormhole/worktrees/{}", home_dir, task_b);
+    assert!(
+        PathBuf::from(&worktree_b).exists(),
+        "Worktree for task_b should exist at {}",
+        worktree_b
+    );
+
+    // Switch to existing task (no home param needed)
+    test.hs_get(&format!("/task/{}", task_a)).unwrap();
+    test.assert_focus(Editor(&task_a));
+
+    // Explicit land-in=editor works
+    test.hs_get(&format!("/task/{}?land-in=editor", task_b))
+        .unwrap();
+    test.assert_focus(Editor(&task_b));
+
+    // Explicit land-in=terminal works
+    test.hs_get(&format!("/task/{}?land-in=terminal", task_a))
+        .unwrap();
+    test.assert_focus(Terminal(&task_a));
+
+    // Switching tasks with explicit land-in preserves as expected
+    test.hs_get(&format!("/task/{}?land-in=terminal", task_b))
+        .unwrap();
+    test.assert_focus(Terminal(&task_b));
+}
+
+#[test]
+fn test_task_tmux_pwd() {
+    let test = harness::WormholeTest::new(8937);
+
+    let home_repo = format!("{}task-pwd-home", TEST_PREFIX);
+    let home_dir = format!("/tmp/{}", home_repo);
+    let task_id = format!("{}PWD-001", TEST_PREFIX);
+
+    std::fs::create_dir_all(&home_dir).unwrap();
+    init_git_repo(&PathBuf::from(&home_dir));
+
+    test.hs_get(&format!("/project/{}?name={}", home_dir, home_repo))
+        .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+
+    test.hs_get(&format!("/task/{}?home={}", task_id, home_repo))
+        .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(2000));
+
+    test.assert_focus(Editor(&task_id));
+
+    let expected_pwd = format!("/private{}/.git/wormhole/worktrees/{}", home_dir, task_id);
+    test.assert_tmux_pwd(&task_id, &expected_pwd);
+}
+
+#[test]
+fn test_project_tmux_pwd() {
+    let test = harness::WormholeTest::new(8938);
+
+    let proj = format!("{}pwd-proj", TEST_PREFIX);
+    let dir = format!("/tmp/{}", proj);
+
+    std::fs::create_dir_all(&dir).unwrap();
+
+    test.hs_get(&format!("/project/{}?name={}", dir, proj))
+        .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+
+    test.hs_get(&format!("/project/{}", proj)).unwrap();
+    test.assert_focus(Editor(&proj));
+
+    let expected_dir = format!("/private{}", dir);
+    test.assert_tmux_pwd(&proj, &expected_dir);
 }

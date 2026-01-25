@@ -100,7 +100,10 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         }
         let task_id = task_id.trim().to_string();
         match crate::task::delete_task(&task_id) {
-            Ok(()) => Ok(Response::new(Body::from(format!("Deleted task: {}", task_id)))),
+            Ok(()) => Ok(Response::new(Body::from(format!(
+                "Deleted task: {}",
+                task_id
+            )))),
             Err(e) => Ok(Response::builder()
                 .status(StatusCode::BAD_REQUEST)
                 .body(Body::from(e))

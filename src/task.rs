@@ -4,7 +4,7 @@ use std::sync::RwLock;
 use std::thread;
 
 use crate::wormhole::Application;
-use crate::{config, editor, git, project::Project, projects, util::warn};
+use crate::{config, editor, git, hammerspoon, project::Project, projects, util::warn};
 
 #[derive(Clone, Debug)]
 pub struct Task {
@@ -18,14 +18,21 @@ static TASK_CACHE: RwLock<Option<HashMap<String, Task>>> = RwLock::new(None);
 pub fn discover_tasks() -> HashMap<String, Task> {
     let mut tasks = HashMap::new();
 
-    for project_path in config::available_projects().values() {
-        if !git::is_git_repo(project_path) {
+    let mut project_paths: Vec<PathBuf> = config::available_projects().values().cloned().collect();
+    for project in projects::lock().all() {
+        if !project_paths.contains(&project.path) {
+            project_paths.push(project.path.clone());
+        }
+    }
+
+    for project_path in project_paths {
+        if !git::is_git_repo(&project_path) {
             continue;
         }
 
-        let worktrees_dir = git::worktree_base_path(project_path);
+        let worktrees_dir = git::worktree_base_path(&project_path);
 
-        for worktree in git::list_worktrees(project_path) {
+        for worktree in git::list_worktrees(&project_path) {
             if !worktree.path.starts_with(&worktrees_dir) {
                 continue;
             }
@@ -88,14 +95,13 @@ pub fn open_task(
     let task = if let Some(task) = get_task(task_id) {
         task
     } else {
-        let home_repo_name = home_repo_name.ok_or_else(|| {
-            format!(
-                "Task '{}' not found. Specify --home to create it.",
-                task_id
-            )
-        })?;
+        let home_repo_name = home_repo_name
+            .ok_or_else(|| format!("Task '{}' not found. Specify --home to create it.", task_id))?;
 
-        let home_repo_path = config::resolve_project_name(home_repo_name)
+        let home_repo_path = projects::lock()
+            .by_name(home_repo_name)
+            .map(|p| p.path)
+            .or_else(|| config::resolve_project_name(home_repo_name))
             .ok_or_else(|| format!("Home repo '{}' not found", home_repo_name))?;
 
         if !git::is_git_repo(&home_repo_path) {
@@ -125,11 +131,18 @@ pub fn open_task(
         last_application: None,
     };
 
+    if !project.is_open() {
+        editor::open_workspace(&project);
+    }
+
     let open_terminal = {
         let project = project.clone();
         move || {
             config::TERMINAL.open(&project).unwrap_or_else(|err| {
-                warn(&format!("Error opening {} in terminal: {}", &project.name, err))
+                warn(&format!(
+                    "Error opening {} in terminal: {}",
+                    &project.name, err
+                ))
             })
         }
     };
@@ -137,7 +150,12 @@ pub fn open_task(
     let open_editor = {
         let project = project.clone();
         move || {
-            editor::open_workspace(&project);
+            editor::open_path(&project.root()).unwrap_or_else(|err| {
+                warn(&format!(
+                    "Error opening {} in editor: {}",
+                    &project.name, err
+                ))
+            });
         }
     };
 
@@ -157,7 +175,7 @@ pub fn open_task(
             let editor_thread = thread::spawn(open_editor);
             terminal_thread.join().unwrap();
             editor_thread.join().unwrap();
-            config::EDITOR.focus();
+            thread::spawn(|| hammerspoon::launch_or_focus(config::EDITOR.application_name()));
         }
     }
 
@@ -170,8 +188,7 @@ pub fn open_task(
 }
 
 pub fn delete_task(task_id: &str) -> Result<(), String> {
-    let task = get_task(task_id)
-        .ok_or_else(|| format!("Task '{}' not found", task_id))?;
+    let task = get_task(task_id).ok_or_else(|| format!("Task '{}' not found", task_id))?;
 
     git::remove_worktree(&task.home_repo, &task.worktree_path)?;
 

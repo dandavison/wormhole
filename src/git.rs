@@ -146,10 +146,7 @@ detached
 "#;
         let worktrees = parse_worktree_list(output);
         assert_eq!(worktrees.len(), 3);
-        assert_eq!(
-            worktrees[0].path,
-            PathBuf::from("/Users/dan/src/temporal")
-        );
+        assert_eq!(worktrees[0].path, PathBuf::from("/Users/dan/src/temporal"));
         assert_eq!(worktrees[0].branch, Some("main".to_string()));
         assert_eq!(
             worktrees[1].path,

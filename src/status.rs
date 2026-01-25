@@ -16,6 +16,17 @@ pub enum SprintShowItem {
     Issue(IssueStatus),
 }
 
+impl SprintShowItem {
+    pub fn render_terminal(&self) -> String {
+        match self {
+            SprintShowItem::Task(task) => task.render_terminal(),
+            SprintShowItem::Issue(issue) => {
+                format!("{}\n  (no wormhole task)", issue.render_terminal())
+            }
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TaskStatus {
     pub name: String,
@@ -110,7 +121,11 @@ impl TaskStatus {
         }
 
         if let Some(ref jira) = self.jira {
-            lines.push(format!("JIRA:      {} {}", jira.status_emoji(), jira.status));
+            lines.push(format!(
+                "JIRA:      {} {}",
+                jira.status_emoji(),
+                jira.status
+            ));
         } else if self.home_project.is_some() {
             lines.push("JIRA:      ✗".to_string());
         }

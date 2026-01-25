@@ -94,6 +94,9 @@ pub enum ProjectCommand {
         /// Output format: text (default) or json
         #[arg(short, long, default_value = "text")]
         output: String,
+        /// List available projects (from WORMHOLE_PATH) instead of current
+        #[arg(short, long)]
+        available: bool,
     },
     /// Switch to the previous project
     Previous {
@@ -171,11 +174,14 @@ pub enum Command {
     /// Generate shell completions
     Completion {
         /// Shell to generate completions for
-        #[arg(value_enum, required_unless_present = "projects")]
+        #[arg(value_enum, required_unless_present_any = ["projects", "available"])]
         shell: Option<Shell>,
-        /// Output project names (for dynamic completion)
+        /// Output current project names (for dynamic completion)
         #[arg(long)]
         projects: bool,
+        /// Output available project names (for dynamic completion)
+        #[arg(long)]
+        available: bool,
     },
 
     /// Kill tmux session and clean up
@@ -322,22 +328,28 @@ pub fn run(command: Command) -> Result<(), String> {
                 client.get(&path)?;
                 Ok(())
             }
-            ProjectCommand::List { output } => {
+            ProjectCommand::List { output, available } => {
                 let response = client.get("/project/list")?;
                 if output == "json" {
                     println!("{}", response);
-                } else {
-                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response) {
-                        if let Some(current) = json.get("current").and_then(|v| v.as_array()) {
-                            for item in current {
-                                if let Some(name) = item.get("name").and_then(|n| n.as_str()) {
-                                    if let Some(home) =
-                                        item.get("home_project").and_then(|h| h.as_str())
-                                    {
-                                        println!("{} ({})", name, home);
-                                    } else {
-                                        println!("{}", name);
-                                    }
+                } else if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response) {
+                    if available {
+                        if let Some(avail) = json.get("available").and_then(|v| v.as_array()) {
+                            for item in avail {
+                                if let Some(name) = item.as_str() {
+                                    println!("{}", name);
+                                }
+                            }
+                        }
+                    } else if let Some(current) = json.get("current").and_then(|v| v.as_array()) {
+                        for item in current {
+                            if let Some(name) = item.get("name").and_then(|n| n.as_str()) {
+                                if let Some(home) =
+                                    item.get("home_project").and_then(|h| h.as_str())
+                                {
+                                    println!("{} ({})", name, home);
+                                } else {
+                                    println!("{}", name);
                                 }
                             }
                         }
@@ -475,13 +487,23 @@ pub fn run(command: Command) -> Result<(), String> {
             },
         },
 
-        Command::Completion { shell, projects } => {
-            if projects {
+        Command::Completion {
+            shell,
+            projects,
+            available,
+        } => {
+            if projects || available {
                 let response = client.get("/project/list")?;
                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response) {
-                    if let Some(current) = json.get("current").and_then(|v| v.as_array()) {
-                        for item in current {
-                            if let Some(name) = item.get("name").and_then(|n| n.as_str()) {
+                    let key = if available { "available" } else { "current" };
+                    if let Some(arr) = json.get(key).and_then(|v| v.as_array()) {
+                        for item in arr {
+                            let name = if available {
+                                item.as_str()
+                            } else {
+                                item.get("name").and_then(|n| n.as_str())
+                            };
+                            if let Some(name) = name {
                                 println!("{}", name);
                             }
                         }

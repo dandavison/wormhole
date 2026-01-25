@@ -65,6 +65,7 @@ wormhole project switch myapp           # Switch to project by name
 wormhole project switch /path/to/repo   # Open/create project at path
 wormhole project switch ACT-1234 --home-project myrepo  # Open task (creates worktree)
 wormhole project list                   # List projects (includes tasks)
+wormhole project list --available       # List available projects (from WORMHOLE_PATH)
 wormhole project previous               # Previous project
 wormhole project next                   # Next project
 wormhole project close myapp            # Close project windows
@@ -81,6 +82,7 @@ wormhole jira sprint create             # Create tasks for all sprint issues
 wormhole jira sprint create ACT-123 myrepo  # With home project override
 wormhole kill-session                   # Kill tmux session and clean up
 wormhole completion bash                # Generate shell completions
+wormhole completion --available         # List available project names (for completion)
 ```
 
 ## HTTP API

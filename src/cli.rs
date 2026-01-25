@@ -455,15 +455,13 @@ fn create_sprint_tasks(client: &Client, overrides: Vec<String>) -> Result<(), St
             continue;
         }
 
-        let home = home_overrides
-            .get(&issue.key)
-            .or(default_home.as_ref())
-            .ok_or_else(|| {
-                format!(
-                    "No home project for {} (set WORMHOLE_DEFAULT_HOME_PROJECT or provide override)",
-                    issue.key
-                )
-            })?;
+        let home = match home_overrides.get(&issue.key).or(default_home.as_ref()) {
+            Some(h) => h,
+            None => {
+                println!("Skipping {} (no home project)", issue.key);
+                continue;
+            }
+        };
 
         let path = format!("/project/switch/{}?home-project={}", issue.key, home);
         client.get(&path)?;

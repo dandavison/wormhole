@@ -6,7 +6,7 @@ use crate::{config, hammerspoon, projects, task, util::debug};
 
 /// Return JSON with current and available projects (including tasks)
 pub fn list_projects() -> Response<Body> {
-    let tasks = task::discover_tasks();
+    let tasks = task::tasks();
 
     // Get currently open projects
     let mut current: VecDeque<_> = projects::lock()

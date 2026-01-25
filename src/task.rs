@@ -50,7 +50,7 @@ pub fn discover_tasks() -> HashMap<String, Project> {
     tasks
 }
 
-fn get_cached_tasks() -> HashMap<String, Project> {
+pub fn tasks() -> HashMap<String, Project> {
     let cache = TASK_CACHE.read().unwrap();
     if let Some(tasks) = cache.as_ref() {
         return tasks.clone();
@@ -71,7 +71,7 @@ fn refresh_cache() -> HashMap<String, Project> {
 }
 
 pub fn get_task(id: &str) -> Option<Project> {
-    let tasks = get_cached_tasks();
+    let tasks = tasks();
     if let Some(task) = tasks.get(id) {
         return Some(task.clone());
     }

@@ -9,7 +9,7 @@ use crate::{config, editor, git, hammerspoon, project::Project, projects, util::
 #[derive(Clone, Debug)]
 pub struct Task {
     pub id: String,
-    pub home_repo: PathBuf,
+    pub project_name: String,
     pub worktree_path: PathBuf,
 }
 
@@ -18,14 +18,15 @@ static TASK_CACHE: RwLock<Option<HashMap<String, Task>>> = RwLock::new(None);
 pub fn discover_tasks() -> HashMap<String, Task> {
     let mut tasks = HashMap::new();
 
-    let mut project_paths: Vec<PathBuf> = config::available_projects().values().cloned().collect();
+    let mut project_name_to_path: HashMap<String, PathBuf> =
+        config::available_projects().into_iter().collect();
     for project in projects::lock().all() {
-        if !project_paths.contains(&project.path) {
-            project_paths.push(project.path.clone());
-        }
+        project_name_to_path
+            .entry(project.name.clone())
+            .or_insert_with(|| project.path.clone());
     }
 
-    for project_path in project_paths {
+    for (project_name, project_path) in project_name_to_path {
         if !git::is_git_repo(&project_path) {
             continue;
         }
@@ -42,7 +43,7 @@ pub fn discover_tasks() -> HashMap<String, Task> {
                     task_id.to_string(),
                     Task {
                         id: task_id.to_string(),
-                        home_repo: project_path.clone(),
+                        project_name: project_name.clone(),
                         worktree_path: worktree.path,
                     },
                 );
@@ -89,36 +90,32 @@ pub fn list_tasks() -> Vec<Task> {
 
 pub fn open_task(
     task_id: &str,
-    home_repo_name: Option<&str>,
+    project_name: Option<&str>,
     land_in: Option<Application>,
 ) -> Result<(), String> {
     let task = if let Some(task) = get_task(task_id) {
         task
     } else {
-        let home_repo_name = home_repo_name
+        let project_name = project_name
             .ok_or_else(|| format!("Task '{}' not found. Specify --home to create it.", task_id))?;
 
-        let home_repo_path = projects::lock()
-            .by_name(home_repo_name)
-            .map(|p| p.path)
-            .or_else(|| config::resolve_project_name(home_repo_name))
-            .ok_or_else(|| format!("Home repo '{}' not found", home_repo_name))?;
+        let project_path = resolve_project_path(project_name)?;
 
-        if !git::is_git_repo(&home_repo_path) {
-            return Err(format!("'{}' is not a git repository", home_repo_name));
+        if !git::is_git_repo(&project_path) {
+            return Err(format!("'{}' is not a git repository", project_name));
         }
 
-        let worktree_path = git::worktree_base_path(&home_repo_path).join(task_id);
+        let worktree_path = git::worktree_base_path(&project_path).join(task_id);
 
         if !worktree_path.exists() {
-            git::create_worktree(&home_repo_path, &worktree_path, task_id)?;
+            git::create_worktree(&project_path, &worktree_path, task_id)?;
         }
 
         refresh_cache();
 
         Task {
             id: task_id.to_string(),
-            home_repo: home_repo_path,
+            project_name: project_name.to_string(),
             worktree_path,
         }
     };
@@ -189,14 +186,23 @@ pub fn open_task(
 
 pub fn delete_task(task_id: &str) -> Result<(), String> {
     let task = get_task(task_id).ok_or_else(|| format!("Task '{}' not found", task_id))?;
+    let project_path = resolve_project_path(&task.project_name)?;
 
-    git::remove_worktree(&task.home_repo, &task.worktree_path)?;
+    git::remove_worktree(&project_path, &task.worktree_path)?;
 
-    if let Err(e) = git::delete_branch(&task.home_repo, task_id) {
+    if let Err(e) = git::delete_branch(&project_path, task_id) {
         warn(&format!("Could not delete branch {}: {}", task_id, e));
     }
 
     refresh_cache();
 
     Ok(())
+}
+
+fn resolve_project_path(project_name: &str) -> Result<PathBuf, String> {
+    projects::lock()
+        .by_name(project_name)
+        .map(|p| p.path)
+        .or_else(|| config::resolve_project_name(project_name))
+        .ok_or_else(|| format!("Project '{}' not found", project_name))
 }

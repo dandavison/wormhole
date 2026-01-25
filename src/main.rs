@@ -40,6 +40,7 @@ async fn main() {
         // No subcommand or explicit "serve" -> start server
         None | Some(Command::Serve) => {
             projects::load();
+            task::tasks(); // Pre-populate task cache
             serve_http().await;
         }
         // Other subcommands -> run as client

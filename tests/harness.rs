@@ -288,7 +288,13 @@ impl WormholeTest {
 
 impl Drop for WormholeTest {
     fn drop(&mut self) {
-        self.close_cursor_window(TEST_PREFIX);
+        let _ = self.wait_until(
+            || {
+                self.close_cursor_window(TEST_PREFIX);
+                !self.window_exists(TEST_PREFIX)
+            },
+            10,
+        );
         let _ = Command::new("tmux")
             .args(["-L", &self.tmux_socket, "kill-server"])
             .output();

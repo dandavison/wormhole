@@ -36,11 +36,11 @@ pub fn list_projects() -> Response<Body> {
 pub fn list_tasks() -> Response<Body> {
     let tasks: Vec<_> = task::list_tasks()
         .into_iter()
-        .map(|t| {
+        .map(|p| {
             serde_json::json!({
-                "id": t.id,
-                "project": t.project_name,
-                "worktree_path": t.worktree_path.to_string_lossy()
+                "id": p.name,
+                "project": p.home_project,
+                "worktree_path": p.path.to_string_lossy()
             })
         })
         .collect();

@@ -13,9 +13,14 @@ pub struct Project {
     pub aliases: Vec<String>,
     pub kv: HashMap<String, String>,
     pub last_application: Option<Application>,
+    pub home_project: Option<String>,
 }
 
 impl Project {
+    pub fn is_task(&self) -> bool {
+        self.home_project.is_some()
+    }
+
     pub fn is_open(&self) -> bool {
         config::TERMINAL.exists(self)
     }

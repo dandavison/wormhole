@@ -195,13 +195,28 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
 
 fn format_status_text(status: &crate::status::TaskStatus, output: &mut Vec<u8>) {
     use std::io::Write;
-    let title = if let Some(ref jira) = status.jira {
-        format!("{}: {}", status.name, jira.summary)
+
+    let jira_instance = std::env::var("JIRA_INSTANCE").ok();
+
+    let name_linked = if let Some(ref instance) = jira_instance {
+        let url = format!("https://{}.atlassian.net/browse/{}", instance, status.name);
+        crate::format_osc8_hyperlink(&url, &status.name)
     } else {
         status.name.clone()
     };
+
+    let title = if let Some(ref jira) = status.jira {
+        format!("{}: {}", name_linked, jira.summary)
+    } else {
+        name_linked.clone()
+    };
+    let title_len = if let Some(ref jira) = status.jira {
+        status.name.len() + 2 + jira.summary.len()
+    } else {
+        status.name.len()
+    };
     let _ = writeln!(output, "{}", title);
-    let _ = writeln!(output, "{}", "─".repeat(title.chars().count().min(60)));
+    let _ = writeln!(output, "{}", "─".repeat(title_len.min(60)));
 
     if let Some(ref jira) = status.jira {
         let _ = writeln!(output, "JIRA:      {} {}", jira.status_emoji(), jira.status);
@@ -210,7 +225,8 @@ fn format_status_text(status: &crate::status::TaskStatus, output: &mut Vec<u8>) 
     }
 
     if let Some(ref pr) = status.pr {
-        let _ = writeln!(output, "PR:        {}", pr.display());
+        let pr_linked = crate::format_osc8_hyperlink(&pr.url, &pr.display());
+        let _ = writeln!(output, "PR:        {}", pr_linked);
     } else {
         let _ = writeln!(output, "PR:        ✗ none");
     }

@@ -246,6 +246,10 @@ fn format_status_text(status: &crate::status::TaskStatus, output: &mut Vec<u8>) 
     let _ = writeln!(output, "{}", title);
     let _ = writeln!(output, "{}", "─".repeat(title_len.min(60)));
 
+    if let Some(ref home) = status.home_project {
+        let _ = writeln!(output, "Home:      {}", home);
+    }
+
     if let Some(ref jira) = status.jira {
         let _ = writeln!(output, "JIRA:      {} {}", jira.status_emoji(), jira.status);
     } else if status.home_project.is_some() {

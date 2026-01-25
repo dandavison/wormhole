@@ -24,6 +24,8 @@ pub enum JiraCommand {
 
 #[derive(Subcommand)]
 pub enum SprintCommand {
+    /// List sprint issues with status
+    List,
     /// Create tasks for sprint issues
     Create {
         /// Override pairs: <ticket> <home-project> ...
@@ -282,7 +284,9 @@ pub fn run(command: Command) -> Result<(), String> {
                         if let Some(current) = json.get("current").and_then(|v| v.as_array()) {
                             for item in current {
                                 if let Some(name) = item.get("name").and_then(|n| n.as_str()) {
-                                    if let Some(home) = item.get("home_project").and_then(|h| h.as_str()) {
+                                    if let Some(home) =
+                                        item.get("home_project").and_then(|h| h.as_str())
+                                    {
                                         println!("{} ({})", name, home);
                                     } else {
                                         println!("{}", name);
@@ -371,7 +375,7 @@ pub fn run(command: Command) -> Result<(), String> {
 
         Command::Jira { command } => match command {
             JiraCommand::Sprint { command } => match command {
-                None => jira::print_sprint_issues(),
+                None | Some(SprintCommand::List) => print_sprint_status(&client),
                 Some(SprintCommand::Create { overrides }) => {
                     create_sprint_tasks(&client, overrides)
                 }
@@ -468,5 +472,42 @@ fn create_sprint_tasks(client: &Client, overrides: Vec<String>) -> Result<(), St
         "\nCreated {} tasks, skipped {} (already exist)",
         created, skipped
     );
+    Ok(())
+}
+
+fn print_sprint_status(_client: &Client) -> Result<(), String> {
+    use std::thread;
+
+    let issues = jira::get_sprint_issues()?;
+
+    // Fetch status for each issue concurrently
+    let statuses: Vec<_> = issues
+        .iter()
+        .map(|issue| {
+            let key = issue.key.clone();
+            let client_url = format!("http://127.0.0.1:{}", crate::config::wormhole_port());
+            thread::spawn(move || {
+                ureq::get(&format!("{}/project/status/{}", client_url, key))
+                    .call()
+                    .ok()
+                    .and_then(|r| r.into_string().ok())
+            })
+        })
+        .collect::<Vec<_>>()
+        .into_iter()
+        .map(|h| h.join().ok().flatten())
+        .collect();
+
+    for (issue, status) in issues.iter().zip(statuses.iter()) {
+        match status {
+            Some(s) => print!("{}", s),
+            None => {
+                // No task exists - show basic JIRA info
+                println!("{} {}: {}", issue.status_emoji(), issue.key, issue.summary);
+                println!("  (no wormhole task)");
+            }
+        }
+        println!();
+    }
     Ok(())
 }

@@ -41,27 +41,3 @@ pub fn get_pr_status(project_path: &Path) -> Option<PrStatus> {
     serde_json::from_slice(&output.stdout).ok()
 }
 
-pub fn get_pr_for_branch(repo: &str, branch: &str) -> Option<PrStatus> {
-    let output = Command::new("gh")
-        .args([
-            "pr",
-            "list",
-            "--repo",
-            repo,
-            "--head",
-            branch,
-            "--json",
-            "number,state,isDraft,url",
-            "--limit",
-            "1",
-        ])
-        .output()
-        .ok()?;
-
-    if !output.status.success() {
-        return None;
-    }
-
-    let prs: Vec<PrStatus> = serde_json::from_slice(&output.stdout).ok()?;
-    prs.into_iter().next()
-}

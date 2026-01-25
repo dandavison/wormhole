@@ -1,5 +1,4 @@
 use std::env;
-use std::io::{self, IsTerminal, Write};
 
 use serde::Deserialize;
 
@@ -60,25 +59,6 @@ fn instance() -> Result<String, String> {
     env::var("JIRA_INSTANCE").map_err(|_| "JIRA_INSTANCE not set".to_string())
 }
 
-fn format_osc8_hyperlink(url: &str, text: &str) -> String {
-    format!(
-        "{osc}8;;{url}{st}{text}{osc}8;;{st}",
-        url = url,
-        text = text,
-        osc = "\x1b]",
-        st = "\x1b\\"
-    )
-}
-
-fn format_key(key: &str, instance: &str) -> String {
-    if io::stdout().is_terminal() {
-        let url = format!("https://{}.atlassian.net/browse/{}", instance, key);
-        format_osc8_hyperlink(&url, key)
-    } else {
-        key.to_string()
-    }
-}
-
 pub fn get_issue(key: &str) -> Result<Option<IssueStatus>, String> {
     let instance = instance()?;
     let url = format!(
@@ -132,46 +112,4 @@ pub fn get_sprint_issues() -> Result<Vec<IssueStatus>, String> {
             status: i.fields.status.name,
         })
         .collect())
-}
-
-pub fn print_sprint_issues() -> Result<(), String> {
-    use std::thread;
-
-    let instance = instance()?;
-    let issues = get_sprint_issues()?;
-    let repo = env::var("GITHUB_REPO").ok();
-
-    let pr_statuses: Vec<_> = if let Some(ref repo) = repo {
-        issues
-            .iter()
-            .map(|issue| {
-                let repo = repo.clone();
-                let branch = issue.key.clone();
-                thread::spawn(move || crate::github::get_pr_for_branch(&repo, &branch))
-            })
-            .collect::<Vec<_>>()
-            .into_iter()
-            .map(|h| h.join().ok().flatten())
-            .collect()
-    } else {
-        vec![None; issues.len()]
-    };
-
-    let mut stdout = io::stdout().lock();
-    for (issue, pr) in issues.iter().zip(pr_statuses.iter()) {
-        let pr_str = match pr {
-            Some(pr) => format!("PR: {}", pr.display()),
-            None => "PR: none".to_string(),
-        };
-        writeln!(
-            stdout,
-            "{} {} {}  {}",
-            issue.status_emoji(),
-            format_key(&issue.key, &instance),
-            issue.summary,
-            pr_str
-        )
-        .map_err(|e| format!("Write failed: {}", e))?;
-    }
-    Ok(())
 }

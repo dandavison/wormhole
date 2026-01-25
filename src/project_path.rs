@@ -17,16 +17,20 @@ pub struct ProjectPath {
 impl ProjectPath {
     pub fn open(&self, mutation: Mutation, land_in: Option<Application>) {
         let mut projects = projects::lock();
-        if let Some(current) = projects.current() {
-            projects.set_last_application(&current.name, hammerspoon::current_application());
-        }
+        let current_app = projects.current().map(|current| {
+            let app = hammerspoon::current_application();
+            projects.set_last_application(&current.name, app.clone());
+            app
+        });
         let project = self.project.clone();
-        if !project.is_open() {
+        let is_already_open = project.is_open();
+        if !is_already_open {
             editor::open_workspace(&project);
         }
         let land_in = land_in.or_else(|| match mutation {
             Mutation::RotateLeft | Mutation::RotateRight => self.project.last_application.clone(),
-            _ => parse_application(self.project.kv.get("land-in")),
+            _ => parse_application(self.project.kv.get("land-in"))
+                .or_else(|| if is_already_open { current_app } else { None }),
         });
         let open_terminal = move || {
             config::TERMINAL.open(&project).unwrap_or_else(|err| {

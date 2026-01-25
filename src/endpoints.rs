@@ -51,7 +51,7 @@ pub fn list_projects() -> Response<Body> {
 
     Response::builder()
         .header("Content-Type", "application/json")
-        .body(Body::from(json.to_string()))
+        .body(Body::from(serde_json::to_string_pretty(&json).unwrap()))
         .unwrap()
 }
 

@@ -99,3 +99,20 @@ Install the Chrome extension from `web/chrome-extension/`, or use Requestly with
 
 **Terminal hyperlinks:**
 Tools like [delta](https://dandavison.github.io/delta/) and [ripgrep](https://github.com/BurntSushi/ripgrep) emit OSC 8 hyperlinks. Configure them to use `http://localhost:7117/file/` URLs.
+
+## Shell Integration
+
+When wormhole opens a terminal for a project, it writes environment variables to `/tmp/wormhole.env`:
+```bash
+export WORMHOLE_PROJECT_NAME=myproject WORMHOLE_PROJECT_DIR=/path/to/myproject
+```
+
+Wormhole doesn't try to `cd` existing shells—it opens new terminal windows/tabs at the correct directory (via tmux `new-window -c` or similar). The env file is metadata that scripts or prompts can optionally source.
+
+Optional shell helpers in `cli/lib.sh`:
+```bash
+source /path/to/wormhole/cli/lib.sh
+
+wormhole-env   # Source /tmp/wormhole.env into current shell
+wormhole-cd    # cd to $WORMHOLE_PROJECT_DIR (or pass a path)
+```

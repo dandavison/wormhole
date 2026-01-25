@@ -1,3 +1,19 @@
+Wormhole manages a collection of 'projects'.
+
+Each project is a git repo: it has a tmux window with that repo as the CWD, and it has an IDE workspace in that repo.
+
+`wormhole project my-project` communicates with tmux and your OS window manager so that the tmux window and IDE workspace are selected. You have control over which of the two applications is focused.
+
+Some projects are 'tasks'. A task is a project for which the CWD is a git worktree directory, rather than the "real" project directory.
+
+
+A task, but not a project, should evolve through a state machine to reach a terminal state. This is called "working"; wormhole does not do it for you yet. However, wormhole can report on what stage the task is at in that state machine. Rather than modeling the state machine explicitly over a finite set of states and storing the current state value, it does this by reading relevant state and reporting on it to the user (`wormhole task status`) (e.g. does a plan.md exist for the task? Have auxiliary repos been identified that will provide LLM context for the work? Is there a JIRA ticket and is so what state is it in? Is there a PR yet? Is it in draft or open-for-review mode? Have you added explanatory comments to the PR to help reviewers?)
+
+
+
+
+## Switching projects
+
 When you switch between projects, two things should happen:
 
 1. Your editor should switch to the new project workspace.

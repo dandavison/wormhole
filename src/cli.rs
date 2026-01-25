@@ -39,8 +39,8 @@ pub enum ProjectCommand {
     /// List projects (current and available)
     List {
         /// Output format: text (default) or json
-        #[arg(long, default_value = "text")]
-        format: String,
+        #[arg(short, long, default_value = "text")]
+        output: String,
     },
     /// Switch to the previous project
     Previous {
@@ -73,8 +73,8 @@ pub enum ProjectCommand {
         /// Project name (defaults to current project)
         name: Option<String>,
         /// Output format: text (default) or json
-        #[arg(long, default_value = "text")]
-        format: String,
+        #[arg(short, long, default_value = "text")]
+        output: String,
     },
 }
 
@@ -256,9 +256,9 @@ pub fn run(command: Command) -> Result<(), String> {
                 client.get(&path)?;
                 Ok(())
             }
-            ProjectCommand::List { format } => {
+            ProjectCommand::List { output } => {
                 let response = client.get("/project/list")?;
-                if format == "json" {
+                if output == "json" {
                     println!("{}", response);
                 } else {
                     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response) {
@@ -304,12 +304,12 @@ pub fn run(command: Command) -> Result<(), String> {
                 println!("{}", response);
                 Ok(())
             }
-            ProjectCommand::Status { name, format } => {
+            ProjectCommand::Status { name, output } => {
                 let path = match name {
                     Some(n) => format!("/project/status/{}", n),
                     None => "/project/status".to_string(),
                 };
-                let query = if format == "json" { "?format=json" } else { "" };
+                let query = if output == "json" { "?format=json" } else { "" };
                 let response = client.get(&format!("{}{}", path, query))?;
                 print!("{}", response);
                 Ok(())

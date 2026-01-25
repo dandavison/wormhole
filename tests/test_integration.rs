@@ -346,7 +346,7 @@ fn test_project_status() {
     std::fs::write(format!("{}/plan.md", dir), "# Plan").unwrap();
 
     test.create_project(&dir, &proj);
-    test.hs_get(&format!("/project/switch/{}", proj)).unwrap();
+    test.assert_focus(Editor(&proj));
 
     // Get status by name
     let status = test.hs_get(&format!("/project/status/{}", proj)).unwrap();

@@ -112,12 +112,7 @@ pub fn get_all_kv() -> Response<Body> {
 }
 
 fn wormhole_dir(project: &Project) -> PathBuf {
-    let path_str = project.path.to_string_lossy();
-    if let Some(idx) = path_str.find("/.git/wormhole/worktrees/") {
-        PathBuf::from(&path_str[..idx]).join(".git/wormhole")
-    } else {
-        project.path.join(".git/wormhole")
-    }
+    crate::git::git_common_dir(&project.path).join("wormhole")
 }
 
 fn kv_file(project: &Project) -> PathBuf {

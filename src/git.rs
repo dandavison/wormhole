@@ -1,6 +1,29 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+/// Returns the common git directory shared by all worktrees.
+/// Uses `git rev-parse --git-common-dir` which handles regular repos,
+/// submodules, and worktrees correctly.
+pub fn git_common_dir(repo_path: &Path) -> PathBuf {
+    let output = Command::new("git")
+        .args(["rev-parse", "--git-common-dir"])
+        .current_dir(repo_path)
+        .output();
+
+    if let Ok(output) = output {
+        if output.status.success() {
+            let path_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let path = PathBuf::from(&path_str);
+            if path.is_absolute() {
+                return path;
+            } else {
+                return repo_path.join(path);
+            }
+        }
+    }
+    repo_path.join(".git")
+}
+
 pub fn is_git_repo(path: &Path) -> bool {
     Command::new("git")
         .args(["rev-parse", "--is-inside-work-tree"])
@@ -93,7 +116,7 @@ pub fn create_worktree(
 }
 
 pub fn worktree_base_path(repo_path: &Path) -> PathBuf {
-    repo_path.join(".git/wormhole").join("worktrees")
+    git_common_dir(repo_path).join("wormhole/worktrees")
 }
 
 pub fn remove_worktree(repo_path: &Path, worktree_path: &Path) -> Result<(), String> {
@@ -143,5 +166,64 @@ detached
             PathBuf::from("/Users/dan/src/temporal/.git/wormhole/worktrees/ACT-5678")
         );
         assert_eq!(worktrees[2].branch, None);
+    }
+
+    #[test]
+    fn test_git_common_dir_submodule() {
+        use std::fs;
+
+        let temp = tempfile::tempdir().unwrap();
+        let parent = temp.path().join("parent");
+        let child_src = temp.path().join("child_src");
+
+        // Create child repo
+        fs::create_dir_all(&child_src).unwrap();
+        Command::new("git")
+            .args(["init"])
+            .current_dir(&child_src)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "--allow-empty", "-m", "init"])
+            .current_dir(&child_src)
+            .output()
+            .unwrap();
+
+        // Create parent repo with submodule
+        fs::create_dir_all(&parent).unwrap();
+        Command::new("git")
+            .args(["init"])
+            .current_dir(&parent)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "--allow-empty", "-m", "init"])
+            .current_dir(&parent)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["submodule", "add", child_src.to_str().unwrap(), "child"])
+            .current_dir(&parent)
+            .output()
+            .unwrap();
+
+        let submodule = parent.join("child");
+        assert!(submodule.join(".git").is_file(), ".git should be a file in submodule");
+
+        // git_common_dir should return parent's modules dir
+        let common = git_common_dir(&submodule);
+        assert!(
+            common.to_string_lossy().contains("modules/child"),
+            "common dir should be in parent's modules: {:?}",
+            common
+        );
+
+        // worktree_base_path should work
+        let base = worktree_base_path(&submodule);
+        assert!(
+            base.to_string_lossy().contains("modules/child/wormhole/worktrees"),
+            "worktree base should be in parent's modules: {:?}",
+            base
+        );
     }
 }

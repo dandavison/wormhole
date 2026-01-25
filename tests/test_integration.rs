@@ -253,6 +253,86 @@ fn test_task_switching() {
 }
 
 #[test]
+fn test_task_in_submodule() {
+    use std::process::Command;
+
+    let test = harness::WormholeTest::new(8939);
+
+    let parent_name = format!("{}submod-parent", TEST_PREFIX);
+    let parent_dir = format!("/tmp/{}", parent_name);
+    let child_src = format!("/tmp/{}submod-src", TEST_PREFIX);
+    // Use a name matching the submodule directory for window title matching
+    let submodule_name = format!("{}submod-child", TEST_PREFIX);
+    let submodule_dirname = submodule_name.clone();
+    let submodule_dir = format!("{}/{}", parent_dir, submodule_dirname);
+    let task_id = format!("{}SUB-TASK", TEST_PREFIX);
+
+    // Clean up
+    let _ = std::fs::remove_dir_all(&parent_dir);
+    let _ = std::fs::remove_dir_all(&child_src);
+
+    // Create source repo (will become submodule)
+    std::fs::create_dir_all(&child_src).unwrap();
+    Command::new("git")
+        .args(["init"])
+        .current_dir(&child_src)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["commit", "--allow-empty", "-m", "initial"])
+        .current_dir(&child_src)
+        .output()
+        .unwrap();
+
+    // Create parent repo
+    std::fs::create_dir_all(&parent_dir).unwrap();
+    Command::new("git")
+        .args(["init"])
+        .current_dir(&parent_dir)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["commit", "--allow-empty", "-m", "initial"])
+        .current_dir(&parent_dir)
+        .output()
+        .unwrap();
+
+    // Add as submodule with name matching our project name
+    Command::new("git")
+        .args(["submodule", "add", &child_src, &submodule_dirname])
+        .current_dir(&parent_dir)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["commit", "-m", "add submodule"])
+        .current_dir(&parent_dir)
+        .output()
+        .unwrap();
+
+    // Register submodule as a wormhole project
+    test.create_project(&submodule_dir, &submodule_name);
+
+    // Create a task in the submodule
+    test.create_task(&task_id, &submodule_name);
+
+    // Worktree should be in parent's .git/modules/<submodule>/wormhole/worktrees/
+    let task_dir = format!(
+        "{}/.git/modules/{}/wormhole/worktrees/{}",
+        parent_dir, submodule_dirname, task_id
+    );
+
+    // Switch between submodule project and task
+    test.hs_get(&format!("/project/switch/{}", submodule_name))
+        .unwrap();
+    test.assert_focus(Editor(&submodule_name));
+    test.assert_tmux_cwd(&submodule_dir);
+
+    test.hs_get(&format!("/project/switch/{}", task_id)).unwrap();
+    test.assert_focus(Editor(&task_id));
+    test.assert_tmux_cwd(&task_dir);
+}
+
+#[test]
 fn test_project_status() {
     let test = harness::WormholeTest::new(8938);
 

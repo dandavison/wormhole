@@ -16,14 +16,8 @@ fn test_open_project() {
     std::fs::create_dir_all(&dir_a).unwrap();
     std::fs::create_dir_all(&dir_b).unwrap();
 
-    // Create projects using unified /project/ endpoint (upsert behavior)
-    // Small delay between calls since project opening is async and uses Hammerspoon
-    test.hs_get(&format!("/project/{}?name={}", dir_a, proj_a))
-        .unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(500));
-    test.hs_get(&format!("/project/{}?name={}", dir_b, proj_b))
-        .unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(500));
+    test.create_project(&dir_a, &proj_a);
+    test.create_project(&dir_b, &proj_b);
 
     // Initially, editor gains focus.
     test.hs_get(&format!("/project/{}", proj_a)).unwrap();
@@ -59,7 +53,7 @@ fn test_open_project() {
 
 #[test]
 fn test_previous_project_and_next_project() {
-    let test = harness::WormholeTest::new(8932);
+    let test = harness::WormholeTest::new(8936);
 
     let proj_a = format!("{}proj-a", TEST_PREFIX);
     let proj_b = format!("{}proj-b", TEST_PREFIX);
@@ -69,14 +63,8 @@ fn test_previous_project_and_next_project() {
     std::fs::create_dir_all(&dir_a).unwrap();
     std::fs::create_dir_all(&dir_b).unwrap();
 
-    // Create projects using unified /project/ endpoint
-    // Small delay between calls since project opening is async and uses Hammerspoon
-    test.hs_get(&format!("/project/{}?name={}", dir_a, proj_a))
-        .unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(500));
-    test.hs_get(&format!("/project/{}?name={}", dir_b, proj_b))
-        .unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(500));
+    test.create_project(&dir_a, &proj_a);
+    test.create_project(&dir_b, &proj_b);
 
     // Start in (a, editor)
     test.hs_get(&format!("/project/{}", proj_a)).unwrap();
@@ -118,11 +106,7 @@ fn test_close_project() {
 
     std::fs::create_dir_all(&dir).unwrap();
 
-    // Create project using unified /project/ endpoint
-    test.hs_get(&format!("/project/{}?name={}", dir, proj))
-        .unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(500));
-
+    test.create_project(&dir, &proj);
     test.hs_get(&format!("/project/{}", proj)).unwrap();
     test.assert_focus(Editor(&proj));
 
@@ -145,9 +129,7 @@ fn test_open_github_url() {
     std::fs::create_dir_all(format!("{}/src", dir)).unwrap();
     std::fs::write(&file, "fn main() {}").unwrap();
 
-    // Create project using unified /project/ endpoint
-    test.hs_get(&format!("/project/{}?name={}", dir, proj))
-        .unwrap();
+    test.create_project(&dir, &proj);
 
     // GitHub URL format: /<owner>/<repo>/blob/<branch>/<path>
     // The repo name should match the project name
@@ -167,10 +149,7 @@ fn test_open_file() {
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(&file, "fn main() {}").unwrap();
 
-    // Create project using unified /project/ endpoint
-    test.hs_get(&format!("/project/{}?name={}", dir, proj))
-        .unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(500));
+    test.create_project(&dir, &proj);
     test.hs_get(&format!("/file/{}", file)).unwrap();
     test.assert_focus(Editor(&proj));
 }
@@ -186,10 +165,7 @@ fn test_pin() {
 
     std::fs::create_dir_all(&dir).unwrap();
 
-    // Create project using unified /project/ endpoint
-    test.hs_get(&format!("/project/{}?name={}", dir, proj))
-        .unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(500));
+    test.create_project(&dir, &proj);
 
     // Go to project in editor
     test.hs_get(&format!("/project/{}", proj)).unwrap();
@@ -197,12 +173,8 @@ fn test_pin() {
 
     // Pin while in editor - should set land-in=editor
     test.hs_post("/pin/").unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(500));
-
-    // Verify KV was set
-    let kv = test.hs_get(&format!("/kv/{}/land-in", proj)).unwrap();
-    assert_eq!(
-        kv, "editor",
+    assert!(
+        test.wait_for_kv(&proj, "land-in", "editor", 10),
         "Expected land-in=editor after pinning in editor"
     );
 
@@ -211,12 +183,8 @@ fn test_pin() {
     test.assert_focus(Terminal(&proj));
 
     test.hs_post("/pin/").unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(500));
-
-    // Verify KV was updated
-    let kv = test.hs_get(&format!("/kv/{}/land-in", proj)).unwrap();
-    assert_eq!(
-        kv, "terminal",
+    assert!(
+        test.wait_for_kv(&proj, "land-in", "terminal", 5),
         "Expected land-in=terminal after pinning in terminal"
     );
 }

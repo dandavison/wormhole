@@ -185,7 +185,36 @@ impl WormholeTest {
     pub fn focus_terminal(&self) {
         let lua = r#"hs.application.launchOrFocus("/Applications/Alacritty.app")"#;
         self.run_hs(lua).unwrap();
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        assert!(
+            self.wait_for_app_focus("Alacritty", 5),
+            "Failed to focus terminal"
+        );
+    }
+
+    pub fn create_project(&self, dir: &str, name: &str) {
+        self.hs_get(&format!("/project/{}?name={}", dir, name))
+            .unwrap();
+        assert!(
+            self.wait_for_window_containing(name, 10),
+            "Project window '{}' did not appear",
+            name
+        );
+    }
+
+    pub fn wait_for_kv(&self, project: &str, key: &str, expected: &str, timeout_secs: u64) -> bool {
+        let url = format!("http://127.0.0.1:{}/kv/{}/{}", self.port, project, key);
+        self.wait_until(
+            || {
+                Command::new("curl")
+                    .args(["-s", &url])
+                    .output()
+                    .ok()
+                    .and_then(|o| String::from_utf8(o.stdout).ok())
+                    .map(|s| s.trim() == expected)
+                    .unwrap_or(false)
+            },
+            timeout_secs,
+        )
     }
 
     pub fn get_tmux_window_name(&self) -> String {
@@ -227,6 +256,7 @@ impl Drop for WormholeTest {
         let _ = Command::new("tmux")
             .args(["-L", &self.tmux_socket, "kill-server"])
             .output();
+        let _ = std::fs::remove_file("/tmp/wormhole.env");
         self.focus_terminal();
         notify_end();
     }

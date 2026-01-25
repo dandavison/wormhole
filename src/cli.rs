@@ -104,6 +104,9 @@ pub enum Command {
         #[arg(value_enum)]
         shell: Shell,
     },
+
+    /// Kill tmux session and clean up
+    KillSession,
 }
 
 #[derive(Subcommand)]
@@ -312,6 +315,15 @@ pub fn run(command: Command) -> Result<(), String> {
 
         Command::Completion { shell } => {
             generate(shell, &mut Cli::command(), "wormhole", &mut io::stdout());
+            Ok(())
+        }
+
+        Command::KillSession => {
+            let _ = std::fs::remove_file("/tmp/wormhole.env");
+            std::process::Command::new("tmux")
+                .args(["kill-session"])
+                .status()
+                .map_err(|e| format!("Failed to kill tmux session: {}", e))?;
             Ok(())
         }
     }

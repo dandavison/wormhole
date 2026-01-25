@@ -12,7 +12,6 @@ internal final class ProjectSelectorModel<V: Equatable>: ObservableObject {
     @Published var width: CGFloat = 100
 
     var textBinding: Binding<String>?
-    weak var projectsModel: ProjectsModel?
 
     private var commandKeyObserver: NSObjectProtocol?
 
@@ -126,10 +125,7 @@ internal final class ProjectSelectorModel<V: Equatable>: ObservableObject {
     }
 
     internal func openProject(name: String, landInTerminal: Bool) async throws {
-        let isTask = projectsModel?.isTaskMode ?? false
-        let endpoint = isTask ? "task" : "project"
-        var url = "http://localhost:7117/\(endpoint)/" + name
-        // Only add land-in if modifier key was pressed (for terminal)
+        var url = "http://localhost:7117/project/switch/" + name
         if landInTerminal {
             url = url + "?land-in=terminal"
         }

@@ -17,10 +17,6 @@ pub struct Project {
 }
 
 impl Project {
-    pub fn is_task(&self) -> bool {
-        self.home_project.is_some()
-    }
-
     pub fn is_open(&self) -> bool {
         config::TERMINAL.exists(self)
     }

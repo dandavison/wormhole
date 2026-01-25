@@ -20,32 +20,9 @@ pub enum JiraCommand {
 }
 
 #[derive(Subcommand)]
-pub enum TaskCommand {
-    /// Open a task (creates git worktree if needed)
-    Open {
-        /// Task identifier (e.g., JIRA ID like ACT-1234)
-        task_id: String,
-        /// Home repository name (required for new tasks)
-        #[arg(long)]
-        home: Option<String>,
-        /// Which application to focus: editor or terminal
-        #[arg(long, value_name = "APP")]
-        land_in: Option<String>,
-    },
-    /// Remove a task (removes git worktree, keeps branch)
-    Remove {
-        /// Task identifier to remove
-        task_id: String,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum Command {
-    /// Start the wormhole server
-    Serve,
-
+pub enum ProjectCommand {
     /// Switch to a project by name, or open/create a project at a path
-    Project {
+    Switch {
         /// Project name or absolute path
         #[arg(value_hint = ValueHint::DirPath)]
         name_or_path: String,
@@ -55,12 +32,53 @@ pub enum Command {
         /// Which application to focus: editor or terminal
         #[arg(long, value_name = "APP")]
         land_in: Option<String>,
+        /// Home project for creating a task (git worktree)
+        #[arg(long)]
+        home_project: Option<String>,
     },
+    /// List projects (current and available)
+    List {
+        /// Output format: text (default) or json
+        #[arg(long, default_value = "text")]
+        format: String,
+    },
+    /// Switch to the previous project
+    Previous {
+        /// Which application to focus: editor or terminal
+        #[arg(long, value_name = "APP")]
+        land_in: Option<String>,
+    },
+    /// Switch to the next project
+    Next {
+        /// Which application to focus: editor or terminal
+        #[arg(long, value_name = "APP")]
+        land_in: Option<String>,
+    },
+    /// Close a project (editor and terminal windows)
+    Close {
+        /// Project name
+        name: String,
+    },
+    /// Remove a project from wormhole (removes worktree for tasks)
+    Remove {
+        /// Project name
+        name: String,
+    },
+    /// Pin current (project, application) state
+    Pin,
+    /// Show debug information about all projects
+    Debug,
+}
 
-    /// Task operations (git worktree-based)
-    Task {
+#[derive(Subcommand)]
+pub enum Command {
+    /// Start the wormhole server
+    Serve,
+
+    /// Project operations
+    Project {
         #[command(subcommand)]
-        command: TaskCommand,
+        command: ProjectCommand,
     },
 
     /// Open a file in the appropriate project
@@ -73,50 +91,11 @@ pub enum Command {
         land_in: Option<String>,
     },
 
-    /// Switch to the previous project
-    Previous {
-        /// Which application to focus: editor or terminal
-        #[arg(long, value_name = "APP")]
-        land_in: Option<String>,
-    },
-
-    /// Switch to the next project
-    Next {
-        /// Which application to focus: editor or terminal
-        #[arg(long, value_name = "APP")]
-        land_in: Option<String>,
-    },
-
-    /// List projects (current and available)
-    List {
-        /// Output format: text (default) or json
-        #[arg(long, default_value = "text")]
-        format: String,
-    },
-
-    /// Close a project (editor and terminal windows)
-    Close {
-        /// Project name
-        name: String,
-    },
-
-    /// Remove a project from wormhole
-    Remove {
-        /// Project name
-        name: String,
-    },
-
-    /// Pin current (project, application) state
-    Pin,
-
     /// Key-value storage operations
     Kv {
         #[command(subcommand)]
         command: KvCommand,
     },
-
-    /// Show debug information about all projects
-    Debug,
 
     /// JIRA operations
     Jira {
@@ -227,49 +206,90 @@ fn build_query(land_in: &Option<String>, name: &Option<String>) -> String {
     }
 }
 
+fn build_switch_query(
+    land_in: &Option<String>,
+    name: &Option<String>,
+    home_project: &Option<String>,
+) -> String {
+    let mut params = vec![];
+    if let Some(app) = land_in {
+        params.push(format!("land-in={}", app));
+    }
+    if let Some(n) = name {
+        params.push(format!("name={}", n));
+    }
+    if let Some(h) = home_project {
+        params.push(format!("home-project={}", h));
+    }
+    if params.is_empty() {
+        String::new()
+    } else {
+        format!("?{}", params.join("&"))
+    }
+}
+
 pub fn run(command: Command) -> Result<(), String> {
     let client = Client::new();
 
     match command {
         Command::Serve => {
-            // This is handled specially in main.rs
             unreachable!("Serve command should be handled in main")
         }
 
-        Command::Project {
-            name_or_path,
-            name,
-            land_in,
-        } => {
-            let query = build_query(&land_in, &name);
-            let path = format!("/project/{}{}", name_or_path, query);
-            client.get(&path)?;
-            Ok(())
-        }
-
-        Command::Task { command } => match command {
-            TaskCommand::Open {
-                task_id,
-                home,
+        Command::Project { command } => match command {
+            ProjectCommand::Switch {
+                name_or_path,
+                name,
                 land_in,
+                home_project,
             } => {
-                let mut params = vec![];
-                if let Some(h) = home {
-                    params.push(format!("home={}", h));
-                }
-                if let Some(app) = land_in {
-                    params.push(format!("land-in={}", app));
-                }
-                let query = if params.is_empty() {
-                    String::new()
-                } else {
-                    format!("?{}", params.join("&"))
-                };
-                client.get(&format!("/task/{}{}", task_id, query))?;
+                let query = build_switch_query(&land_in, &name, &home_project);
+                let path = format!("/project/switch/{}{}", name_or_path, query);
+                client.get(&path)?;
                 Ok(())
             }
-            TaskCommand::Remove { task_id } => {
-                client.post(&format!("/remove-task/{}", task_id))?;
+            ProjectCommand::List { format } => {
+                let response = client.get("/project/list")?;
+                if format == "json" {
+                    println!("{}", response);
+                } else {
+                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response) {
+                        if let Some(current) = json.get("current").and_then(|v| v.as_array()) {
+                            for item in current {
+                                if let Some(name) = item.get("name").and_then(|n| n.as_str()) {
+                                    println!("{}", name);
+                                }
+                            }
+                        }
+                    }
+                }
+                Ok(())
+            }
+            ProjectCommand::Previous { land_in } => {
+                let query = build_query(&land_in, &None);
+                client.get(&format!("/project/previous{}", query))?;
+                Ok(())
+            }
+            ProjectCommand::Next { land_in } => {
+                let query = build_query(&land_in, &None);
+                client.get(&format!("/project/next{}", query))?;
+                Ok(())
+            }
+            ProjectCommand::Close { name } => {
+                client.post(&format!("/project/close/{}", name))?;
+                Ok(())
+            }
+            ProjectCommand::Remove { name } => {
+                client.post(&format!("/project/remove/{}", name))?;
+                Ok(())
+            }
+            ProjectCommand::Pin => {
+                client.post("/project/pin")?;
+                Ok(())
+            }
+            ProjectCommand::Debug => {
+                let response = client.get("/project/debug")?;
+                println!("{}", response);
                 Ok(())
             }
         },
@@ -278,52 +298,6 @@ pub fn run(command: Command) -> Result<(), String> {
             let query = build_query(&land_in, &None);
             let url_path = format!("/file/{}{}", path, query);
             client.get(&url_path)?;
-            Ok(())
-        }
-
-        Command::Previous { land_in } => {
-            let query = build_query(&land_in, &None);
-            client.get(&format!("/previous-project/{}", query))?;
-            Ok(())
-        }
-
-        Command::Next { land_in } => {
-            let query = build_query(&land_in, &None);
-            client.get(&format!("/next-project/{}", query))?;
-            Ok(())
-        }
-
-        Command::List { format } => {
-            let response = client.get("/list-projects/")?;
-            if format == "json" {
-                println!("{}", response);
-            } else {
-                // Parse JSON and print current projects as plain text
-                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response) {
-                    if let Some(current) = json.get("current").and_then(|v| v.as_array()) {
-                        for name in current {
-                            if let Some(s) = name.as_str() {
-                                println!("{}", s);
-                            }
-                        }
-                    }
-                }
-            }
-            Ok(())
-        }
-
-        Command::Close { name } => {
-            client.post(&format!("/close-project/{}", name))?;
-            Ok(())
-        }
-
-        Command::Remove { name } => {
-            client.post(&format!("/remove-project/{}", name))?;
-            Ok(())
-        }
-
-        Command::Pin => {
-            client.post("/pin/")?;
             Ok(())
         }
 
@@ -355,12 +329,6 @@ pub fn run(command: Command) -> Result<(), String> {
                 Ok(())
             }
         },
-
-        Command::Debug => {
-            let response = client.get("/debug-projects/")?;
-            println!("{}", response);
-            Ok(())
-        }
 
         Command::Jira { command } => match command {
             JiraCommand::Sprint => jira::print_sprint_issues(),

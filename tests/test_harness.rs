@@ -8,8 +8,8 @@ fn test_close_cursor_window() {
     let dir = format!("/tmp/{}", proj);
     std::fs::create_dir_all(&dir).unwrap();
 
-    // Create and switch to project using unified /project/ endpoint
-    test.hs_get(&format!("/project/{}?name={}", dir, proj))
+    // Create and switch to project using unified /project/switch/ endpoint
+    test.hs_get(&format!("/project/switch/{}?name={}", dir, proj))
         .unwrap();
     std::thread::sleep(std::time::Duration::from_millis(500));
 

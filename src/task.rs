@@ -80,10 +80,6 @@ pub fn get_task(id: &str) -> Option<Project> {
     tasks.get(id).cloned()
 }
 
-pub fn list_tasks() -> Vec<Project> {
-    get_cached_tasks().into_values().collect()
-}
-
 pub fn open_task(
     task_id: &str,
     home: Option<&str>,

@@ -21,12 +21,12 @@ fn test_open_project() {
     test.create_project(&dir_b, &proj_b);
 
     // Initially, editor gains focus.
-    test.hs_get(&format!("/project/{}", proj_a)).unwrap();
+    test.hs_get(&format!("/project/switch/{}", proj_a)).unwrap();
     test.assert_focus(Editor(&proj_a));
     test.assert_tmux_cwd(&dir_a);
 
     // Switching stays with editor.
-    test.hs_get(&format!("/project/{}", proj_b)).unwrap();
+    test.hs_get(&format!("/project/switch/{}", proj_b)).unwrap();
     test.assert_focus(Editor(&proj_b));
     test.assert_tmux_cwd(&dir_b);
 
@@ -34,24 +34,24 @@ fn test_open_project() {
     test.focus_terminal();
 
     // Switching now stays with terminal.
-    test.hs_get(&format!("/project/{}", proj_a)).unwrap();
+    test.hs_get(&format!("/project/switch/{}", proj_a)).unwrap();
     test.assert_focus(Terminal(&proj_a));
     test.assert_tmux_cwd(&dir_a);
 
     // land-in=editor overrides: even though we're in terminal, we land in editor
-    test.hs_get(&format!("/project/{}?land-in=editor", proj_b))
+    test.hs_get(&format!("/project/switch/{}?land-in=editor", proj_b))
         .unwrap();
     test.assert_focus(Editor(&proj_b));
 
     // land-in=terminal overrides: even though we're now in editor, we land in terminal
-    test.hs_get(&format!("/project/{}?land-in=terminal", proj_a))
+    test.hs_get(&format!("/project/switch/{}?land-in=terminal", proj_a))
         .unwrap();
     test.assert_focus(Terminal(&proj_a));
 
     // land-in is also respected from project kv store.
     test.hs_put(&format!("/kv/{}/land-in", proj_b), "editor")
         .unwrap();
-    test.hs_get(&format!("/project/{}", proj_b)).unwrap();
+    test.hs_get(&format!("/project/switch/{}", proj_b)).unwrap();
     test.assert_focus(Editor(&proj_b));
 }
 
@@ -71,20 +71,20 @@ fn test_previous_project_and_next_project() {
     test.create_project(&dir_b, &proj_b);
 
     // Start in (a, editor)
-    test.hs_get(&format!("/project/{}", proj_a)).unwrap();
+    test.hs_get(&format!("/project/switch/{}", proj_a)).unwrap();
     test.assert_focus(Editor(&proj_a));
 
     // Transition to (b, editor)
-    test.hs_get(&format!("/project/{}", proj_b)).unwrap();
+    test.hs_get(&format!("/project/switch/{}", proj_b)).unwrap();
     test.assert_focus(Editor(&proj_b));
 
     for _ in 0..2 {
         // Previous should transition to (a, editor)
-        test.hs_get("/previous-project/").unwrap();
+        test.hs_get("/project/previous").unwrap();
         test.assert_focus(Editor(&proj_a));
 
         // Next should transition to (b, editor)
-        test.hs_get("/next-project/").unwrap();
+        test.hs_get("/project/next").unwrap();
         test.assert_focus(Editor(&proj_b));
     }
 
@@ -97,7 +97,7 @@ fn test_previous_project_and_next_project() {
         .unwrap();
 
     // Previous should transition to (a, editor)
-    test.hs_get("/previous-project/").unwrap();
+    test.hs_get("/project/previous").unwrap();
     test.assert_focus(Editor(&proj_a));
 }
 
@@ -111,10 +111,10 @@ fn test_close_project() {
     std::fs::create_dir_all(&dir).unwrap();
 
     test.create_project(&dir, &proj);
-    test.hs_get(&format!("/project/{}", proj)).unwrap();
+    test.hs_get(&format!("/project/switch/{}", proj)).unwrap();
     test.assert_focus(Editor(&proj));
 
-    test.hs_post(&format!("/close-project/{}", proj)).unwrap();
+    test.hs_post(&format!("/project/close/{}", proj)).unwrap();
 
     assert!(
         test.wait_until(|| !test.window_exists(&proj), 5),
@@ -172,11 +172,11 @@ fn test_pin() {
     test.create_project(&dir, &proj);
 
     // Go to project in editor
-    test.hs_get(&format!("/project/{}", proj)).unwrap();
+    test.hs_get(&format!("/project/switch/{}", proj)).unwrap();
     test.assert_focus(Editor(&proj));
 
     // Pin while in editor - should set land-in=editor
-    test.hs_post("/pin/").unwrap();
+    test.hs_post("/project/pin").unwrap();
     assert!(
         test.wait_for_kv(&proj, "land-in", "editor", 10),
         "Expected land-in=editor after pinning in editor"
@@ -186,7 +186,7 @@ fn test_pin() {
     test.focus_terminal();
     test.assert_focus(Terminal(&proj));
 
-    test.hs_post("/pin/").unwrap();
+    test.hs_post("/project/pin").unwrap();
     assert!(
         test.wait_for_kv(&proj, "land-in", "terminal", 5),
         "Expected land-in=terminal after pinning in terminal"
@@ -227,27 +227,27 @@ fn test_task_switching() {
     let task_2_dir = format!("{}/.git/wormhole/worktrees/{}", home_dir, task_2);
 
     // Switch to home project
-    test.hs_get(&format!("/project/{}", home_proj)).unwrap();
+    test.hs_get(&format!("/project/switch/{}", home_proj)).unwrap();
     test.assert_focus(Editor(&home_proj));
     test.assert_tmux_cwd(&home_dir);
 
     // Switch to task 1
-    test.hs_get(&format!("/task/{}", task_1)).unwrap();
+    test.hs_get(&format!("/project/switch/{}", task_1)).unwrap();
     test.assert_focus(Editor(&task_1));
     test.assert_tmux_cwd(&task_1_dir);
 
     // Switch to task 2
-    test.hs_get(&format!("/task/{}", task_2)).unwrap();
+    test.hs_get(&format!("/project/switch/{}", task_2)).unwrap();
     test.assert_focus(Editor(&task_2));
     test.assert_tmux_cwd(&task_2_dir);
 
     // Switch back to home project
-    test.hs_get(&format!("/project/{}", home_proj)).unwrap();
+    test.hs_get(&format!("/project/switch/{}", home_proj)).unwrap();
     test.assert_focus(Editor(&home_proj));
     test.assert_tmux_cwd(&home_dir);
 
     // Switch to task 1 again
-    test.hs_get(&format!("/task/{}", task_1)).unwrap();
+    test.hs_get(&format!("/project/switch/{}", task_1)).unwrap();
     test.assert_focus(Editor(&task_1));
     test.assert_tmux_cwd(&task_1_dir);
 }

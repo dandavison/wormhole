@@ -1,25 +1,20 @@
 import Foundation
 import Combine
 
+struct ProjectInfo: Codable {
+    let name: String
+    let is_task: Bool
+    let home_project: String?
+}
+
 struct ProjectsResponse: Codable {
-    let current: [String]
+    let current: [ProjectInfo]
     let available: [String]
-}
-
-struct TasksResponse: Codable {
-    let tasks: [TaskInfo]
-}
-
-struct TaskInfo: Codable {
-    let id: String
-    let home_repo: String
-    let worktree_path: String
 }
 
 enum SelectorMode: Int, CaseIterable {
     case current = 0
     case available = 1
-    case tasks = 2
 
     func next() -> SelectorMode {
         let allCases = SelectorMode.allCases
@@ -31,7 +26,6 @@ enum SelectorMode: Int, CaseIterable {
 final class ProjectsModel: ObservableObject {
     var currentProjects: [String] = []
     var availableProjects: [String] = []
-    var tasks: [String] = []
 
     @Published var mode: SelectorMode = .current
     @Published var currentText: String = ""
@@ -46,25 +40,13 @@ final class ProjectsModel: ObservableObject {
             return currentProjects
         case .available:
             return availableProjects
-        case .tasks:
-            return tasks
         }
     }
 
-    var isTaskMode: Bool {
-        mode == .tasks
-    }
-
     func fetchProjects() async throws -> ProjectsResponse {
-        let url = URL(string: "http://localhost:7117/list-projects/")!
+        let url = URL(string: "http://localhost:7117/project/list")!
         let (data, _) = try await URLSession.shared.data(from: url)
         return try JSONDecoder().decode(ProjectsResponse.self, from: data)
-    }
-
-    func fetchTasks() async throws -> TasksResponse {
-        let url = URL(string: "http://localhost:7117/list-tasks/")!
-        let (data, _) = try await URLSession.shared.data(from: url)
-        return try JSONDecoder().decode(TasksResponse.self, from: data)
     }
 
     func toggleMode() {
@@ -84,15 +66,11 @@ final class ProjectsModel: ObservableObject {
     init() {
         Task {
             do {
-                async let projectsTask = fetchProjects()
-                async let tasksTask = fetchTasks()
-
-                let (projectsResponse, tasksResponse) = try await (projectsTask, tasksTask)
+                let response = try await fetchProjects()
 
                 await MainActor.run {
-                    self.currentProjects = projectsResponse.current
-                    self.availableProjects = projectsResponse.available
-                    self.tasks = tasksResponse.tasks.map { $0.id }
+                    self.currentProjects = response.current.map { $0.name }
+                    self.availableProjects = response.available
                     self.updateProjectsList()
                 }
 

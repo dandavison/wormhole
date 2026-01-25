@@ -256,6 +256,7 @@ impl Drop for WormholeTest {
         let _ = Command::new("tmux")
             .args(["-L", &self.tmux_socket, "kill-server"])
             .output();
+        let _ = std::fs::remove_file("/tmp/wormhole.env");
         self.focus_terminal();
         notify_end();
     }

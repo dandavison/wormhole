@@ -202,8 +202,11 @@ impl WormholeTest {
     }
 
     pub fn create_task(&self, task_id: &str, home_project: &str) {
-        self.hs_get(&format!("/project/switch/{}?home-project={}", task_id, home_project))
-            .unwrap();
+        self.hs_get(&format!(
+            "/project/switch/{}?home-project={}",
+            task_id, home_project
+        ))
+        .unwrap();
         assert!(
             self.wait_for_window_containing(task_id, 10),
             "Task window '{}' did not appear",

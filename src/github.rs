@@ -40,4 +40,3 @@ pub fn get_pr_status(project_path: &Path) -> Option<PrStatus> {
 
     serde_json::from_slice(&output.stdout).ok()
 }
-

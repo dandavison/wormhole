@@ -227,7 +227,8 @@ fn test_task_switching() {
     let task_2_dir = format!("{}/.git/wormhole/worktrees/{}", home_dir, task_2);
 
     // Switch to home project
-    test.hs_get(&format!("/project/switch/{}", home_proj)).unwrap();
+    test.hs_get(&format!("/project/switch/{}", home_proj))
+        .unwrap();
     test.assert_focus(Editor(&home_proj));
     test.assert_tmux_cwd(&home_dir);
 
@@ -242,7 +243,8 @@ fn test_task_switching() {
     test.assert_tmux_cwd(&task_2_dir);
 
     // Switch back to home project
-    test.hs_get(&format!("/project/switch/{}", home_proj)).unwrap();
+    test.hs_get(&format!("/project/switch/{}", home_proj))
+        .unwrap();
     test.assert_focus(Editor(&home_proj));
     test.assert_tmux_cwd(&home_dir);
 
@@ -327,7 +329,8 @@ fn test_task_in_submodule() {
     test.assert_focus(Editor(&submodule_name));
     test.assert_tmux_cwd(&submodule_dir);
 
-    test.hs_get(&format!("/project/switch/{}", task_id)).unwrap();
+    test.hs_get(&format!("/project/switch/{}", task_id))
+        .unwrap();
     test.assert_focus(Editor(&task_id));
     test.assert_tmux_cwd(&task_dir);
 }
@@ -352,7 +355,10 @@ fn test_project_status() {
 
     // Get current project status
     let status = test.hs_get("/project/status").unwrap();
-    assert!(status.contains(&proj), "Current status should contain project name");
+    assert!(
+        status.contains(&proj),
+        "Current status should contain project name"
+    );
 
     // Get JSON format
     let status = test

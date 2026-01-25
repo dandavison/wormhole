@@ -73,18 +73,24 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         if method != &Method::POST {
             return Ok(Response::builder()
                 .status(StatusCode::METHOD_NOT_ALLOWED)
-                .body(Body::from("Method not allowed. Use POST for /project/remove/"))
+                .body(Body::from(
+                    "Method not allowed. Use POST for /project/remove/",
+                ))
                 .unwrap());
         }
         let name = name.trim();
         if let Some(task) = crate::task::get_task(name) {
             if task.home_project.is_some() {
                 match crate::task::remove_task(name) {
-                    Ok(()) => return Ok(Response::new(Body::from(format!("Removed task: {}", name)))),
-                    Err(e) => return Ok(Response::builder()
-                        .status(StatusCode::BAD_REQUEST)
-                        .body(Body::from(e))
-                        .unwrap()),
+                    Ok(()) => {
+                        return Ok(Response::new(Body::from(format!("Removed task: {}", name))))
+                    }
+                    Err(e) => {
+                        return Ok(Response::builder()
+                            .status(StatusCode::BAD_REQUEST)
+                            .body(Body::from(e))
+                            .unwrap())
+                    }
                 }
             }
         }
@@ -93,7 +99,9 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         if method != &Method::POST {
             return Ok(Response::builder()
                 .status(StatusCode::METHOD_NOT_ALLOWED)
-                .body(Body::from("Method not allowed. Use POST for /project/close/"))
+                .body(Body::from(
+                    "Method not allowed. Use POST for /project/close/",
+                ))
                 .unwrap());
         }
         let name = name.trim().to_string();
@@ -142,7 +150,9 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         let names = params.names.clone();
         thread::spawn(move || {
             if home_project.is_some() || crate::task::get_task(&name_or_path).is_some() {
-                if let Err(e) = crate::task::open_task(&name_or_path, home_project.as_deref(), land_in) {
+                if let Err(e) =
+                    crate::task::open_task(&name_or_path, home_project.as_deref(), land_in)
+                {
                     crate::util::error(&e);
                 }
             } else {

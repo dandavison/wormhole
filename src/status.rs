@@ -73,4 +73,3 @@ pub fn get_current_status() -> Option<TaskStatus> {
     let project = projects.current()?;
     Some(get_status(&project))
 }
-

@@ -464,7 +464,9 @@ pub fn run(command: Command) -> Result<(), String> {
                     println!("{}", response);
                 } else {
                     // Parse JSON and render text
-                    if let Ok(kv) = serde_json::from_str::<std::collections::HashMap<String, String>>(&response) {
+                    if let Ok(kv) =
+                        serde_json::from_str::<std::collections::HashMap<String, String>>(&response)
+                    {
                         for (k, v) in &kv {
                             println!("{}: {}", k, v);
                         }
@@ -632,11 +634,14 @@ fn sprint_show(output: &str) -> Result<(), String> {
             let key = issue.key.clone();
             let client_url = format!("http://127.0.0.1:{}", crate::config::wormhole_port());
             thread::spawn(move || {
-                ureq::get(&format!("{}/project/status/{}?format=json", client_url, key))
-                    .call()
-                    .ok()
-                    .and_then(|r| r.into_string().ok())
-                    .and_then(|s| serde_json::from_str::<TaskStatus>(&s).ok())
+                ureq::get(&format!(
+                    "{}/project/status/{}?format=json",
+                    client_url, key
+                ))
+                .call()
+                .ok()
+                .and_then(|r| r.into_string().ok())
+                .and_then(|s| serde_json::from_str::<TaskStatus>(&s).ok())
             })
         })
         .collect::<Vec<_>>()

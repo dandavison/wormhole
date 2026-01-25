@@ -208,7 +208,10 @@ detached
             .unwrap();
 
         let submodule = parent.join("child");
-        assert!(submodule.join(".git").is_file(), ".git should be a file in submodule");
+        assert!(
+            submodule.join(".git").is_file(),
+            ".git should be a file in submodule"
+        );
 
         // git_common_dir should return parent's modules dir
         let common = git_common_dir(&submodule);
@@ -221,7 +224,8 @@ detached
         // worktree_base_path should work
         let base = worktree_base_path(&submodule);
         assert!(
-            base.to_string_lossy().contains("modules/child/wormhole/worktrees"),
+            base.to_string_lossy()
+                .contains("modules/child/wormhole/worktrees"),
             "worktree base should be in parent's modules: {:?}",
             base
         );

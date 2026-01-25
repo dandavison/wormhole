@@ -7,27 +7,6 @@ use std::time::{Duration, Instant};
 
 pub const TEST_PREFIX: &str = "wh-test-";
 
-const NOTIFICATION_GROUP: &str = "wormhole-test";
-
-fn notify_start() {
-    let _ = Command::new("terminal-notifier")
-        .args([
-            "-message",
-            "wormhole test running",
-            "-title",
-            "wormhole test",
-            "-group",
-            NOTIFICATION_GROUP,
-        ])
-        .spawn();
-}
-
-fn notify_end() {
-    let _ = Command::new("terminal-notifier")
-        .args(["-remove", NOTIFICATION_GROUP])
-        .output();
-}
-
 pub fn init_git_repo(path: &Path) {
     Command::new("git")
         .args(["init"])
@@ -92,8 +71,6 @@ pub struct WormholeTest {
 
 impl WormholeTest {
     pub fn new(port: u16) -> Self {
-        notify_start();
-
         let tmux_socket = format!("wormhole-test-{}", port);
         let _ = Command::new("tmux")
             .args(["-L", &tmux_socket, "kill-server"])
@@ -326,6 +303,5 @@ impl Drop for WormholeTest {
             .args(["-L", &self.tmux_socket, "kill-server"])
             .output();
         self.focus_terminal();
-        notify_end();
     }
 }

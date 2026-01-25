@@ -14,6 +14,24 @@ struct SprintCreateResult {
     no_home: Vec<String>,
 }
 
+impl SprintCreateResult {
+    fn render_terminal(&self) -> String {
+        let mut lines = Vec::new();
+        for task in &self.created {
+            lines.push(format!("Created task {}", task));
+        }
+        for key in &self.no_home {
+            lines.push(format!("Skipping {} (no home project)", key));
+        }
+        lines.push(format!(
+            "\nCreated {} tasks, skipped {} (already exist)",
+            self.created.len(),
+            self.skipped.len()
+        ));
+        lines.join("\n")
+    }
+}
+
 #[derive(Serialize, serde::Deserialize)]
 struct ProjectDebug {
     index: usize,
@@ -23,11 +41,31 @@ struct ProjectDebug {
     home_project: Option<String>,
 }
 
+impl ProjectDebug {
+    fn render_terminal(&self) -> String {
+        let aliases = if self.aliases.is_empty() {
+            "none".to_string()
+        } else {
+            self.aliases.join(", ")
+        };
+        format!(
+            "[{}] name: {}, path: {}, aliases: [{}]",
+            self.index, self.name, self.path, aliases
+        )
+    }
+}
+
 #[derive(Serialize)]
 struct KvValue {
     project: String,
     key: String,
     value: Option<String>,
+}
+
+impl KvValue {
+    fn render_terminal(&self) -> String {
+        self.value.clone().unwrap_or_default()
+    }
 }
 
 #[derive(Parser)]
@@ -384,19 +422,10 @@ pub fn run(command: Command) -> Result<(), String> {
                 if output == "json" {
                     println!("{}", response);
                 } else {
-                    // Parse JSON and render text
                     let projects: Vec<ProjectDebug> = serde_json::from_str(&response)
                         .map_err(|e| format!("Failed to parse debug response: {}", e))?;
                     for p in &projects {
-                        let aliases = if p.aliases.is_empty() {
-                            "none".to_string()
-                        } else {
-                            p.aliases.join(", ")
-                        };
-                        println!(
-                            "[{}] name: {}, path: {}, aliases: [{}]",
-                            p.index, p.name, p.path, aliases
-                        );
+                        println!("{}", p.render_terminal());
                     }
                 }
                 Ok(())
@@ -427,18 +456,18 @@ pub fn run(command: Command) -> Result<(), String> {
                 output,
             } => {
                 let response = client.get(&format!("/kv/{}/{}", project, key));
+                let kv = KvValue {
+                    project: project.clone(),
+                    key: key.clone(),
+                    value: response.ok(),
+                };
                 if output == "json" {
-                    let kv = KvValue {
-                        project: project.clone(),
-                        key: key.clone(),
-                        value: response.ok(),
-                    };
                     println!(
                         "{}",
                         serde_json::to_string_pretty(&kv).map_err(|e| e.to_string())?
                     );
                 } else {
-                    println!("{}", response?);
+                    println!("{}", kv.render_terminal());
                 }
                 Ok(())
             }
@@ -591,17 +620,7 @@ fn sprint_create(client: &Client, overrides: Vec<String>, output: &str) -> Resul
             serde_json::to_string_pretty(&result).map_err(|e| e.to_string())?
         );
     } else {
-        for task in &result.created {
-            println!("Created task {}", task);
-        }
-        for key in &result.no_home {
-            println!("Skipping {} (no home project)", key);
-        }
-        println!(
-            "\nCreated {} tasks, skipped {} (already exist)",
-            result.created.len(),
-            result.skipped.len()
-        );
+        println!("{}", result.render_terminal());
     }
     Ok(())
 }
@@ -615,7 +634,7 @@ fn sprint_list(output: &str) -> Result<(), String> {
         );
     } else {
         for issue in &issues {
-            println!("{} {}: {}", issue.status_emoji(), issue.key, issue.summary);
+            println!("{}", issue.render_terminal());
         }
     }
     Ok(())
@@ -666,16 +685,7 @@ fn sprint_show(output: &str) -> Result<(), String> {
         );
     } else {
         for item in &items {
-            match item {
-                SprintShowItem::Task(task) => {
-                    print!("{}", task.render_terminal());
-                }
-                SprintShowItem::Issue(issue) => {
-                    println!("{} {}: {}", issue.status_emoji(), issue.key, issue.summary);
-                    println!("  (no wormhole task)");
-                }
-            }
-            println!();
+            println!("{}\n", item.render_terminal());
         }
     }
     Ok(())

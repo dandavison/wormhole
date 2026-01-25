@@ -16,6 +16,17 @@ pub enum SprintShowItem {
     Issue(IssueStatus),
 }
 
+impl SprintShowItem {
+    pub fn render_terminal(&self) -> String {
+        match self {
+            SprintShowItem::Task(task) => task.render_terminal(),
+            SprintShowItem::Issue(issue) => {
+                format!("{}\n  (no wormhole task)", issue.render_terminal())
+            }
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TaskStatus {
     pub name: String,

@@ -71,13 +71,7 @@ fn refresh_cache() -> HashMap<String, Project> {
 }
 
 pub fn get_task(id: &str) -> Option<Project> {
-    let tasks = tasks();
-    if let Some(task) = tasks.get(id) {
-        return Some(task.clone());
-    }
-
-    let tasks = refresh_cache();
-    tasks.get(id).cloned()
+    tasks().get(id).cloned()
 }
 
 pub fn open_task(

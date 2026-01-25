@@ -7,7 +7,7 @@ Each project is a git repo: it has a tmux window with that repo as the CWD, and 
 Some projects are 'tasks'. A task is a project for which the CWD is a git worktree directory, rather than the "real" project directory.
 
 
-A task, but not a project, should evolve through a state machine to reach a terminal state. This is called "working"; wormhole does not do it for you yet. In the future, wormhole will report on what stage the task is at in that state machine. Rather than modeling the state machine explicitly over a finite set of states and storing the current state value, it will do this by reading relevant state and reporting on it to the user (e.g. does a plan.md exist for the task? Have auxiliary repos been identified that will provide LLM context for the work? Is there a JIRA ticket and if so what state is it in? Is there a PR yet? Is it in draft or open-for-review mode? Have you added explanatory comments to the PR to help reviewers?)
+A task should evolve through a state machine to reach a terminal state. Wormhole reports on what stage the task is at (`wormhole project status`) by reading relevant state from JIRA, GitHub, and local files (e.g. does a plan.md exist? Is there a JIRA ticket and what state is it in? Is there a PR and is it draft or open for review?).
 
 
 
@@ -71,6 +71,8 @@ wormhole project close myapp            # Close project windows
 wormhole project remove myapp           # Remove project/task
 wormhole project pin                    # Pin current (project, app) state
 wormhole project debug                  # Debug info for all projects
+wormhole project status                 # Show task status (JIRA, PR, plan.md)
+wormhole project status ACT-1234        # Show status for specific project
 wormhole file /path/to/file.rs:42       # Open file at line
 wormhole kv get myapp land-in           # Get KV
 wormhole kv set myapp land-in editor    # Set KV
@@ -91,6 +93,7 @@ wormhole completion bash                # Generate shell completions
 | POST   | `/project/remove/<name>`    | Remove project/task               |
 | POST   | `/project/pin`              | Pin current (project, app) state  |
 | GET    | `/project/debug`            | Debug info                        |
+| GET    | `/project/status[/<name>]`  | Task status (JIRA, PR, plan.md)   |
 | GET    | `/file/<path>`              | Open file (path:line supported)   |
 | GET    | `/<github_blob_path>?line=N`| Open GitHub file locally          |
 | GET    | `/kv/<project>/<key>`       | Get value                         |
@@ -99,7 +102,16 @@ wormhole completion bash                # Generate shell completions
 | GET    | `/kv/<project>`             | List project KV                   |
 | GET    | `/kv`                       | List all KV                       |
 
-Query params: `land-in=terminal|editor`, `name=<project_name>`, `line=N`, `home-project=<project>` (for tasks)
+Query params: `land-in=terminal|editor`, `name=<project_name>`, `line=N`, `home-project=<project>` (for tasks), `format=json`
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `JIRA_INSTANCE` | JIRA instance name (e.g., `mycompany` for mycompany.atlassian.net) |
+| `JIRA_EMAIL` | JIRA account email |
+| `JIRA_TOKEN` | JIRA API token |
+| `GITHUB_REPO` | GitHub repo (e.g., `owner/repo`) for PR lookup in `jira sprint` |
 
 ## Example Workflows
 

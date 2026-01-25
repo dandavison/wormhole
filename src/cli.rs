@@ -68,6 +68,14 @@ pub enum ProjectCommand {
     Pin,
     /// Show debug information about all projects
     Debug,
+    /// Show status of a project/task (JIRA, PR, etc.)
+    Status {
+        /// Project name (defaults to current project)
+        name: Option<String>,
+        /// Output format: text (default) or json
+        #[arg(long, default_value = "text")]
+        format: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -290,6 +298,16 @@ pub fn run(command: Command) -> Result<(), String> {
             ProjectCommand::Debug => {
                 let response = client.get("/project/debug")?;
                 println!("{}", response);
+                Ok(())
+            }
+            ProjectCommand::Status { name, format } => {
+                let path = match name {
+                    Some(n) => format!("/project/status/{}", n),
+                    None => "/project/status".to_string(),
+                };
+                let query = if format == "json" { "?format=json" } else { "" };
+                let response = client.get(&format!("{}{}", path, query))?;
+                print!("{}", response);
                 Ok(())
             }
         },

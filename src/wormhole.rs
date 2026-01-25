@@ -31,6 +31,7 @@ pub struct QueryParams {
     pub line: Option<usize>,
     pub names: Vec<String>,
     pub home_project: Option<String>,
+    pub format: Option<String>,
 }
 
 pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
@@ -107,6 +108,33 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         }
         thread::spawn(move || endpoints::pin_current());
         Ok(Response::new(Body::from("Pinning current state...")))
+    } else if path == "/project/status" || path.starts_with("/project/status/") {
+        let name = path.strip_prefix("/project/status/").map(|s| s.trim());
+        let json_format = params.format.as_deref() == Some("json");
+        let status = if let Some(n) = name.filter(|s| !s.is_empty()) {
+            crate::status::get_status_by_name(n)
+        } else {
+            crate::status::get_current_status()
+        };
+        match status {
+            Some(s) => {
+                if json_format {
+                    let json = serde_json::to_string_pretty(&s).unwrap_or_default();
+                    Ok(Response::builder()
+                        .header("Content-Type", "application/json")
+                        .body(Body::from(json))
+                        .unwrap())
+                } else {
+                    let mut output = Vec::new();
+                    format_status_text(&s, &mut output);
+                    Ok(Response::new(Body::from(output)))
+                }
+            }
+            None => Ok(Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(Body::from("Project not found"))
+                .unwrap()),
+        }
     } else if let Some(name_or_path) = path.strip_prefix("/project/switch/") {
         let name_or_path = name_or_path.trim().to_string();
         let home_project = params.home_project.clone();
@@ -162,6 +190,38 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
                 .unwrap();
             return Ok(response);
         }
+    }
+}
+
+fn format_status_text(status: &crate::status::TaskStatus, output: &mut Vec<u8>) {
+    use std::io::Write;
+    let title = if let Some(ref jira) = status.jira {
+        format!("{}: {}", status.name, jira.summary)
+    } else {
+        status.name.clone()
+    };
+    let _ = writeln!(output, "{}", title);
+    let _ = writeln!(output, "{}", "─".repeat(title.chars().count().min(60)));
+
+    if let Some(ref jira) = status.jira {
+        let _ = writeln!(output, "JIRA:      {} {}", jira.status_emoji(), jira.status);
+    } else if status.home_project.is_some() {
+        let _ = writeln!(output, "JIRA:      ✗ no ticket");
+    }
+
+    if let Some(ref pr) = status.pr {
+        let _ = writeln!(output, "PR:        {}", pr.display());
+    } else {
+        let _ = writeln!(output, "PR:        ✗ none");
+    }
+
+    let plan_status = if status.plan_exists { "✓" } else { "✗" };
+    let _ = writeln!(output, "Plan:      {} plan.md", plan_status);
+
+    if let Some(ref repos) = status.aux_repos {
+        let _ = writeln!(output, "Aux repos: {}", repos);
+    } else {
+        let _ = writeln!(output, "Aux repos: ✗ not set");
     }
 }
 
@@ -269,6 +329,7 @@ impl QueryParams {
             line: None,
             names: vec![],
             home_project: None,
+            format: None,
         };
         if let Some(query) = query {
             for (key, val) in form_urlencoded::parse(query.as_bytes()).collect::<Vec<(_, _)>>() {
@@ -290,6 +351,8 @@ impl QueryParams {
                         .collect();
                 } else if key_lower == "home-project" {
                     params.home_project = Some(val.to_string());
+                } else if key_lower == "format" {
+                    params.format = Some(val.to_string());
                 }
             }
         }

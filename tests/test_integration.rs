@@ -251,3 +251,37 @@ fn test_task_switching() {
     test.assert_focus(Editor(&task_1));
     test.assert_tmux_cwd(&task_1_dir);
 }
+
+#[test]
+fn test_project_status() {
+    let test = harness::WormholeTest::new(8938);
+
+    let proj = format!("{}status-proj", TEST_PREFIX);
+    let dir = format!("/tmp/{}", proj);
+
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(format!("{}/plan.md", dir), "# Plan").unwrap();
+
+    test.create_project(&dir, &proj);
+    test.hs_get(&format!("/project/switch/{}", proj)).unwrap();
+
+    // Get status by name
+    let status = test.hs_get(&format!("/project/status/{}", proj)).unwrap();
+    assert!(status.contains(&proj), "Status should contain project name");
+    assert!(status.contains("plan.md"), "Status should mention plan.md");
+
+    // Get current project status
+    let status = test.hs_get("/project/status").unwrap();
+    assert!(status.contains(&proj), "Current status should contain project name");
+
+    // Get JSON format
+    let status = test
+        .hs_get(&format!("/project/status/{}?format=json", proj))
+        .unwrap();
+    assert!(status.contains("\"name\""), "JSON should have name field");
+    assert!(
+        status.contains("\"plan_exists\": true"),
+        "JSON should show plan_exists true, got: {}",
+        status
+    );
+}

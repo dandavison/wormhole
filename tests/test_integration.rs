@@ -22,10 +22,12 @@ fn test_open_project() {
     // Initially, editor gains focus.
     test.hs_get(&format!("/project/{}", proj_a)).unwrap();
     test.assert_focus(Editor(&proj_a));
+    test.assert_tmux_cwd(&dir_a);
 
     // Switching stays with editor.
     test.hs_get(&format!("/project/{}", proj_b)).unwrap();
     test.assert_focus(Editor(&proj_b));
+    test.assert_tmux_cwd(&dir_b);
 
     // Now focus the terminal.
     test.focus_terminal();
@@ -33,6 +35,7 @@ fn test_open_project() {
     // Switching now stays with terminal.
     test.hs_get(&format!("/project/{}", proj_a)).unwrap();
     test.assert_focus(Terminal(&proj_a));
+    test.assert_tmux_cwd(&dir_a);
 
     // land-in=editor overrides: even though we're in terminal, we land in editor
     test.hs_get(&format!("/project/{}?land-in=editor", proj_b))

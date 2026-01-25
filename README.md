@@ -72,29 +72,38 @@ wormhole kv get myapp land-in           # Get KV
 wormhole kv set myapp land-in editor    # Set KV
 wormhole close myapp                    # Close project windows
 wormhole remove myapp                   # Remove from wormhole
+wormhole task open ACT-1234 --home myrepo  # Open task (creates worktree)
+wormhole task remove ACT-1234           # Remove task (keeps branch)
+wormhole debug                          # Debug info for all projects
+wormhole jira sprint                    # List JIRA sprint issues
+wormhole kill-session                   # Kill tmux session and clean up
+wormhole completion bash                # Generate shell completions
 ```
 
 ## HTTP API
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/project/<name_or_path>` | Switch/create project |
-| GET | `/previous-project/` | Previous project |
-| GET | `/next-project/` | Next project |
-| POST | `/pin/` | Pin current (project, app) state |
-| GET | `/file/<path>` | Open file (path:line supported) |
-| GET | `/<github_blob_path>?line=N` | Open GitHub file locally |
-| GET | `/list-projects/` | List projects (JSON) |
-| GET | `/debug-projects/` | Debug info |
-| POST | `/close-project/<name>` | Close project windows |
-| POST | `/remove-project/<name>` | Remove project |
-| GET | `/kv/<project>/<key>` | Get value |
-| PUT | `/kv/<project>/<key>` | Set value (body) |
-| DELETE | `/kv/<project>/<key>` | Delete key |
-| GET | `/kv/<project>` | List project KV |
-| GET | `/kv` | List all KV |
+| Method |              Endpoint                 |             Description                |
+|--------|--------------------------------------|----------------------------------------|
+| GET    | `/project/<name_or_path>`            | Switch/create project                  |
+| GET    | `/previous-project/`                 | Previous project                       |
+| GET    | `/next-project/`                     | Next project                           |
+| POST   | `/pin/`                              | Pin current (project, app) state       |
+| GET    | `/file/<path>`                       | Open file (path:line supported)        |
+| GET    | `/<github_blob_path>?line=N`         | Open GitHub file locally               |
+| GET    | `/list-projects/`                    | List projects (JSON)                   |
+| GET    | `/debug-projects/`                   | Debug info                             |
+| POST   | `/close-project/<name>`              | Close project windows                  |
+| POST   | `/remove-project/<name>`             | Remove project                         |
+| GET    | `/task/<task_id>`                    | Switch to/create task                  |
+| GET    | `/list-tasks/`                       | List tasks (JSON)                      |
+| POST   | `/remove-task/<task_id>`             | Remove task worktree                   |
+| GET    | `/kv/<project>/<key>`                | Get value                              |
+| PUT    | `/kv/<project>/<key>`                | Set value (body)                       |
+| DELETE | `/kv/<project>/<key>`                | Delete key                             |
+| GET    | `/kv/<project>`                      | List project KV                        |
+| GET    | `/kv`                                | List all KV                            |
 
-Query params: `land-in=terminal|editor`, `name=<project_name>`, `line=N`
+Query params: `land-in=terminal|editor`, `name=<project_name>`, `line=N`, `home=<project_name>` (for tasks)
 
 ## Example Workflows
 

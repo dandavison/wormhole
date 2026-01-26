@@ -81,8 +81,9 @@ pub fn get_status(project: &Project) -> TaskStatus {
 }
 
 pub fn get_status_by_name(name: &str) -> Option<TaskStatus> {
-    let projects = projects::lock();
-    let project = projects.by_name(name)?;
+    let project = projects::lock()
+        .by_name(name)
+        .or_else(|| crate::task::get_task(name))?;
     Some(get_status(&project))
 }
 

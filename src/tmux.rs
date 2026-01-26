@@ -105,9 +105,11 @@ pub fn tmux<'a, I>(args: I) -> String
 where
     I: IntoIterator<Item = &'a str>,
 {
-    // TODO: once
-    // E.g. TMUX=/private/tmp/tmux-501/default,89323,0
-    let socket_path = std::env::var("TMUX")
+    // WORMHOLE_TMUX takes precedence (used by daemon to target user's session)
+    // Falls back to TMUX (set by tmux for processes inside a session)
+    // E.g. /private/tmp/tmux-501/default,89323,0
+    let socket_path = std::env::var("WORMHOLE_TMUX")
+        .or_else(|_| std::env::var("TMUX"))
         .unwrap_or_else(|_| panic("TMUX env var is not set"))
         .split(",")
         .nth(0)

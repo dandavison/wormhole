@@ -29,7 +29,7 @@ use clap::Parser;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::Server;
 
-use cli::{Cli, Command};
+use cli::{Cli, Command, ServerCommand};
 use util::warn;
 
 #[tokio::main]
@@ -37,8 +37,11 @@ async fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        // No subcommand or explicit "serve" -> start server
-        None | Some(Command::Serve) => {
+        // No subcommand or "server start-foreground" -> start server
+        None
+        | Some(Command::Server {
+            command: ServerCommand::StartForeground,
+        }) => {
             projects::load();
             task::tasks(); // Pre-populate task cache
             serve_http().await;

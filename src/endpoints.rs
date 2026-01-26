@@ -256,6 +256,25 @@ h1 {{
     background: #0066cc;
     color: #fff;
 }}
+.btn-maximize {{
+    font-family: inherit;
+    font-size: 0.75rem;
+    padding: 0.25rem 0.75rem;
+    border: 1px solid #666;
+    background: #fff;
+    color: #666;
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s;
+    display: none;
+}}
+.btn-maximize:hover {{
+    background: #666;
+    color: #fff;
+}}
+.iframe-container.expanded ~ .card-actions .btn-maximize,
+.card.expanded .btn-maximize {{
+    display: inline-block;
+}}
 .iframe-container {{
     display: none;
     margin-top: 0.75rem;
@@ -271,6 +290,38 @@ h1 {{
 }}
 .card.expanded {{
     max-width: none;
+}}
+.card.maximized {{
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1000;
+    max-width: none;
+    margin: 0;
+    border-radius: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}}
+.card.maximized .iframe-container {{
+    flex: 1;
+    margin-top: 0;
+    border: none;
+}}
+.card.maximized .iframe-container iframe {{
+    height: 100%;
+}}
+.card.maximized .card-actions {{
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    margin: 0;
+    z-index: 1001;
+}}
+.card.maximized > *:not(.card-actions):not(.iframe-container) {{
+    display: none;
 }}
 </style>
 </head>
@@ -296,6 +347,27 @@ document.querySelectorAll('.btn-open').forEach(btn => {{
             fetch('/project/switch/' + card.dataset.task + '?skip-editor=true');
         }}
     }});
+}});
+
+document.querySelectorAll('.btn-maximize').forEach(btn => {{
+    btn.addEventListener('click', e => {{
+        e.stopPropagation();
+        const card = btn.closest('.card');
+        const isMaximized = card.classList.toggle('maximized');
+        btn.textContent = isMaximized ? 'Restore' : 'Maximize';
+        document.body.style.overflow = isMaximized ? 'hidden' : '';
+    }});
+}});
+
+document.addEventListener('keydown', e => {{
+    if (e.key === 'Escape') {{
+        const maximized = document.querySelector('.card.maximized');
+        if (maximized) {{
+            maximized.classList.remove('maximized');
+            maximized.querySelector('.btn-maximize').textContent = 'Maximize';
+            document.body.style.overflow = '';
+        }}
+    }}
 }});
 </script>
 </body>
@@ -373,7 +445,7 @@ fn render_card(item: &crate::status::SprintShowItem, jira_instance: Option<&str>
                 Ok(port) => {
                     let folder_encoded = url_encode(&task.path.to_string_lossy());
                     format!(
-                        r#"<div class="card-actions"><button class="btn-open">Open</button></div>
+                        r#"<div class="card-actions"><button class="btn-open">Open</button><button class="btn-maximize">Maximize</button></div>
 <div class="iframe-container"><iframe data-src="http://localhost:{}/?folder={}"></iframe></div>"#,
                         port, folder_encoded
                     )

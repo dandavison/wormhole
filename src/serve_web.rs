@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
@@ -45,14 +44,18 @@ impl ServeWebManager {
         }
 
         let port = self.port_for_task(task_id);
-        let server_bin = find_code_server_binary()?;
+        let home = std::env::var("HOME").map_err(|_| "HOME not set")?;
+        let server_data_dir = format!("{}/.vscode-server/data", home);
 
-        let child = Command::new(server_bin)
+        let child = Command::new("/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code")
             .args([
+                "serve-web",
                 "--port",
                 &port.to_string(),
                 "--without-connection-token",
                 "--accept-server-license-terms",
+                "--server-data-dir",
+                &server_data_dir,
             ])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -94,24 +97,6 @@ impl ServeWebManager {
 
 fn is_running(child: &mut Child) -> bool {
     matches!(child.try_wait(), Ok(None))
-}
-
-fn find_code_server_binary() -> Result<PathBuf, String> {
-    let home = std::env::var("HOME").map_err(|_| "HOME not set")?;
-    let serve_web_dir = PathBuf::from(format!("{}/.vscode/cli/serve-web", home));
-
-    let entry = fs::read_dir(&serve_web_dir)
-        .map_err(|e| format!("Cannot read {:?}: {}", serve_web_dir, e))?
-        .filter_map(|e| e.ok())
-        .find(|e| e.path().is_dir() && !e.file_name().to_string_lossy().ends_with(".staging"))
-        .ok_or("No VS Code server installed. Run 'code serve-web' once to download it.")?;
-
-    let bin = entry.path().join("bin/code-server");
-    if bin.exists() {
-        Ok(bin)
-    } else {
-        Err(format!("code-server not found at {:?}", bin))
-    }
 }
 
 impl Drop for ServeWebManager {

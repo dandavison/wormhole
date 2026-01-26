@@ -49,6 +49,10 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         Ok(endpoints::list_projects())
     } else if &path == "/project/debug" {
         Ok(endpoints::debug_projects())
+    } else if &path == "/api/sprint" {
+        Ok(endpoints::sprint())
+    } else if &path == "/dashboard" {
+        Ok(endpoints::dashboard())
     } else if &path == "/project/previous" {
         let p = {
             let projects = projects::lock();

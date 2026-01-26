@@ -93,6 +93,24 @@ pub fn get_current_status() -> Option<TaskStatus> {
     Some(get_status(&project))
 }
 
+pub fn get_sprint_status() -> Vec<SprintShowItem> {
+    let issues = match jira::get_sprint_issues() {
+        Ok(issues) => issues,
+        Err(_) => return vec![],
+    };
+    let projects = projects::lock();
+    issues
+        .into_iter()
+        .map(|issue| {
+            if let Some(project) = projects.by_name(&issue.key) {
+                SprintShowItem::Task(get_status(&project))
+            } else {
+                SprintShowItem::Issue(issue)
+            }
+        })
+        .collect()
+}
+
 impl TaskStatus {
     pub fn render_terminal(&self) -> String {
         let jira_instance = std::env::var("JIRA_INSTANCE").ok();

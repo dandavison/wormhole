@@ -179,7 +179,7 @@ h1 {{
     margin-bottom: 0.5rem;
 }}
 .card-key {{
-    font-weight: 600;
+    font-weight: normal;
     font-size: 0.9rem;
     color: #1a1a1a;
     text-decoration: none;
@@ -193,6 +193,7 @@ h1 {{
     color: #555;
 }}
 .card-summary {{
+    font-weight: 600;
     font-size: 0.85rem;
     color: #444;
     margin-bottom: 0.75rem;

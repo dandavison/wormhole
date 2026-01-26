@@ -133,7 +133,7 @@ impl TaskStatus {
             self.name.len()
         };
 
-        let mut lines = vec![title, "─".repeat(title_len.min(60))];
+        let mut lines = vec![title, "─".repeat(title_len)];
 
         if let Some(ref home) = self.home_project {
             lines.push(format!("Home:      {}", home));

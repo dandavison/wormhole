@@ -730,7 +730,7 @@ fn sprint_show(output: &str) -> Result<(), String> {
         );
     } else {
         for item in &items {
-            println!("{}\n", item.render_terminal());
+            println!("{}\n\n", item.render_terminal());
         }
     }
     Ok(())

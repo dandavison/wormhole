@@ -31,6 +31,7 @@ pub struct QueryParams {
     pub line: Option<usize>,
     pub names: Vec<String>,
     pub home_project: Option<String>,
+    pub branch: Option<String>,
     pub format: Option<String>,
 }
 
@@ -156,7 +157,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
                     .unwrap())
             }
         };
-        match crate::task::create_task(task_id, home) {
+        match crate::task::create_task(task_id, home, params.branch.as_deref()) {
             Ok(_) => Ok(Response::new(Body::from(format!(
                 "Created task: {}",
                 task_id
@@ -169,13 +170,17 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
     } else if let Some(name_or_path) = path.strip_prefix("/project/switch/") {
         let name_or_path = name_or_path.trim().to_string();
         let home_project = params.home_project.clone();
+        let branch = params.branch.clone();
         let land_in = params.land_in.clone();
         let names = params.names.clone();
         thread::spawn(move || {
             if home_project.is_some() || crate::task::get_task(&name_or_path).is_some() {
-                if let Err(e) =
-                    crate::task::open_task(&name_or_path, home_project.as_deref(), land_in)
-                {
+                if let Err(e) = crate::task::open_task(
+                    &name_or_path,
+                    home_project.as_deref(),
+                    branch.as_deref(),
+                    land_in,
+                ) {
                     crate::util::error(&e);
                 }
             } else {
@@ -330,6 +335,7 @@ impl QueryParams {
             line: None,
             names: vec![],
             home_project: None,
+            branch: None,
             format: None,
         };
         if let Some(query) = query {
@@ -352,6 +358,8 @@ impl QueryParams {
                         .collect();
                 } else if key_lower == "home-project" {
                     params.home_project = Some(val.to_string());
+                } else if key_lower == "branch" {
+                    params.branch = Some(val.to_string());
                 } else if key_lower == "format" {
                     params.format = Some(val.to_string());
                 }

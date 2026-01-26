@@ -74,7 +74,7 @@ pub fn get_task(id: &str) -> Option<Project> {
     tasks().get(id).cloned()
 }
 
-pub fn create_task(task_id: &str, home: &str) -> Result<Project, String> {
+pub fn create_task(task_id: &str, home: &str, branch: Option<&str>) -> Result<Project, String> {
     if let Some(task) = get_task(task_id) {
         return Ok(task);
     }
@@ -86,9 +86,10 @@ pub fn create_task(task_id: &str, home: &str) -> Result<Project, String> {
     }
 
     let worktree_path = git::worktree_base_path(&home_path).join(task_id);
+    let branch_name = branch.unwrap_or(task_id);
 
     if !worktree_path.exists() {
-        git::create_worktree(&home_path, &worktree_path, task_id)?;
+        git::create_worktree(&home_path, &worktree_path, branch_name)?;
     }
 
     refresh_cache();
@@ -106,6 +107,7 @@ pub fn create_task(task_id: &str, home: &str) -> Result<Project, String> {
 pub fn open_task(
     task_id: &str,
     home: Option<&str>,
+    branch: Option<&str>,
     land_in: Option<Application>,
 ) -> Result<(), String> {
     let project = if let Some(task) = get_task(task_id) {
@@ -113,7 +115,7 @@ pub fn open_task(
     } else {
         let home = home
             .ok_or_else(|| format!("Task '{}' not found. Specify --home to create it.", task_id))?;
-        create_task(task_id, home)?
+        create_task(task_id, home, branch)?
     };
 
     let open_terminal = {

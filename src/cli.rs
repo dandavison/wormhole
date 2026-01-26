@@ -126,6 +126,9 @@ pub enum ProjectCommand {
         /// Home project for creating a task (git worktree)
         #[arg(long)]
         home_project: Option<String>,
+        /// Branch name for new task (prompted if not provided)
+        #[arg(long)]
+        branch: Option<String>,
     },
     /// List projects (current and available)
     List {
@@ -344,6 +347,7 @@ fn build_switch_query(
     land_in: &Option<String>,
     name: &Option<String>,
     home_project: &Option<String>,
+    branch: &Option<String>,
 ) -> String {
     let mut params = vec![];
     if let Some(app) = land_in {
@@ -355,11 +359,39 @@ fn build_switch_query(
     if let Some(h) = home_project {
         params.push(format!("home-project={}", h));
     }
+    if let Some(b) = branch {
+        params.push(format!("branch={}", b));
+    }
     if params.is_empty() {
         String::new()
     } else {
         format!("?{}", params.join("&"))
     }
+}
+
+fn prompt_for_branch_if_needed(
+    task_id: &str,
+    home_project: &Option<String>,
+    branch: Option<String>,
+) -> Result<Option<String>, String> {
+    if branch.is_some() {
+        return Ok(branch);
+    }
+    let is_new_task = home_project.is_some() && crate::task::get_task(task_id).is_none();
+    if !is_new_task {
+        return Ok(None);
+    }
+    eprint!("Branch name for {}: ", task_id);
+    io::Write::flush(&mut io::stderr()).ok();
+    let mut input = String::new();
+    io::stdin()
+        .read_line(&mut input)
+        .map_err(|e| format!("Failed to read branch name: {}", e))?;
+    let branch = input.trim();
+    if branch.is_empty() {
+        return Err("Branch name required for new task".to_string());
+    }
+    Ok(Some(branch.to_string()))
 }
 
 pub fn run(command: Command) -> Result<(), String> {
@@ -405,8 +437,10 @@ pub fn run(command: Command) -> Result<(), String> {
                 name,
                 land_in,
                 home_project,
+                branch,
             } => {
-                let query = build_switch_query(&land_in, &name, &home_project);
+                let branch = prompt_for_branch_if_needed(&name_or_path, &home_project, branch)?;
+                let query = build_switch_query(&land_in, &name, &home_project, &branch);
                 let path = format!("/project/switch/{}{}", name_or_path, query);
                 client.get(&path)?;
                 Ok(())

@@ -187,8 +187,6 @@ pub enum ServerCommand {
     Stop,
     /// Attach to the running server daemon
     Attach,
-    /// Kill tmux work session and clean up
-    KillSession,
 }
 
 #[derive(Subcommand)]
@@ -239,6 +237,9 @@ pub enum Command {
         #[arg(long)]
         available: bool,
     },
+
+    /// Close all editor windows, kill tmux session, and clean up
+    KillSession,
 }
 
 #[derive(Subcommand)]
@@ -395,14 +396,6 @@ pub fn run(command: Command) -> Result<(), String> {
                 } else {
                     Err("wormhole not running".to_string())
                 }
-            }
-            ServerCommand::KillSession => {
-                let _ = std::fs::remove_file("/tmp/wormhole.env");
-                std::process::Command::new("tmux")
-                    .args(["kill-session"])
-                    .status()
-                    .map_err(|e| format!("Failed to kill tmux session: {}", e))?;
-                Ok(())
             }
         },
 
@@ -595,6 +588,16 @@ pub fn run(command: Command) -> Result<(), String> {
             } else if let Some(shell) = shell {
                 generate(shell, &mut Cli::command(), "wormhole", &mut io::stdout());
             }
+            Ok(())
+        }
+
+        Command::KillSession => {
+            crate::hammerspoon::close_all_windows(crate::config::EDITOR.application_name());
+            let _ = std::fs::remove_file("/tmp/wormhole.env");
+            std::process::Command::new("tmux")
+                .args(["kill-session"])
+                .status()
+                .map_err(|e| format!("Failed to kill tmux session: {}", e))?;
             Ok(())
         }
     }

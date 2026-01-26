@@ -60,6 +60,19 @@ pub fn close_window(application_name: &str, title_pattern: &str) {
     ));
 }
 
+pub fn close_all_windows(application_name: &str) {
+    hammerspoon(&format!(
+        r#"
+        local app = hs.application.find('{application_name}')
+        if app then
+            for _, w in ipairs(app:allWindows()) do
+                w:close()
+            end
+        end
+        "#,
+    ));
+}
+
 pub fn alert(message: &str) {
     hammerspoon(&format!(r#"hs.alert.show("{message}", 0.5)"#,));
 }

@@ -3,6 +3,7 @@
 use std::process::Command;
 use std::thread;
 use std::time::{Duration, Instant};
+use wormhole::daemon::{wait_for_ready, TmuxSession};
 
 pub const TEST_PREFIX: &str = "wh-test-";
 
@@ -33,44 +34,27 @@ pub enum Focus<'a> {
 
 pub struct WormholeTest {
     port: u16,
-    tmux_socket: String,
+    tmux: TmuxSession,
 }
 
 impl WormholeTest {
     pub fn new(port: u16) -> Self {
         notify_start();
 
-        let tmux_socket = format!("wormhole-test-{}", port);
-        let _ = Command::new("tmux")
-            .args(["-L", &tmux_socket, "kill-server"])
-            .output();
-
+        let tmux = TmuxSession::new(&format!("wormhole-test-{}", port), "wormhole");
         let current_dir =
             std::env::current_dir().unwrap_or_else(|_| panic!("Failed to get current directory"));
-        Command::new("tmux")
-            .args([
-                "-L",
-                &tmux_socket,
-                "new-session",
-                "-d",
-                "-c",
-                current_dir.to_str().unwrap(),
-                "./target/debug/wormhole",
-            ])
-            .env("WORMHOLE_PORT", port.to_string())
-            .output()
-            .unwrap_or_else(|_| panic!("Failed to start wormhole in tmux"));
+        tmux.start(
+            "./target/debug/wormhole",
+            Some(port),
+            Some(current_dir.to_str().unwrap()),
+            &[],
+        )
+        .expect("Failed to start wormhole in tmux");
 
-        let test = WormholeTest { port, tmux_socket };
+        wait_for_ready(port, Duration::from_secs(5));
 
-        for _ in 0..20 {
-            if test.hs_get("/project/list").is_ok() {
-                break;
-            }
-            thread::sleep(Duration::from_millis(250));
-        }
-
-        test
+        WormholeTest { port, tmux }
     }
 
     pub fn hs_get(&self, path: &str) -> Result<String, String> {
@@ -232,7 +216,7 @@ impl WormholeTest {
 
     pub fn get_tmux_window_name(&self) -> String {
         let output = Command::new("tmux")
-            .args(["-L", &self.tmux_socket, "display-message", "-p", "#W"])
+            .args(["-L", &self.tmux.socket, "display-message", "-p", "#W"])
             .output()
             .unwrap();
         String::from_utf8_lossy(&output.stdout).trim().to_string()
@@ -242,7 +226,7 @@ impl WormholeTest {
         let output = Command::new("tmux")
             .args([
                 "-L",
-                &self.tmux_socket,
+                &self.tmux.socket,
                 "display-message",
                 "-p",
                 "#{pane_current_path}",
@@ -308,9 +292,7 @@ impl Drop for WormholeTest {
             },
             10,
         );
-        let _ = Command::new("tmux")
-            .args(["-L", &self.tmux_socket, "kill-server"])
-            .output();
+        self.tmux.stop();
         let _ = std::fs::remove_file("/tmp/wormhole.env");
         self.focus_terminal();
         notify_end();

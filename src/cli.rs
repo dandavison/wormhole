@@ -177,9 +177,25 @@ pub enum ProjectCommand {
 }
 
 #[derive(Subcommand)]
+pub enum ServerCommand {
+    /// Run server in foreground (used internally by daemon)
+    #[command(hide = true)]
+    StartForeground,
+    /// Start the server daemon (background)
+    Start,
+    /// Stop the server daemon
+    Stop,
+    /// Attach to the running server daemon
+    Attach,
+}
+
+#[derive(Subcommand)]
 pub enum Command {
-    /// Start the wormhole server
-    Serve,
+    /// Server daemon operations
+    Server {
+        #[command(subcommand)]
+        command: ServerCommand,
+    },
 
     /// Project operations
     Project {
@@ -222,8 +238,8 @@ pub enum Command {
         available: bool,
     },
 
-    /// Kill tmux session and clean up
-    KillSession,
+    /// Close all editor windows, kill tmux session, and clean up
+    Kill,
 }
 
 #[derive(Subcommand)]
@@ -350,9 +366,38 @@ pub fn run(command: Command) -> Result<(), String> {
     let client = Client::new();
 
     match command {
-        Command::Serve => {
-            unreachable!("Serve command should be handled in main")
-        }
+        Command::Server { command } => match command {
+            ServerCommand::StartForeground => {
+                unreachable!("StartForeground command should be handled in main")
+            }
+            ServerCommand::Start => {
+                let tmux_env = std::env::var("TMUX")
+                    .map_err(|_| "TMUX env var not set - run from within tmux")?;
+                let d = wormhole::daemon::daemon();
+                let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+                d.start(
+                    exe.to_str().ok_or("invalid exe path")?,
+                    None,
+                    None,
+                    &[("WORMHOLE_TMUX", &tmux_env)],
+                )?;
+                println!("wormhole started");
+                Ok(())
+            }
+            ServerCommand::Stop => {
+                wormhole::daemon::daemon().stop();
+                println!("wormhole stopped");
+                Ok(())
+            }
+            ServerCommand::Attach => {
+                let d = wormhole::daemon::daemon();
+                if d.is_running() {
+                    d.attach()
+                } else {
+                    Err("wormhole not running".to_string())
+                }
+            }
+        },
 
         Command::Project { command } => match command {
             ProjectCommand::Switch {
@@ -546,7 +591,8 @@ pub fn run(command: Command) -> Result<(), String> {
             Ok(())
         }
 
-        Command::KillSession => {
+        Command::Kill => {
+            crate::hammerspoon::close_all_windows(crate::config::EDITOR.application_name());
             let _ = std::fs::remove_file("/tmp/wormhole.env");
             std::process::Command::new("tmux")
                 .args(["kill-session"])
@@ -690,4 +736,3 @@ fn sprint_show(output: &str) -> Result<(), String> {
     }
     Ok(())
 }
-

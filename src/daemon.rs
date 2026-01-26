@@ -24,6 +24,7 @@ impl TmuxSession {
     ) -> Result<(), String> {
         self.stop();
         let mut cmd = Command::new("tmux");
+        cmd.env_remove("TMUX");
         cmd.args(["-L", &self.socket, "new-session", "-d", "-s", &self.session]);
         if let Some(dir) = working_dir {
             cmd.args(["-c", dir]);

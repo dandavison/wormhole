@@ -178,6 +178,17 @@ h1 {{
     padding: 1rem;
     box-shadow: 2px 2px 0 #ddd;
 }}
+.card[data-task] {{
+    cursor: pointer;
+    transition: border-color 0.1s, box-shadow 0.1s;
+}}
+.card[data-task]:hover {{
+    border-color: #0066cc;
+    box-shadow: 2px 2px 0 #0066cc;
+}}
+.card[data-task].switching {{
+    opacity: 0.6;
+}}
 .card-header {{
     display: flex;
     justify-content: space-between;
@@ -227,6 +238,16 @@ h1 {{
 </head>
 <body>
 <div class="grid">{}</div>
+<script>
+document.querySelectorAll('.card[data-task]').forEach(card => {{
+    card.addEventListener('click', e => {{
+        if (e.target.closest('a')) return;
+        card.classList.add('switching');
+        fetch('/project/switch/' + card.dataset.task)
+            .finally(() => card.classList.remove('switching'));
+    }});
+}});
+</script>
 </body>
 </html>"##,
         cards_html
@@ -298,12 +319,17 @@ fn render_card(item: &crate::status::SprintShowItem, jira_instance: Option<&str>
             };
 
             format!(
-                r#"<div class="card">
+                r#"<div class="card" data-task="{}">
 <div class="card-header">{}{}</div>
 <div class="card-summary">{}</div>
 <div class="card-meta">{}{}</div>
 </div>"#,
-                key_html, status_html, summary, pr_html, plan_html
+                html_escape(&task.name),
+                key_html,
+                status_html,
+                summary,
+                pr_html,
+                plan_html
             )
         }
         SprintShowItem::Issue(issue) => {

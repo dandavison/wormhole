@@ -170,7 +170,6 @@ h1 {{
     display: flex;
     flex-direction: column;
     gap: 1rem;
-    max-width: 560px;
 }}
 .card {{
     background: #fff;
@@ -234,17 +233,68 @@ h1 {{
     font-style: italic;
     margin-top: 0.5rem;
 }}
+.card-actions {{
+    margin-top: 0.75rem;
+    display: flex;
+    gap: 0.5rem;
+}}
+.btn-open {{
+    font-family: inherit;
+    font-size: 0.75rem;
+    padding: 0.25rem 0.75rem;
+    border: 1px solid #0066cc;
+    background: #fff;
+    color: #0066cc;
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s;
+}}
+.btn-open:hover {{
+    background: #0066cc;
+    color: #fff;
+}}
+.btn-open.active {{
+    background: #0066cc;
+    color: #fff;
+}}
+.iframe-container {{
+    display: none;
+    margin-top: 0.75rem;
+    border: 1px solid #ccc;
+}}
+.iframe-container.expanded {{
+    display: block;
+}}
+.iframe-container iframe {{
+    width: 100%;
+    height: 600px;
+    border: none;
+}}
+.card.expanded {{
+    max-width: none;
+}}
 </style>
 </head>
 <body>
 <div class="grid">{}</div>
 <script>
-document.querySelectorAll('.card[data-task]').forEach(card => {{
-    card.addEventListener('click', e => {{
-        if (e.target.closest('a')) return;
-        card.classList.add('switching');
-        fetch('/project/switch/' + card.dataset.task)
-            .finally(() => card.classList.remove('switching'));
+document.querySelectorAll('.btn-open').forEach(btn => {{
+    btn.addEventListener('click', e => {{
+        e.stopPropagation();
+        const card = btn.closest('.card');
+        const container = card.querySelector('.iframe-container');
+        const iframe = container.querySelector('iframe');
+        const isExpanding = !container.classList.contains('expanded');
+
+        container.classList.toggle('expanded');
+        card.classList.toggle('expanded');
+        btn.classList.toggle('active');
+
+        if (isExpanding) {{
+            if (!iframe.src) {{
+                iframe.src = iframe.dataset.src;
+            }}
+            fetch('/project/switch/' + card.dataset.task + '?skip-editor=true');
+        }}
     }});
 }});
 </script>
@@ -318,18 +368,33 @@ fn render_card(item: &crate::status::SprintShowItem, jira_instance: Option<&str>
                 r#"<span class="meta-item">Plan: <span class="cross">✗</span></span>"#.to_string()
             };
 
+            let iframe_html = match crate::serve_web::manager().get_or_start(&task.name, &task.path)
+            {
+                Ok(port) => {
+                    let folder_encoded = url_encode(&task.path.to_string_lossy());
+                    format!(
+                        r#"<div class="card-actions"><button class="btn-open">Open</button></div>
+<div class="iframe-container"><iframe data-src="http://localhost:{}/?folder={}"></iframe></div>"#,
+                        port, folder_encoded
+                    )
+                }
+                Err(_) => String::new(),
+            };
+
             format!(
                 r#"<div class="card" data-task="{}">
 <div class="card-header">{}{}</div>
 <div class="card-summary">{}</div>
 <div class="card-meta">{}{}</div>
+{}
 </div>"#,
                 html_escape(&task.name),
                 key_html,
                 status_html,
                 summary,
                 pr_html,
-                plan_html
+                plan_html,
+                iframe_html
             )
         }
         SprintShowItem::Issue(issue) => {
@@ -369,4 +434,8 @@ fn html_escape(s: &str) -> String {
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('"', "&quot;")
+}
+
+fn url_encode(s: &str) -> String {
+    url::form_urlencoded::byte_serialize(s.as_bytes()).collect()
 }

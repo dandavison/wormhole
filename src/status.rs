@@ -30,6 +30,7 @@ impl SprintShowItem {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TaskStatus {
     pub name: String,
+    pub path: std::path::PathBuf,
     pub home_project: Option<String>,
     pub jira: Option<IssueStatus>,
     pub pr: Option<PrStatus>,
@@ -71,6 +72,7 @@ pub fn get_status(project: &Project) -> TaskStatus {
 
     TaskStatus {
         name,
+        path,
         home_project,
         jira,
         pr,

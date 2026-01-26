@@ -1,6 +1,3 @@
-serve: build
-	./target/release/wormhole serve
-
 build:
 	cargo build --release
 

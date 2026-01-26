@@ -177,9 +177,25 @@ pub enum ProjectCommand {
 }
 
 #[derive(Subcommand)]
+pub enum ServerCommand {
+    /// Start the server daemon (background)
+    Start,
+    /// Stop the server daemon
+    Stop,
+    /// Attach to the running server daemon
+    Attach,
+}
+
+#[derive(Subcommand)]
 pub enum Command {
-    /// Start the wormhole server
+    /// Start the wormhole server (foreground)
     Serve,
+
+    /// Server daemon operations
+    Server {
+        #[command(subcommand)]
+        command: ServerCommand,
+    },
 
     /// Project operations
     Project {
@@ -353,6 +369,29 @@ pub fn run(command: Command) -> Result<(), String> {
         Command::Serve => {
             unreachable!("Serve command should be handled in main")
         }
+
+        Command::Server { command } => match command {
+            ServerCommand::Start => {
+                let d = wormhole::daemon::daemon();
+                let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+                d.start(exe.to_str().ok_or("invalid exe path")?, None, None)?;
+                println!("wormhole started");
+                Ok(())
+            }
+            ServerCommand::Stop => {
+                wormhole::daemon::daemon().stop();
+                println!("wormhole stopped");
+                Ok(())
+            }
+            ServerCommand::Attach => {
+                let d = wormhole::daemon::daemon();
+                if d.is_running() {
+                    d.attach()
+                } else {
+                    Err("wormhole not running".to_string())
+                }
+            }
+        },
 
         Command::Project { command } => match command {
             ProjectCommand::Switch {

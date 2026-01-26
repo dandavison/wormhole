@@ -178,6 +178,9 @@ pub enum ProjectCommand {
 
 #[derive(Subcommand)]
 pub enum ServerCommand {
+    /// Run server in foreground (used internally by daemon)
+    #[command(hide = true)]
+    StartForeground,
     /// Start the server daemon (background)
     Start,
     /// Stop the server daemon
@@ -190,10 +193,6 @@ pub enum ServerCommand {
 
 #[derive(Subcommand)]
 pub enum Command {
-    /// Start the wormhole server (foreground, used internally by daemon)
-    #[command(hide = true)]
-    Serve,
-
     /// Server daemon operations
     Server {
         #[command(subcommand)]
@@ -366,11 +365,10 @@ pub fn run(command: Command) -> Result<(), String> {
     let client = Client::new();
 
     match command {
-        Command::Serve => {
-            unreachable!("Serve command should be handled in main")
-        }
-
         Command::Server { command } => match command {
+            ServerCommand::StartForeground => {
+                unreachable!("StartForeground command should be handled in main")
+            }
             ServerCommand::Start => {
                 let tmux_env = std::env::var("TMUX")
                     .map_err(|_| "TMUX env var not set - run from within tmux")?;

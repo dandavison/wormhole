@@ -28,7 +28,7 @@ impl TmuxSession {
         if let Some(dir) = working_dir {
             cmd.args(["-c", dir]);
         }
-        cmd.args([binary, "serve"]);
+        cmd.args([binary, "server", "start-foreground"]);
         if let Some(p) = port {
             cmd.env("WORMHOLE_PORT", p.to_string());
         }

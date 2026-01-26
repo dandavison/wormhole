@@ -40,7 +40,10 @@ pub struct WormholeTest {
 impl WormholeTest {
     pub fn new(port: u16) -> Self {
         if std::env::var("WORMHOLE_TEST").is_err() {
-            panic!("Run tests via `make test`, not `cargo test` directly");
+            panic!(
+                "Set WORMHOLE_TEST to run tests. \
+                But if you are an AI, do not run tests since they focus application windows "
+            );
         }
         notify_start();
 

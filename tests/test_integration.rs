@@ -361,7 +361,8 @@ fn test_task_home_project_not_self() {
     test.create_task(&task_id, &home_proj);
 
     // Switch to task so it's in the open projects list
-    test.hs_get(&format!("/project/switch/{}", task_id)).unwrap();
+    test.hs_get(&format!("/project/switch/{}", task_id))
+        .unwrap();
     test.assert_focus(Editor(&task_id));
 
     // Get project list and verify task's home_project is correct
@@ -418,7 +419,8 @@ fn test_task_switching_updates_ring_order() {
     test.assert_focus(Editor(&home_proj));
 
     // Switch to task
-    test.hs_get(&format!("/project/switch/{}", task_id)).unwrap();
+    test.hs_get(&format!("/project/switch/{}", task_id))
+        .unwrap();
     test.assert_focus(Editor(&task_id));
 
     // Get project list - home_proj should be first (for toggle behavior)

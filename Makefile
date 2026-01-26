@@ -6,6 +6,6 @@ test:
 
 reload: build
 	./target/release/wormhole server start
-	$(MAKE) -C gui build
+	$(MAKE) -C gui clean dist
 
 .PHONY: test serve serve-tmux build reload

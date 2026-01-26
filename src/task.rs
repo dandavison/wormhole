@@ -3,14 +3,14 @@ use std::path::PathBuf;
 use std::sync::RwLock;
 use std::thread;
 
+use rayon::prelude::*;
+
 use crate::wormhole::Application;
 use crate::{config, editor, git, project::Project, projects, util::warn};
 
 static TASK_CACHE: RwLock<Option<HashMap<String, Project>>> = RwLock::new(None);
 
 pub fn discover_tasks() -> HashMap<String, Project> {
-    let mut tasks = HashMap::new();
-
     let mut project_name_to_path: HashMap<String, PathBuf> =
         config::available_projects().into_iter().collect();
     for project in projects::lock().all() {
@@ -19,38 +19,36 @@ pub fn discover_tasks() -> HashMap<String, Project> {
             .or_insert_with(|| project.path.clone());
     }
 
-    for (project_name, project_path) in project_name_to_path {
-        if !git::is_git_repo(&project_path) {
-            continue;
-        }
-
-        let worktrees_dir = git::worktree_base_path(&project_path);
-
-        for worktree in git::list_worktrees(&project_path) {
-            if !worktree.path.starts_with(&worktrees_dir) {
-                continue;
+    project_name_to_path
+        .into_par_iter()
+        .flat_map(|(project_name, project_path)| {
+            if !git::is_git_repo(&project_path) {
+                return vec![];
             }
-
-            if let Some(task_id) = worktree.path.file_name().and_then(|n| n.to_str()) {
-                if task_id == project_name {
-                    continue;
-                }
-                tasks.insert(
-                    task_id.to_string(),
-                    Project {
-                        name: task_id.to_string(),
-                        path: worktree.path,
-                        aliases: vec![],
-                        kv: HashMap::new(),
-                        last_application: None,
-                        home_project: Some(project_name.clone()),
-                    },
-                );
-            }
-        }
-    }
-
-    tasks
+            let worktrees_dir = git::worktree_base_path(&project_path);
+            git::list_worktrees(&project_path)
+                .into_iter()
+                .filter(|wt| wt.path.starts_with(&worktrees_dir))
+                .filter_map(|wt| {
+                    let task_id = wt.path.file_name()?.to_str()?;
+                    if task_id == project_name {
+                        return None;
+                    }
+                    Some((
+                        task_id.to_string(),
+                        Project {
+                            name: task_id.to_string(),
+                            path: wt.path,
+                            aliases: vec![],
+                            kv: HashMap::new(),
+                            last_application: None,
+                            home_project: Some(project_name.clone()),
+                        },
+                    ))
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect()
 }
 
 pub fn tasks() -> HashMap<String, Project> {

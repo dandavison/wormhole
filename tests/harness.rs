@@ -48,6 +48,7 @@ impl WormholeTest {
             "./target/debug/wormhole",
             Some(port),
             Some(current_dir.to_str().unwrap()),
+            &[],
         )
         .expect("Failed to start wormhole in tmux");
 

@@ -20,6 +20,7 @@ impl TmuxSession {
         binary: &str,
         port: Option<u16>,
         working_dir: Option<&str>,
+        envs: &[(&str, &str)],
     ) -> Result<(), String> {
         self.stop();
         let mut cmd = Command::new("tmux");
@@ -30,6 +31,9 @@ impl TmuxSession {
         cmd.args([binary, "serve"]);
         if let Some(p) = port {
             cmd.env("WORMHOLE_PORT", p.to_string());
+        }
+        for (k, v) in envs {
+            cmd.env(k, v);
         }
         let status = cmd
             .status()

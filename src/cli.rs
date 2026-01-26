@@ -372,9 +372,16 @@ pub fn run(command: Command) -> Result<(), String> {
 
         Command::Server { command } => match command {
             ServerCommand::Start => {
+                let tmux_env = std::env::var("TMUX")
+                    .map_err(|_| "TMUX env var not set - run from within tmux")?;
                 let d = wormhole::daemon::daemon();
                 let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-                d.start(exe.to_str().ok_or("invalid exe path")?, None, None)?;
+                d.start(
+                    exe.to_str().ok_or("invalid exe path")?,
+                    None,
+                    None,
+                    &[("WORMHOLE_TMUX", &tmux_env)],
+                )?;
                 println!("wormhole started");
                 Ok(())
             }

@@ -170,13 +170,11 @@ impl<'a> Projects<'a> {
     }
 
     pub fn by_name(&self, name: &str) -> Option<Project> {
-        self.0.iter().find_map(|p| {
-            if p.name == name {
-                Some(p.clone())
-            } else {
-                None
-            }
-        })
+        self.0.iter().find(|p| p.name == name).cloned()
+    }
+
+    pub fn resolve(&self, name: &str) -> Option<Project> {
+        crate::task::get_task(name).or_else(|| self.by_name(name))
     }
 
     fn contains(&self, name: &str) -> bool {

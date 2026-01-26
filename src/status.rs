@@ -82,8 +82,8 @@ pub fn get_status(project: &Project) -> TaskStatus {
 
 pub fn get_status_by_name(name: &str) -> Option<TaskStatus> {
     let projects = projects::lock();
-    let project = crate::task::get_task(name)
-        .or_else(|| projects.by_name(name))
+    let project = projects
+        .resolve(name)
         .or_else(|| projects.by_path(std::path::Path::new(name)))?;
     Some(get_status(&project))
 }
@@ -102,12 +102,9 @@ pub fn get_sprint_status() -> Vec<SprintShowItem> {
     let projects = projects::lock();
     issues
         .into_iter()
-        .map(|issue| {
-            if let Some(project) = projects.by_name(&issue.key) {
-                SprintShowItem::Task(get_status(&project))
-            } else {
-                SprintShowItem::Issue(issue)
-            }
+        .map(|issue| match projects.resolve(&issue.key) {
+            Some(project) => SprintShowItem::Task(get_status(&project)),
+            None => SprintShowItem::Issue(issue),
         })
         .collect()
 }

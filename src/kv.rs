@@ -7,24 +7,21 @@ use crate::projects;
 
 pub fn get_value(project_name: &str, key: &str) -> Response<Body> {
     let projects = projects::lock();
-
-    if let Some(project) = projects.by_name(project_name) {
-        if let Some(value) = project.kv.get(key) {
-            Response::new(Body::from(value.clone()))
-        } else {
-            Response::builder()
-                .status(StatusCode::NOT_FOUND)
-                .body(Body::from(format!(
-                    "Key '{}' not found in project '{}'",
-                    key, project_name
-                )))
-                .unwrap()
-        }
-    } else {
-        Response::builder()
+    let Some(project) = projects.resolve(project_name) else {
+        return Response::builder()
             .status(StatusCode::NOT_FOUND)
             .body(Body::from(format!("Project '{}' not found", project_name)))
-            .unwrap()
+            .unwrap();
+    };
+    match project.kv.get(key) {
+        Some(value) => Response::new(Body::from(value.clone())),
+        None => Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(Body::from(format!(
+                "Key '{}' not found in project '{}'",
+                key, project_name
+            )))
+            .unwrap(),
     }
 }
 
@@ -85,15 +82,15 @@ pub fn delete_value(project_name: &str, key: &str) -> Response<Body> {
 
 pub fn get_project_kv(project_name: &str) -> Response<Body> {
     let projects = projects::lock();
-
-    if let Some(project) = projects.by_name(project_name) {
-        let json = serde_json::to_string_pretty(&project.kv).unwrap();
-        Response::new(Body::from(json))
-    } else {
-        Response::builder()
+    match projects.resolve(project_name) {
+        Some(project) => {
+            let json = serde_json::to_string_pretty(&project.kv).unwrap();
+            Response::new(Body::from(json))
+        }
+        None => Response::builder()
             .status(StatusCode::NOT_FOUND)
             .body(Body::from(format!("Project '{}' not found", project_name)))
-            .unwrap()
+            .unwrap(),
     }
 }
 

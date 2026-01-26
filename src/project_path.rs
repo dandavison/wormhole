@@ -118,7 +118,7 @@ impl ProjectPath {
                 line,
                 repo
             );
-            if let Some(project) = projects.by_name(repo) {
+            if let Some(project) = projects.resolve(repo) {
                 Some(ProjectPath {
                     project,
                     relative_path: Some((path, line)),

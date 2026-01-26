@@ -88,21 +88,20 @@ pub fn debug_projects() -> Response<Body> {
 
 pub fn remove_project(name: &str) -> Response<Body> {
     let mut projects = projects::lock();
-    projects.by_name(name).map(|p| {
+    if let Some(p) = projects.resolve(name) {
         config::TERMINAL.close(&p);
-    });
+    }
     projects.remove(name);
-
     projects.print();
     Response::new(Body::from(format!("removed project: {}", name)))
 }
 
 pub fn close_project(name: &str) {
     let projects = projects::lock();
-    projects.by_name(name).map(|p| {
+    if let Some(p) = projects.resolve(name) {
         config::TERMINAL.close(&p);
         config::EDITOR.close(&p);
-    });
+    }
     projects.print();
 }
 

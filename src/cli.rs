@@ -239,7 +239,7 @@ pub enum Command {
     },
 
     /// Close all editor windows, kill tmux session, and clean up
-    KillSession,
+    Kill,
 }
 
 #[derive(Subcommand)]
@@ -591,7 +591,7 @@ pub fn run(command: Command) -> Result<(), String> {
             Ok(())
         }
 
-        Command::KillSession => {
+        Command::Kill => {
             crate::hammerspoon::close_all_windows(crate::config::EDITOR.application_name());
             let _ = std::fs::remove_file("/tmp/wormhole.env");
             std::process::Command::new("tmux")

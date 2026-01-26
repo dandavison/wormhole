@@ -512,7 +512,12 @@ pub fn run(command: Command) -> Result<(), String> {
             ProjectCommand::Status { name, output } => {
                 let path = match name {
                     Some(n) => format!("/project/status/{}", n),
-                    None => "/project/status".to_string(),
+                    None => {
+                        let cwd = std::env::current_dir()
+                            .map(|p| p.to_string_lossy().to_string())
+                            .unwrap_or_default();
+                        format!("/project/status/{}", cwd)
+                    }
                 };
                 let query = if output == "json" { "?format=json" } else { "" };
                 let response = client.get(&format!("{}{}", path, query))?;

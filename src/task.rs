@@ -121,6 +121,14 @@ pub fn open_task(
         create_task(task_id, home, branch)?
     };
 
+    {
+        let mut projects = projects::lock();
+        if projects.by_name(&project.name).is_none() {
+            projects.add_project(project.clone());
+        }
+        projects.apply(projects::Mutation::Insert, &project.name);
+    }
+
     let open_terminal = {
         let project = project.clone();
         move || {
@@ -158,11 +166,6 @@ pub fn open_task(
             editor_thread.join().unwrap();
             config::EDITOR.focus();
         }
-    }
-
-    let mut projects = projects::lock();
-    if projects.by_name(&project.name).is_none() {
-        projects.add_project(project);
     }
 
     Ok(())

@@ -8,15 +8,16 @@ use crate::{config, git, hammerspoon, projects, task, util::debug};
 pub fn list_projects() -> Response<Body> {
     let tasks = task::tasks();
 
-    // Get currently open projects
+    // Get currently open projects, using task info where available
     let mut current: VecDeque<_> = projects::lock()
         .open()
         .into_iter()
         .map(|p| {
-            let mut obj = serde_json::json!({ "name": p.name });
-            if let Some(home) = &p.home_project {
+            let project = tasks.get(&p.name).unwrap_or(&p);
+            let mut obj = serde_json::json!({ "name": project.name });
+            if let Some(home) = &project.home_project {
                 obj["home_project"] = serde_json::json!(home);
-                if let Some(branch) = git::current_branch(&p.path) {
+                if let Some(branch) = git::current_branch(&project.path) {
                     obj["branch"] = serde_json::json!(branch);
                 }
             }

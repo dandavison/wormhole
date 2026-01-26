@@ -42,41 +42,11 @@ struct ProjectTextField<V: Equatable>: NSViewRepresentable {
     }
 
     func updateNSView(_ searchField: NSSearchField, context: Context) {
-        let model = self.model
-        let text = self.text
-
         let coordinator = context.coordinator
-        coordinator.model = model
+        coordinator.model = self.model
 
-        coordinator.updatingSelectedRange = true
-        defer {
-            coordinator.updatingSelectedRange = false
-        }
-
-        if let selectedProject = model.selectedProject {
-            let projectText = selectedProject.text
-
-            if searchField.stringValue != projectText {
-                searchField.stringValue = projectText
-            }
-
-            if let fieldEditor = searchField.window?.fieldEditor(false, for: searchField) {
-                if model.projectConfirmed {
-                    let range = NSRange(projectText.startIndex..<projectText.endIndex, in: fieldEditor.string)
-                    if fieldEditor.selectedRange != range {
-                        fieldEditor.selectedRange = range
-                    }
-                } else if projectText.hasPrefix(text) {
-                    let range = NSRange(projectText.index(projectText.startIndex, offsetBy: text.count)..<projectText.index(projectText.startIndex, offsetBy: projectText.count), in: fieldEditor.string)
-                    if fieldEditor.selectedRange != range {
-                        fieldEditor.selectedRange = range
-                    }
-                }
-            }
-        } else {
-            if searchField.stringValue != self.text {
-                searchField.stringValue = self.text
-            }
+        if searchField.stringValue != self.text {
+            searchField.stringValue = self.text
         }
     }
 

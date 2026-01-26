@@ -61,6 +61,7 @@ struct ProjectTextField<V: Equatable>: NSViewRepresentable {
         var didChangeSelectionSubscription: AnyCancellable?
         var frameDidChangeSubscription: AnyCancellable?
         var keyEventMonitor: Any?
+        var cursorTimer: Timer?
         var updatingSelectedRange: Bool = false
 
         init(text: Binding<String>, model: ProjectSelectorModel<V>, projectsModel: ProjectsModel) {
@@ -89,9 +90,19 @@ struct ProjectTextField<V: Equatable>: NSViewRepresentable {
                 }
                 return event
             }
+
+            self.cursorTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+                guard let self = self,
+                      let window = self.searchField?.window,
+                      let fieldEditor = window.fieldEditor(false, for: self.searchField) as? NSTextView else {
+                    return
+                }
+                fieldEditor.updateInsertionPointStateAndRestartTimer(true)
+            }
         }
 
         deinit {
+            cursorTimer?.invalidate()
             if let monitor = keyEventMonitor {
                 NSEvent.removeMonitor(monitor)
             }

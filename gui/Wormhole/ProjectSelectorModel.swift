@@ -116,7 +116,9 @@ internal final class ProjectSelectorModel<V: Equatable>: ObservableObject {
 
         Task {
             do {
-                try await openProject(name: project.text, landInTerminal: modifier)
+                if let name = project.value as? String {
+                    try await openProject(name: name, landInTerminal: modifier)
+                }
                 await NSApplication.shared.terminate(nil)
             } catch {
                 print("Error while opening project: " + project.text)

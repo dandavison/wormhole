@@ -4,8 +4,16 @@ import Combine
 struct ProjectInfo: Codable {
     let name: String
     let home_project: String?
+    let branch: String?
 
     var isTask: Bool { home_project != nil }
+
+    var displayName: String {
+        if let home = home_project, let branch = branch {
+            return "\(home) \(name) \(branch)"
+        }
+        return name
+    }
 }
 
 struct ProjectsResponse: Codable {
@@ -25,7 +33,7 @@ enum SelectorMode: Int, CaseIterable {
 }
 
 final class ProjectsModel: ObservableObject {
-    var currentProjects: [String] = []
+    var currentProjects: [ProjectInfo] = []
     var availableProjects: [String] = []
 
     @Published var mode: SelectorMode = .current
@@ -34,15 +42,6 @@ final class ProjectsModel: ObservableObject {
     @Published var currentProject: String?
 
     private var cancellables: Set<AnyCancellable> = []
-
-    var activeProjectList: [String] {
-        switch mode {
-        case .current:
-            return currentProjects
-        case .available:
-            return availableProjects
-        }
-    }
 
     func fetchProjects() async throws -> ProjectsResponse {
         let url = URL(string: "http://localhost:7117/project/list")!
@@ -59,9 +58,18 @@ final class ProjectsModel: ObservableObject {
 
     private func updateProjectsList() {
         let text = currentText.lowercased()
-        let source = activeProjectList
-        let filtered = text.isEmpty ? source : source.filter { $0.lowercased().contains(text) }
-        self.projects = filtered.map { Project(text: $0, value: $0) }
+        switch mode {
+        case .current:
+            let filtered = text.isEmpty ? currentProjects : currentProjects.filter {
+                $0.name.lowercased().contains(text) || ($0.branch?.lowercased().contains(text) ?? false)
+            }
+            self.projects = filtered.map { Project(text: $0.displayName, value: $0.name) }
+        case .available:
+            let filtered = text.isEmpty ? availableProjects : availableProjects.filter {
+                $0.lowercased().contains(text)
+            }
+            self.projects = filtered.map { Project(text: $0, value: $0) }
+        }
     }
 
     init() {
@@ -70,7 +78,7 @@ final class ProjectsModel: ObservableObject {
                 let response = try await fetchProjects()
 
                 await MainActor.run {
-                    self.currentProjects = response.current.map { $0.name }
+                    self.currentProjects = response.current
                     self.availableProjects = response.available
                     self.updateProjectsList()
                 }

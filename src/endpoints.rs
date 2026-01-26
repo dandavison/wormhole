@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 
 use hyper::{Body, Response};
 
-use crate::{config, hammerspoon, projects, task, util::debug};
+use crate::{config, git, hammerspoon, projects, task, util::debug};
 
 /// Return JSON with current and available projects (including tasks)
 pub fn list_projects() -> Response<Body> {
@@ -16,6 +16,9 @@ pub fn list_projects() -> Response<Body> {
             let mut obj = serde_json::json!({ "name": p.name });
             if let Some(home) = &p.home_project {
                 obj["home_project"] = serde_json::json!(home);
+                if let Some(branch) = git::current_branch(&p.path) {
+                    obj["branch"] = serde_json::json!(branch);
+                }
             }
             obj
         })
@@ -36,6 +39,9 @@ pub fn list_projects() -> Response<Body> {
             let mut obj = serde_json::json!({ "name": task_name });
             if let Some(home) = &task_project.home_project {
                 obj["home_project"] = serde_json::json!(home);
+                if let Some(branch) = git::current_branch(&task_project.path) {
+                    obj["branch"] = serde_json::json!(branch);
+                }
             }
             current.push_back(obj);
         }

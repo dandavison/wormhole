@@ -61,15 +61,48 @@ final class ProjectsModel: ObservableObject {
         switch mode {
         case .current:
             let filtered = text.isEmpty ? currentProjects : currentProjects.filter {
-                $0.name.lowercased().contains(text) || ($0.branch?.lowercased().contains(text) ?? false)
+                $0.name.lowercased().contains(text) ||
+                ($0.branch?.lowercased().contains(text) ?? false) ||
+                ($0.home_project?.lowercased().contains(text) ?? false)
             }
-            self.projects = filtered.map { Project(text: $0.displayName, value: $0.name) }
+            self.projects = formatAligned(filtered, allProjects: currentProjects)
         case .available:
             let filtered = text.isEmpty ? availableProjects : availableProjects.filter {
                 $0.lowercased().contains(text)
             }
             self.projects = filtered.map { Project(text: $0, value: $0) }
         }
+    }
+
+    private func formatAligned(_ projects: [ProjectInfo], allProjects: [ProjectInfo]) -> [Project<String>] {
+        let allTasks = allProjects.filter { $0.isTask }
+        let homeWidth = min(allTasks.map { $0.home_project?.count ?? 0 }.max() ?? 0, 16)
+        let nameWidth = min(allTasks.map { $0.name.count }.max() ?? 0, 14)
+        let branchWidth = 55
+
+        return projects.map { p in
+            if let home = p.home_project, let branch = p.branch {
+                let col1 = truncateOrPad(home, width: homeWidth)
+                let col2 = truncateOrPad(p.name, width: nameWidth)
+                let col3 = truncate(branch, width: branchWidth)
+                return Project(text: "\(col1)  \(col2)  \(col3)", value: p.name)
+            }
+            return Project(text: p.name, value: p.name)
+        }
+    }
+
+    private func truncateOrPad(_ s: String, width: Int) -> String {
+        if s.count > width {
+            return String(s.prefix(width - 1)) + "…"
+        }
+        return s.padding(toLength: width, withPad: " ", startingAt: 0)
+    }
+
+    private func truncate(_ s: String, width: Int) -> String {
+        if s.count > width {
+            return String(s.prefix(width - 1)) + "…"
+        }
+        return s
     }
 
     init() {

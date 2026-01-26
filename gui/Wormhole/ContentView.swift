@@ -5,7 +5,7 @@ struct ContentView: View {
 
     var body: some View {
         ProjectInput(text: self.$model.currentText, projects: self.model.projects, projectsModel: model)
-            .frame(width: 340)
+            .frame(width: 740)
             .padding(8)
             .background(
                 UnevenRoundedRectangle(topLeadingRadius: 10, bottomLeadingRadius: 0, bottomTrailingRadius: 0, topTrailingRadius: 10)

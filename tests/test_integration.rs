@@ -461,8 +461,8 @@ fn test_project_status() {
     let proj = format!("{}status-proj", TEST_PREFIX);
     let dir = format!("/tmp/{}", proj);
 
-    std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(format!("{}/plan.md", dir), "# Plan").unwrap();
+    std::fs::create_dir_all(format!("{}/.task", dir)).unwrap();
+    std::fs::write(format!("{}/.task/plan.md", dir), "# Plan").unwrap();
 
     test.create_project(&dir, &proj);
     test.assert_focus(Editor(&proj));

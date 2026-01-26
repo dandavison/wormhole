@@ -58,9 +58,9 @@ pub fn get_status(project: &Project) -> TaskStatus {
         thread::spawn(move || github::get_pr_status(&path))
     };
 
-    let plan_exists = path.join("plan.md").exists();
+    let plan_exists = path.join(".task/plan.md").exists();
     let plan_url = if plan_exists {
-        crate::git::github_file_url(&path, "plan.md")
+        crate::git::github_file_url(&path, ".task/plan.md")
     } else {
         None
     };

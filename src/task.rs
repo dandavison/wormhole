@@ -1,5 +1,6 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::RwLock;
 use std::thread;
 
@@ -91,6 +92,7 @@ pub fn create_task(task_id: &str, home: &str, branch: Option<&str>) -> Result<Pr
 
     if !worktree_path.exists() {
         git::create_worktree(&home_path, &worktree_path, branch_name)?;
+        setup_task_directory(&worktree_path)?;
     }
 
     refresh_cache();
@@ -191,4 +193,35 @@ fn resolve_project_path(project_name: &str) -> Result<PathBuf, String> {
                 .map(|p| p.path.clone())
         })
         .ok_or_else(|| format!("Project '{}' not found", project_name))
+}
+
+fn setup_task_directory(worktree_path: &Path) -> Result<(), String> {
+    let task_dir = worktree_path.join(".task");
+    fs::create_dir_all(&task_dir)
+        .map_err(|e| format!("Failed to create .task directory: {}", e))?;
+
+    fs::write(task_dir.join("plan.md"), "")
+        .map_err(|e| format!("Failed to create plan.md: {}", e))?;
+
+    ensure_gitattributes_entry(worktree_path)?;
+    Ok(())
+}
+
+fn ensure_gitattributes_entry(worktree_path: &Path) -> Result<(), String> {
+    let gitattributes_path = worktree_path.join(".gitattributes");
+    let entry = ".task/ linguist-generated";
+
+    let contents = fs::read_to_string(&gitattributes_path).unwrap_or_default();
+    if contents.lines().any(|line| line.trim() == entry) {
+        return Ok(());
+    }
+
+    let new_contents = if contents.is_empty() || contents.ends_with('\n') {
+        format!("{}{}\n", contents, entry)
+    } else {
+        format!("{}\n{}\n", contents, entry)
+    };
+
+    fs::write(&gitattributes_path, new_contents)
+        .map_err(|e| format!("Failed to update .gitattributes: {}", e))
 }

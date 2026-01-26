@@ -93,27 +93,27 @@ function M.select()
 end
 
 function M.previous()
-    hs.http.asyncGet(M.host .. "/previous-project/", nil, function() end)
+    hs.http.asyncGet(M.host .. "/project/previous", nil, function() end)
 end
 
 function M.next()
-    hs.http.asyncGet(M.host .. "/next-project/", nil, function() end)
+    hs.http.asyncGet(M.host .. "/project/next", nil, function() end)
 end
 
 function M.pin()
-    hs.http.asyncPost(M.host .. "/pin/", "", nil, function() end)
+    hs.http.asyncPost(M.host .. "/project/pin", "", nil, function() end)
 end
 
 function M.openProject(name)
-    hs.http.asyncGet(M.host .. "/project/" .. name, nil, function() end)
+    hs.http.asyncGet(M.host .. "/project/switch/" .. name, nil, function() end)
 end
 
 function M.getOpenProjects()
     local projects = {}
-    local handle = io.popen("wormhole list")
+    local handle = io.popen("wormhole project list")
     if handle then
         for line in handle:lines() do
-            local project = line:match("^%s*(.-)%s*$")
+            local project = line:match("^(%S+)")
             if project and project ~= "" then
                 projects[project] = true
             end

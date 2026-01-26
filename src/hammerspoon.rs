@@ -60,6 +60,19 @@ pub fn close_window(application_name: &str, title_pattern: &str) {
     ));
 }
 
+pub fn any_windows_exist(application_name: &str) -> bool {
+    let result = hammerspoon(&format!(
+        r#"
+        local app = hs.application.find('{application_name}')
+        if app and #app:allWindows() > 0 then
+            return "true"
+        end
+        return "false"
+        "#,
+    ));
+    String::from_utf8_lossy(&result).trim() == "true"
+}
+
 pub fn close_all_windows(application_name: &str) {
     hammerspoon(&format!(
         r#"
@@ -71,6 +84,21 @@ pub fn close_all_windows(application_name: &str) {
         end
         "#,
     ));
+}
+
+pub fn close_all_windows_and_wait(application_name: &str, timeout_secs: u64) {
+    use std::time::{Duration, Instant};
+    use std::thread;
+
+    let start = Instant::now();
+    let timeout = Duration::from_secs(timeout_secs);
+    while start.elapsed() < timeout {
+        close_all_windows(application_name);
+        if !any_windows_exist(application_name) {
+            return;
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
 }
 
 pub fn alert(message: &str) {

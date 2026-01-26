@@ -592,7 +592,10 @@ pub fn run(command: Command) -> Result<(), String> {
         }
 
         Command::Kill => {
-            crate::hammerspoon::close_all_windows(crate::config::EDITOR.application_name());
+            crate::hammerspoon::close_all_windows_and_wait(
+                crate::config::EDITOR.application_name(),
+                10,
+            );
             let _ = std::fs::remove_file("/tmp/wormhole.env");
             std::process::Command::new("tmux")
                 .args(["kill-session"])

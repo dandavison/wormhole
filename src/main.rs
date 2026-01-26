@@ -10,6 +10,7 @@ mod kv;
 mod project;
 mod project_path;
 mod projects;
+mod serve_web;
 mod status;
 mod task;
 mod terminal;

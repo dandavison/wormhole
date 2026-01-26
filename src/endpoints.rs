@@ -136,101 +136,8 @@ pub fn dashboard() -> Response<Body> {
         .map(|item| render_card(item, jira_instance.as_deref()))
         .collect();
 
-    let html = format!(
-        r##"<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Wormhole Sprint</title>
-<style>
-* {{ margin: 0; padding: 0; box-sizing: border-box; }}
-body {{
-    font-family: "SF Mono", "Menlo", "Monaco", monospace;
-    background-color: #fdfeff;
-    background-image:
-        linear-gradient(#eef1f4 1px, transparent 1px),
-        linear-gradient(90deg, #eef1f4 1px, transparent 1px);
-    background-size: 20px 20px;
-    min-height: 100vh;
-    padding: 3rem 2rem 2rem 3rem;
-}}
-header {{
-    margin-bottom: 2rem;
-    padding-bottom: 1rem;
-    border-bottom: 2px solid #333;
-}}
-h1 {{
-    font-size: 1.25rem;
-    font-weight: 600;
-    letter-spacing: 0.1em;
-    color: #333;
-}}
-.grid {{
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-    max-width: 560px;
-}}
-.card {{
-    background: #fff;
-    border: 1px solid #ccc;
-    padding: 1rem;
-    box-shadow: 2px 2px 0 #ddd;
-}}
-.card-header {{
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 0.5rem;
-}}
-.card-key {{
-    font-weight: normal;
-    font-size: 0.9rem;
-    color: #1a1a1a;
-    text-decoration: none;
-}}
-.card-key:hover {{ text-decoration: underline; }}
-.card-status {{
-    font-size: 0.75rem;
-    padding: 0.125rem 0.5rem;
-    border-radius: 2px;
-    background: #eee;
-    color: #555;
-}}
-.card-summary {{
-    font-weight: 600;
-    font-size: 0.85rem;
-    color: #444;
-    margin-bottom: 0.75rem;
-    line-height: 1.4;
-}}
-.card-meta {{
-    font-size: 0.75rem;
-    color: #666;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-}}
-.meta-item {{ display: flex; align-items: center; gap: 0.25rem; }}
-.meta-item a {{ color: #0066cc; text-decoration: none; }}
-.meta-item a:hover {{ text-decoration: underline; }}
-.check {{ color: #22863a; }}
-.cross {{ color: #999; }}
-.no-task {{
-    font-size: 0.7rem;
-    color: #888;
-    font-style: italic;
-    margin-top: 0.5rem;
-}}
-</style>
-</head>
-<body>
-<div class="grid">{}</div>
-</body>
-</html>"##,
-        cards_html
-    );
+    let template = include_str!("dashboard.html");
+    let html = template.replace("{{CARDS}}", &cards_html);
 
     Response::builder()
         .header("Content-Type", "text/html; charset=utf-8")
@@ -297,13 +204,33 @@ fn render_card(item: &crate::status::SprintShowItem, jira_instance: Option<&str>
                 r#"<span class="meta-item">Plan: <span class="cross">✗</span></span>"#.to_string()
             };
 
+            let iframe_html = match crate::serve_web::manager().get_or_start(&task.name, &task.path)
+            {
+                Ok(port) => {
+                    let folder_encoded = url_encode(&task.path.to_string_lossy());
+                    format!(
+                        r#"<div class="card-actions"><button class="btn btn-open">Open</button><button class="btn btn-maximize">Maximize</button><button class="btn btn-cursor">Cursor</button><button class="btn btn-terminal">Terminal</button></div>
+<div class="iframe-container"><iframe data-src="http://localhost:{}/?folder={}"></iframe></div>"#,
+                        port, folder_encoded
+                    )
+                }
+                Err(_) => String::new(),
+            };
+
             format!(
-                r#"<div class="card">
+                r#"<div class="card" data-task="{}">
 <div class="card-header">{}{}</div>
 <div class="card-summary">{}</div>
 <div class="card-meta">{}{}</div>
+{}
 </div>"#,
-                key_html, status_html, summary, pr_html, plan_html
+                html_escape(&task.name),
+                key_html,
+                status_html,
+                summary,
+                pr_html,
+                plan_html,
+                iframe_html
             )
         }
         SprintShowItem::Issue(issue) => {
@@ -343,4 +270,8 @@ fn html_escape(s: &str) -> String {
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('"', "&quot;")
+}
+
+fn url_encode(s: &str) -> String {
+    url::form_urlencoded::byte_serialize(s.as_bytes()).collect()
 }

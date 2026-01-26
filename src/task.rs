@@ -114,6 +114,8 @@ pub fn open_task(
     home: Option<&str>,
     branch: Option<&str>,
     land_in: Option<Application>,
+    skip_editor: bool,
+    focus_terminal: bool,
 ) -> Result<(), String> {
     let project = if let Some(task) = get_task(task_id) {
         task
@@ -150,23 +152,30 @@ pub fn open_task(
         }
     };
 
-    match land_in {
-        Some(Application::Terminal) => {
-            open_terminal();
+    if skip_editor {
+        open_terminal();
+        if focus_terminal {
             config::TERMINAL.focus();
-            open_editor();
         }
-        Some(Application::Editor) => {
-            open_editor();
-            config::EDITOR.focus();
-            open_terminal();
-        }
-        None => {
-            let terminal_thread = thread::spawn(open_terminal);
-            let editor_thread = thread::spawn(open_editor);
-            terminal_thread.join().unwrap();
-            editor_thread.join().unwrap();
-            config::EDITOR.focus();
+    } else {
+        match land_in {
+            Some(Application::Terminal) => {
+                open_terminal();
+                config::TERMINAL.focus();
+                open_editor();
+            }
+            Some(Application::Editor) => {
+                open_editor();
+                config::EDITOR.focus();
+                open_terminal();
+            }
+            None => {
+                let terminal_thread = thread::spawn(open_terminal);
+                let editor_thread = thread::spawn(open_editor);
+                terminal_thread.join().unwrap();
+                editor_thread.join().unwrap();
+                config::EDITOR.focus();
+            }
         }
     }
 
@@ -181,6 +190,7 @@ pub fn remove_task(task_id: &str) -> Result<(), String> {
         .ok_or_else(|| format!("'{}' is not a task", task_id))?;
     let home_path = resolve_project_path(home)?;
 
+    crate::serve_web::manager().stop(task_id);
     git::remove_worktree(&home_path, &task.path)?;
     refresh_cache();
 

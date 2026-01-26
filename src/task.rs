@@ -32,6 +32,9 @@ pub fn discover_tasks() -> HashMap<String, Project> {
             }
 
             if let Some(task_id) = worktree.path.file_name().and_then(|n| n.to_str()) {
+                if task_id == project_name {
+                    continue;
+                }
                 tasks.insert(
                     task_id.to_string(),
                     Project {

@@ -386,6 +386,73 @@ fn test_task_home_project_not_self() {
 }
 
 #[test]
+fn test_task_switching_updates_ring_order() {
+    // Verify that switching to a task updates the ring order so toggle works.
+    // After switching: home -> task, the project list should have home first
+    // (for toggle back behavior).
+    let test = harness::WormholeTest::new(8941);
+
+    let home_proj = format!("{}ring-home", TEST_PREFIX);
+    let home_dir = format!("/tmp/{}", home_proj);
+    let task_id = format!("{}RING-TASK", TEST_PREFIX);
+
+    let _ = std::fs::remove_dir_all(&home_dir);
+    std::fs::create_dir_all(&home_dir).unwrap();
+    Command::new("git")
+        .args(["init"])
+        .current_dir(&home_dir)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["commit", "--allow-empty", "-m", "initial"])
+        .current_dir(&home_dir)
+        .output()
+        .unwrap();
+
+    test.create_project(&home_dir, &home_proj);
+    test.create_task(&task_id, &home_proj);
+
+    // Switch to home project first
+    test.hs_get(&format!("/project/switch/{}", home_proj))
+        .unwrap();
+    test.assert_focus(Editor(&home_proj));
+
+    // Switch to task
+    test.hs_get(&format!("/project/switch/{}", task_id)).unwrap();
+    test.assert_focus(Editor(&task_id));
+
+    // Get project list - home_proj should be first (for toggle behavior)
+    let list_json = test.hs_get("/project/list").unwrap();
+    let list: Value = serde_json::from_str(&list_json).unwrap();
+    let current = list["current"].as_array().unwrap();
+
+    let first_name = current[0]["name"].as_str().unwrap();
+    assert_eq!(
+        first_name, &home_proj,
+        "After switching home->task, home should be first in list for toggle. Got '{}' first, list: {:?}",
+        first_name,
+        current.iter().map(|e| e["name"].as_str()).collect::<Vec<_>>()
+    );
+
+    // Switch back to home
+    test.hs_get(&format!("/project/switch/{}", home_proj))
+        .unwrap();
+    test.assert_focus(Editor(&home_proj));
+
+    // Now task should be first in the list
+    let list_json = test.hs_get("/project/list").unwrap();
+    let list: Value = serde_json::from_str(&list_json).unwrap();
+    let current = list["current"].as_array().unwrap();
+
+    let first_name = current[0]["name"].as_str().unwrap();
+    assert_eq!(
+        first_name, &task_id,
+        "After switching task->home, task should be first in list for toggle. Got '{}' first",
+        first_name
+    );
+}
+
+#[test]
 fn test_project_status() {
     let test = harness::WormholeTest::new(8938);
 

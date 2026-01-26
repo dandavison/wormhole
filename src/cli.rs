@@ -184,11 +184,14 @@ pub enum ServerCommand {
     Stop,
     /// Attach to the running server daemon
     Attach,
+    /// Kill tmux work session and clean up
+    KillSession,
 }
 
 #[derive(Subcommand)]
 pub enum Command {
-    /// Start the wormhole server (foreground)
+    /// Start the wormhole server (foreground, used internally by daemon)
+    #[command(hide = true)]
     Serve,
 
     /// Server daemon operations
@@ -237,9 +240,6 @@ pub enum Command {
         #[arg(long)]
         available: bool,
     },
-
-    /// Kill tmux session and clean up
-    KillSession,
 }
 
 #[derive(Subcommand)]
@@ -397,6 +397,14 @@ pub fn run(command: Command) -> Result<(), String> {
                 } else {
                     Err("wormhole not running".to_string())
                 }
+            }
+            ServerCommand::KillSession => {
+                let _ = std::fs::remove_file("/tmp/wormhole.env");
+                std::process::Command::new("tmux")
+                    .args(["kill-session"])
+                    .status()
+                    .map_err(|e| format!("Failed to kill tmux session: {}", e))?;
+                Ok(())
             }
         },
 
@@ -591,15 +599,6 @@ pub fn run(command: Command) -> Result<(), String> {
             }
             Ok(())
         }
-
-        Command::KillSession => {
-            let _ = std::fs::remove_file("/tmp/wormhole.env");
-            std::process::Command::new("tmux")
-                .args(["kill-session"])
-                .status()
-                .map_err(|e| format!("Failed to kill tmux session: {}", e))?;
-            Ok(())
-        }
     }
 }
 
@@ -736,4 +735,3 @@ fn sprint_show(output: &str) -> Result<(), String> {
     }
     Ok(())
 }
-

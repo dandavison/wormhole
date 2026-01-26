@@ -15,9 +15,11 @@ pub fn discover_tasks() -> HashMap<String, Project> {
     let mut project_name_to_path: HashMap<String, PathBuf> =
         config::available_projects().into_iter().collect();
     for project in projects::lock().all() {
-        project_name_to_path
-            .entry(project.name.clone())
-            .or_insert_with(|| project.path.clone());
+        if project.home_project.is_none() {
+            project_name_to_path
+                .entry(project.name.clone())
+                .or_insert_with(|| project.path.clone());
+        }
     }
 
     project_name_to_path

@@ -47,6 +47,8 @@ cp target/release/wormhole ~/bin/
 # Run server
 wormhole serve
 
+# To run multiple wormholes, create a new tmux session, set WORMHOLE_PORT, and run `server start-foreground`
+
 # GUI (optional)
 (cd gui && make dist)
 ln -fs $PWD/gui/dist/Wormhole/Wormhole.app /Applications/Wormhole.app

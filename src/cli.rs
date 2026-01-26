@@ -459,16 +459,34 @@ pub fn run(command: Command) -> Result<(), String> {
                             }
                         }
                     } else if let Some(current) = json.get("current").and_then(|v| v.as_array()) {
-                        for item in current {
-                            if let Some(name) = item.get("name").and_then(|n| n.as_str()) {
-                                if let Some(home) =
+                        let rows: Vec<(String, Option<String>)> = current
+                            .iter()
+                            .filter_map(|item| {
+                                let name = item.get("name")?.as_str()?;
+                                let display = if let Some(home) =
                                     item.get("home_project").and_then(|h| h.as_str())
                                 {
-                                    println!("{} ({})", name, home);
+                                    let branch =
+                                        item.get("branch").and_then(|b| b.as_str()).unwrap_or(name);
+                                    (home.to_string(), Some(branch.to_string()))
                                 } else {
-                                    println!("{}", name);
+                                    (name.to_string(), None)
+                                };
+                                Some(display)
+                            })
+                            .collect();
+                        let formatted: Vec<Vec<&str>> = rows
+                            .iter()
+                            .map(|(col1, col2)| {
+                                if let Some(c2) = col2 {
+                                    vec![col1.as_str(), c2.as_str()]
+                                } else {
+                                    vec![col1.as_str()]
                                 }
-                            }
+                            })
+                            .collect();
+                        for line in crate::util::format_columns(&formatted) {
+                            println!("{}", line);
                         }
                     }
                 }
@@ -737,14 +755,11 @@ fn sprint_show(output: &str) -> Result<(), String> {
             let key = issue.key.clone();
             let client_url = format!("http://127.0.0.1:{}", crate::config::wormhole_port());
             thread::spawn(move || {
-                ureq::get(&format!(
-                    "{}/project/show/{}?format=json",
-                    client_url, key
-                ))
-                .call()
-                .ok()
-                .and_then(|r| r.into_string().ok())
-                .and_then(|s| serde_json::from_str::<TaskStatus>(&s).ok())
+                ureq::get(&format!("{}/project/show/{}?format=json", client_url, key))
+                    .call()
+                    .ok()
+                    .and_then(|r| r.into_string().ok())
+                    .and_then(|s| serde_json::from_str::<TaskStatus>(&s).ok())
             })
         })
         .collect::<Vec<_>>()

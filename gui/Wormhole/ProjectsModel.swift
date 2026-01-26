@@ -7,13 +7,6 @@ struct ProjectInfo: Codable {
     let branch: String?
 
     var isTask: Bool { home_project != nil }
-
-    var displayName: String {
-        if let home = home_project, let branch = branch {
-            return "\(home) \(name) \(branch)"
-        }
-        return name
-    }
 }
 
 struct ProjectsResponse: Codable {
@@ -77,15 +70,13 @@ final class ProjectsModel: ObservableObject {
     private func formatAligned(_ projects: [ProjectInfo], allProjects: [ProjectInfo]) -> [Project<String>] {
         let allTasks = allProjects.filter { $0.isTask }
         let homeWidth = min(allTasks.map { $0.home_project?.count ?? 0 }.max() ?? 0, 16)
-        let nameWidth = min(allTasks.map { $0.name.count }.max() ?? 0, 14)
-        let branchWidth = 55
+        let branchWidth = 60
 
         return projects.map { p in
             if let home = p.home_project, let branch = p.branch {
                 let col1 = truncateOrPad(home, width: homeWidth)
-                let col2 = truncateOrPad(p.name, width: nameWidth)
-                let col3 = truncate(branch, width: branchWidth)
-                return Project(text: "\(col1)  \(col2)  \(col3)", value: p.name)
+                let col2 = truncate(branch, width: branchWidth)
+                return Project(text: "\(col1)  \(col2)", value: p.name)
             }
             return Project(text: p.name, value: p.name)
         }

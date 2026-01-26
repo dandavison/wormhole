@@ -121,8 +121,8 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         }
         thread::spawn(move || endpoints::pin_current());
         Ok(Response::new(Body::from("Pinning current state...")))
-    } else if path == "/project/status" || path.starts_with("/project/status/") {
-        let name = path.strip_prefix("/project/status/").map(|s| s.trim());
+    } else if path == "/project/show" || path.starts_with("/project/show/") {
+        let name = path.strip_prefix("/project/show/").map(|s| s.trim());
         let json_format = params.format.as_deref() == Some("json");
         let status = if let Some(n) = name.filter(|s| !s.is_empty()) {
             crate::status::get_status_by_name(n)

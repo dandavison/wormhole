@@ -7,7 +7,7 @@ Each project is a git repo: it has a tmux window with that repo as the CWD, and 
 Some projects are 'tasks'. A task is a project for which the CWD is a git worktree directory, rather than the "real" project directory.
 
 
-A task should evolve through a state machine to reach a terminal state. Wormhole reports on what stage the task is at (`wormhole project status`) by reading relevant state from JIRA, GitHub, and local files (e.g. does a plan.md exist? Is there a JIRA ticket and what state is it in? Is there a PR and is it draft or open for review?).
+A task should evolve through a state machine to reach a terminal state. Wormhole reports on what stage the task is at (`wormhole project show`) by reading relevant state from JIRA, GitHub, and local files (e.g. does a plan.md exist? Is there a JIRA ticket and what state is it in? Is there a PR and is it draft or open for review?).
 
 
 
@@ -72,8 +72,8 @@ wormhole project close myapp            # Close project windows
 wormhole project remove myapp           # Remove project/task
 wormhole project pin                    # Pin current (project, app) state
 wormhole project debug                  # Debug info for all projects
-wormhole project status                 # Show task status (JIRA, PR, plan.md)
-wormhole project status ACT-1234        # Show status for specific project
+wormhole project show                   # Show task info (JIRA, PR, plan.md)
+wormhole project show ACT-1234          # Show info for specific project
 wormhole file /path/to/file.rs:42       # Open file at line
 wormhole kv get myapp land-in           # Get KV
 wormhole kv set myapp land-in editor    # Set KV
@@ -97,7 +97,7 @@ wormhole completion --available         # List available project names (for comp
 | POST   | `/project/remove/<name>`    | Remove project/task               |
 | POST   | `/project/pin`              | Pin current (project, app) state  |
 | GET    | `/project/debug`            | Debug info                        |
-| GET    | `/project/status[/<name>]`  | Task status (JIRA, PR, plan.md)   |
+| GET    | `/project/show[/<name>]`    | Task info (JIRA, PR, plan.md)     |
 | GET    | `/file/<path>`              | Open file (path:line supported)   |
 | GET    | `/<github_blob_path>?line=N`| Open GitHub file locally          |
 | GET    | `/kv/<project>/<key>`       | Get value                         |

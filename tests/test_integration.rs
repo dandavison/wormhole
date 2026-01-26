@@ -465,12 +465,12 @@ fn test_project_status() {
     test.create_project(&dir, &proj);
     test.assert_focus(Editor(&proj));
 
-    // Get status by name
-    let status = test.hs_get(&format!("/project/status/{}", proj)).unwrap();
+    // Get info by name
+    let status = test.hs_get(&format!("/project/show/{}", proj)).unwrap();
     assert!(status.contains(&proj), "Status should contain project name");
 
-    // Get current project status
-    let status = test.hs_get("/project/status").unwrap();
+    // Get current project info
+    let status = test.hs_get("/project/show").unwrap();
     assert!(
         status.contains(&proj),
         "Current status should contain project name"
@@ -478,7 +478,7 @@ fn test_project_status() {
 
     // Get JSON format
     let status = test
-        .hs_get(&format!("/project/status/{}?format=json", proj))
+        .hs_get(&format!("/project/show/{}?format=json", proj))
         .unwrap();
     assert!(status.contains("\"name\""), "JSON should have name field");
     assert!(

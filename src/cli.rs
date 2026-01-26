@@ -169,8 +169,8 @@ pub enum ProjectCommand {
         #[arg(short, long, default_value = "text")]
         output: String,
     },
-    /// Show status of a project/task (JIRA, PR, etc.)
-    Status {
+    /// Show project/task info (JIRA, PR, etc.)
+    Show {
         /// Project name (defaults to current project)
         name: Option<String>,
         /// Output format: text (default) or json
@@ -509,14 +509,14 @@ pub fn run(command: Command) -> Result<(), String> {
                 }
                 Ok(())
             }
-            ProjectCommand::Status { name, output } => {
+            ProjectCommand::Show { name, output } => {
                 let path = match name {
-                    Some(n) => format!("/project/status/{}", n),
+                    Some(n) => format!("/project/show/{}", n),
                     None => {
                         let cwd = std::env::current_dir()
                             .map(|p| p.to_string_lossy().to_string())
                             .unwrap_or_default();
-                        format!("/project/status/{}", cwd)
+                        format!("/project/show/{}", cwd)
                     }
                 };
                 let query = if output == "json" { "?format=json" } else { "" };
@@ -738,7 +738,7 @@ fn sprint_show(output: &str) -> Result<(), String> {
             let client_url = format!("http://127.0.0.1:{}", crate::config::wormhole_port());
             thread::spawn(move || {
                 ureq::get(&format!(
-                    "{}/project/status/{}?format=json",
+                    "{}/project/show/{}?format=json",
                     client_url, key
                 ))
                 .call()

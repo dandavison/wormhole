@@ -1,6 +1,7 @@
 mod harness;
 use harness::Focus::*;
 use harness::TEST_PREFIX;
+use serde_json::Value;
 use std::process::Command;
 
 #[test]
@@ -333,6 +334,55 @@ fn test_task_in_submodule() {
         .unwrap();
     test.assert_focus(Editor(&task_id));
     test.assert_tmux_cwd(&task_dir);
+}
+
+#[test]
+fn test_task_home_project_not_self() {
+    let test = harness::WormholeTest::new(8940);
+
+    let home_proj = format!("{}home-proj", TEST_PREFIX);
+    let home_dir = format!("/tmp/{}", home_proj);
+    let task_id = format!("{}TASK-SELF", TEST_PREFIX);
+
+    let _ = std::fs::remove_dir_all(&home_dir);
+    std::fs::create_dir_all(&home_dir).unwrap();
+    Command::new("git")
+        .args(["init"])
+        .current_dir(&home_dir)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["commit", "--allow-empty", "-m", "initial"])
+        .current_dir(&home_dir)
+        .output()
+        .unwrap();
+
+    test.create_project(&home_dir, &home_proj);
+    test.create_task(&task_id, &home_proj);
+
+    // Switch to task so it's in the open projects list
+    test.hs_get(&format!("/project/switch/{}", task_id)).unwrap();
+    test.assert_focus(Editor(&task_id));
+
+    // Get project list and verify task's home_project is correct
+    let list_json = test.hs_get("/project/list").unwrap();
+    let list: Value = serde_json::from_str(&list_json).unwrap();
+    let current = list["current"].as_array().unwrap();
+
+    let task_entry = current
+        .iter()
+        .find(|e| e["name"].as_str() == Some(&task_id))
+        .expect("Task should be in current list");
+
+    let home = task_entry["home_project"]
+        .as_str()
+        .expect("Task should have home_project");
+
+    assert_eq!(
+        home, &home_proj,
+        "Task's home_project should be '{}', not '{}'",
+        home_proj, home
+    );
 }
 
 #[test]

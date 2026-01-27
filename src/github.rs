@@ -136,3 +136,43 @@ pub fn get_pr_branch(owner: &str, repo: &str, pr_number: u64) -> Option<String> 
         Some(branch.to_string())
     }
 }
+
+/// Get the PR number for the current branch in a project
+pub fn get_open_pr_number(project_path: &Path) -> Option<u64> {
+    let output = Command::new("gh")
+        .args(["pr", "view", "--json", "number", "--jq", ".number"])
+        .current_dir(project_path)
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    String::from_utf8(output.stdout)
+        .ok()?
+        .trim()
+        .parse()
+        .ok()
+}
+
+/// Get the repo name (owner/repo) for a project
+pub fn get_repo_name(project_path: &Path) -> Option<String> {
+    let output = Command::new("gh")
+        .args(["repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"])
+        .current_dir(project_path)
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let name = String::from_utf8(output.stdout).ok()?;
+    let name = name.trim();
+    if name.is_empty() {
+        None
+    } else {
+        Some(name.to_string())
+    }
+}

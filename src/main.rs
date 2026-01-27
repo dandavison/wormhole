@@ -1,5 +1,6 @@
 mod cli;
 mod config;
+mod describe;
 mod editor;
 mod endpoints;
 mod git;

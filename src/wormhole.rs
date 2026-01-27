@@ -36,10 +36,6 @@ pub struct QueryParams {
     pub skip_editor: bool,
     pub focus_terminal: bool,
     pub sync: bool,
-    // GitHub extension params
-    pub github_owner: Option<String>,
-    pub github_repo: Option<String>,
-    pub github_pr: Option<u64>,
 }
 
 pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
@@ -159,6 +155,36 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
                 .body(Body::from("Project not found"))
                 .unwrap()),
         }
+    } else if path == "/project/describe" {
+        if method != &Method::POST {
+            return Ok(cors_response(
+                Response::builder()
+                    .status(StatusCode::METHOD_NOT_ALLOWED)
+                    .body(Body::from("Use POST"))
+                    .unwrap(),
+            ));
+        }
+        let body_bytes = hyper::body::to_bytes(req.into_body()).await.unwrap();
+        let request: Result<crate::describe::DescribeRequest, _> =
+            serde_json::from_slice(&body_bytes);
+        match request {
+            Ok(req) => {
+                let response = crate::describe::describe(&req);
+                let json = serde_json::to_string_pretty(&response).unwrap_or_default();
+                Ok(cors_response(
+                    Response::builder()
+                        .header("Content-Type", "application/json")
+                        .body(Body::from(json))
+                        .unwrap(),
+                ))
+            }
+            Err(e) => Ok(cors_response(
+                Response::builder()
+                    .status(StatusCode::BAD_REQUEST)
+                    .body(Body::from(format!("Invalid JSON: {}", e)))
+                    .unwrap(),
+            )),
+        }
     } else if let Some(task_id) = path.strip_prefix("/project/create/") {
         let task_id = task_id.trim();
         let home = match params.home_project.as_deref() {
@@ -233,72 +259,6 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
                     ))
                     .unwrap(),
             ))
-        }
-    } else if path == "/github/switch" {
-        // Chrome extension endpoint: switch based on GitHub URL info
-        let owner = params.github_owner.as_deref();
-        let repo = params.github_repo.as_deref();
-        let pr = params.github_pr;
-        let land_in = params.land_in.clone();
-
-        let project_name = match (owner, repo, pr) {
-            (Some(owner), Some(repo), Some(pr_num)) => {
-                // PR page: get branch name from GitHub API
-                let branch = crate::github::get_pr_branch(owner, repo, pr_num);
-                ps!("/github/switch: PR {}/{}/{}  branch={:?}", owner, repo, pr_num, branch);
-                branch
-            }
-            (_, Some(repo), None) => {
-                // Repo page: use repo name as project
-                ps!("/github/switch: repo={}", repo);
-                Some(repo.to_string())
-            }
-            _ => {
-                ps!("/github/switch: missing owner/repo");
-                None
-            }
-        };
-
-        match project_name {
-            Some(name) => {
-                let skip_editor = params.skip_editor;
-                let focus_terminal = params.focus_terminal;
-                let is_task = crate::task::get_task(&name).is_some();
-                ps!("/github/switch: name={} is_task={}", name, is_task);
-                let do_switch = move || -> Result<(), String> {
-                    if is_task {
-                        crate::task::open_task(&name, None, None, land_in, skip_editor, focus_terminal)
-                    } else {
-                        let project_path = {
-                            let mut projects = projects::lock();
-                            resolve_project(&mut projects, &name, vec![])
-                        };
-                        ps!("/github/switch: project_path={:?}", project_path.is_some());
-                        if let Some(pp) = project_path {
-                            pp.open(Mutation::Insert, land_in);
-                        }
-                        Ok(())
-                    }
-                };
-                match do_switch() {
-                    Ok(()) => Ok(cors_response(Response::new(Body::from("ok")))),
-                    Err(e) => {
-                        ps!("/github/switch: error={}", e);
-                        Ok(cors_response(
-                            Response::builder()
-                                .status(StatusCode::BAD_REQUEST)
-                                .body(Body::from(e))
-                                .unwrap(),
-                        ))
-                    }
-                }
-            }
-            None => Ok(cors_response(
-                Response::builder()
-                    .status(StatusCode::BAD_REQUEST)
-                    .body(Body::from("Could not determine project name"))
-                    .unwrap(),
-            )),
         }
     } else if path == "/kv" {
         Ok(crate::kv::get_all_kv())
@@ -441,9 +401,6 @@ impl QueryParams {
             skip_editor: false,
             focus_terminal: false,
             sync: false,
-            github_owner: None,
-            github_repo: None,
-            github_pr: None,
         };
         if let Some(query) = query {
             for (key, val) in form_urlencoded::parse(query.as_bytes()).collect::<Vec<(_, _)>>() {
@@ -475,12 +432,6 @@ impl QueryParams {
                     params.focus_terminal = val.to_lowercase() == "true";
                 } else if key_lower == "sync" {
                     params.sync = val == "true" || val == "1";
-                } else if key_lower == "owner" {
-                    params.github_owner = Some(val.to_string());
-                } else if key_lower == "repo" {
-                    params.github_repo = Some(val.to_string());
-                } else if key_lower == "pr" {
-                    params.github_pr = val.parse::<u64>().ok();
                 }
             }
         }

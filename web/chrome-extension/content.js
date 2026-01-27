@@ -4,25 +4,7 @@
 const WORMHOLE_PORT = 7117;
 const WORMHOLE_BASE = `http://localhost:${WORMHOLE_PORT}`;
 
-function getPageInfo() {
-    const path = window.location.pathname;
-
-    // PR page: /owner/repo/pull/123[/...]
-    const prMatch = path.match(/^\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
-    if (prMatch) {
-        return { owner: prMatch[1], repo: prMatch[2], pr: parseInt(prMatch[3], 10) };
-    }
-
-    // Repo page: /owner/repo[/...]
-    const repoMatch = path.match(/^\/([^/]+)\/([^/]+)/);
-    if (repoMatch && !['settings', 'notifications', 'new', 'login', 'signup'].includes(repoMatch[2])) {
-        return { owner: repoMatch[1], repo: repoMatch[2], pr: null };
-    }
-
-    return null;
-}
-
-function createButtons(pageInfo) {
+function createButtons() {
     const container = document.createElement('div');
     container.className = 'wormhole-buttons';
     container.innerHTML = `
@@ -33,45 +15,58 @@ function createButtons(pageInfo) {
     container.querySelector('.wormhole-btn-terminal').addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        switchProject(pageInfo, 'terminal');
+        switchProject('terminal');
     });
 
     container.querySelector('.wormhole-btn-cursor').addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        switchProject(pageInfo, 'editor');
+        switchProject('editor');
     });
 
     return container;
 }
 
-async function switchProject(pageInfo, landIn) {
-    const params = new URLSearchParams({
-        owner: pageInfo.owner,
-        repo: pageInfo.repo,
-        'land-in': landIn,
-    });
-    if (pageInfo.pr) {
-        params.set('pr', pageInfo.pr.toString());
-    }
-    if (landIn === 'terminal') {
-        params.set('skip-editor', 'true');
-        params.set('focus-terminal', 'true');
-    }
-
-    const url = `${WORMHOLE_BASE}/github/switch?${params}`;
-    console.log('[Wormhole] Switching:', url);
-
+async function switchProject(landIn) {
     try {
-        const response = await fetch(url);
-        const text = await response.text();
-        if (!response.ok) {
-            console.warn('[Wormhole] Switch failed:', response.status, text);
+        // Ask wormhole to describe the current URL
+        const describeResp = await fetch(`${WORMHOLE_BASE}/project/describe`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: window.location.href })
+        });
+
+        if (!describeResp.ok) {
+            console.warn('[Wormhole] describe failed:', await describeResp.text());
+            return;
+        }
+
+        const info = await describeResp.json();
+        console.log('[Wormhole] describe:', info);
+
+        if (!info.name) {
+            console.warn('[Wormhole] No project/task found');
+            return;
+        }
+
+        // Switch to the project/task
+        const params = new URLSearchParams({ 'land-in': landIn });
+        if (landIn === 'terminal') {
+            params.set('skip-editor', 'true');
+            params.set('focus-terminal', 'true');
+        }
+
+        const switchResp = await fetch(
+            `${WORMHOLE_BASE}/project/switch/${encodeURIComponent(info.name)}?${params}`
+        );
+
+        if (!switchResp.ok) {
+            console.warn('[Wormhole] switch failed:', await switchResp.text());
         } else {
-            console.log('[Wormhole] Switch succeeded');
+            console.log('[Wormhole] Switched to', info.name);
         }
     } catch (err) {
-        console.warn('[Wormhole] Server not reachable:', err.message);
+        console.warn('[Wormhole] Error:', err.message);
     }
 }
 
@@ -116,8 +111,10 @@ function injectStyles() {
 function injectButtons() {
     if (document.querySelector('.wormhole-buttons')) return;
 
-    const pageInfo = getPageInfo();
-    if (!pageInfo) return;
+    // Only inject on github.com repo/PR pages
+    const path = window.location.pathname;
+    if (!path.match(/^\/[^/]+\/[^/]+/)) return;
+    if (path.match(/^\/(settings|notifications|new|login|signup)/)) return;
 
     injectStyles();
 
@@ -137,7 +134,7 @@ function injectButtons() {
     }
 
     if (targetElement) {
-        const buttons = createButtons(pageInfo);
+        const buttons = createButtons();
         targetElement.appendChild(buttons);
     } else {
         // Retry - GitHub loads content dynamically

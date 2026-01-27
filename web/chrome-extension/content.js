@@ -30,19 +30,37 @@ function getBranchName() {
     const selectors = [
         '.head-ref a span',
         '.head-ref span',
+        '.head-ref',
         '.commit-ref.head-ref',
         '[data-testid="head-ref-name"]',
         '.gh-header-meta .commit-ref:last-child',
+        // For /files and /changes tabs - look for the "from" branch link
+        'a.Link--secondary[href*="/tree/"]',
     ];
 
     for (const selector of selectors) {
         const el = document.querySelector(selector);
         if (el) {
-            const text = el.textContent.trim();
+            let text = el.textContent.trim();
             if (text) {
+                console.log('[Wormhole] Found branch with selector:', selector, 'text:', text);
                 // Handle "user:branch" format
-                return text.includes(':') ? text.split(':')[1] : text;
+                if (text.includes(':')) {
+                    text = text.split(':')[1];
+                }
+                return text;
             }
+        }
+    }
+
+    // Last resort: look for any element containing the branch pattern in href
+    const branchLinks = document.querySelectorAll('a[href*="/tree/"]');
+    for (const link of branchLinks) {
+        const href = link.getAttribute('href');
+        const match = href.match(/\/tree\/([^/?]+)/);
+        if (match && match[1] !== 'main' && match[1] !== 'master') {
+            console.log('[Wormhole] Found branch from href:', match[1]);
+            return match[1];
         }
     }
 
@@ -154,10 +172,18 @@ function injectButtons() {
         console.log('[Wormhole] PR page, branch name:', projectName);
         if (!projectName) {
             // Retry after a short delay (GitHub loads content dynamically)
-            console.log('[Wormhole] Branch name not found, retrying...');
-            setTimeout(injectButtons, 500);
+            // But limit retries to avoid infinite loop
+            if (!injectButtons.retryCount) injectButtons.retryCount = 0;
+            injectButtons.retryCount++;
+            if (injectButtons.retryCount < 10) {
+                console.log('[Wormhole] Branch name not found, retry', injectButtons.retryCount);
+                setTimeout(injectButtons, 500);
+            } else {
+                console.log('[Wormhole] Branch name not found after 10 retries, giving up');
+            }
             return;
         }
+        injectButtons.retryCount = 0;
 
         // Insert in the PR header area - try multiple selectors
         const selectors = [

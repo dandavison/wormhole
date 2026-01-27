@@ -99,15 +99,23 @@ h1 {
     display: flex;
     gap: 0.5rem;
 }
-.btn-open {
+.btn {
     font-family: inherit;
     font-size: 0.75rem;
     padding: 0.25rem 0.75rem;
-    border: 1px solid #0066cc;
+    border: 1px solid #999;
     background: #fff;
-    color: #0066cc;
+    color: #666;
     cursor: pointer;
     transition: background 0.1s, color 0.1s;
+}
+.btn:hover {
+    background: #666;
+    color: #fff;
+}
+.btn-open {
+    border-color: #0066cc;
+    color: #0066cc;
 }
 .btn-open:hover {
     background: #0066cc;
@@ -118,19 +126,7 @@ h1 {
     color: #fff;
 }
 .btn-maximize {
-    font-family: inherit;
-    font-size: 0.75rem;
-    padding: 0.25rem 0.75rem;
-    border: 1px solid #666;
-    background: #fff;
-    color: #666;
-    cursor: pointer;
-    transition: background 0.1s, color 0.1s;
     display: none;
-}
-.btn-maximize:hover {
-    background: #666;
-    color: #fff;
 }
 .iframe-container.expanded ~ .card-actions .btn-maximize,
 .card.expanded .btn-maximize {
@@ -200,6 +196,7 @@ document.querySelectorAll('.btn-open').forEach(btn => {
         container.classList.toggle('expanded');
         card.classList.toggle('expanded');
         btn.classList.toggle('active');
+        btn.textContent = isExpanding ? 'Close' : 'Open';
 
         if (isExpanding) {
             if (!iframe.src) {
@@ -207,6 +204,22 @@ document.querySelectorAll('.btn-open').forEach(btn => {
             }
             fetch('/project/switch/' + card.dataset.task + '?skip-editor=true');
         }
+    });
+});
+
+document.querySelectorAll('.btn-cursor').forEach(btn => {
+    btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const task = btn.closest('.card').dataset.task;
+        fetch('/project/switch/' + task);
+    });
+});
+
+document.querySelectorAll('.btn-terminal').forEach(btn => {
+    btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const task = btn.closest('.card').dataset.task;
+        fetch('/project/switch/' + task + '?skip-editor=true');
     });
 });
 

@@ -111,3 +111,28 @@ fn get_pr_comments(project_path: &Path, pr_number: u64) -> Vec<CommentCount> {
     result.sort_by(|a, b| b.count.cmp(&a.count).then(a.author.cmp(&b.author)));
     result
 }
+
+/// Get the head branch name for a PR given owner/repo/number
+pub fn get_pr_branch(owner: &str, repo: &str, pr_number: u64) -> Option<String> {
+    let output = Command::new("gh")
+        .args([
+            "api",
+            &format!("repos/{}/{}/pulls/{}", owner, repo, pr_number),
+            "--jq",
+            ".head.ref",
+        ])
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let branch = String::from_utf8(output.stdout).ok()?;
+    let branch = branch.trim();
+    if branch.is_empty() {
+        None
+    } else {
+        Some(branch.to_string())
+    }
+}

@@ -36,6 +36,10 @@ pub struct QueryParams {
     pub skip_editor: bool,
     pub focus_terminal: bool,
     pub sync: bool,
+    // GitHub extension params
+    pub github_owner: Option<String>,
+    pub github_repo: Option<String>,
+    pub github_pr: Option<u64>,
 }
 
 pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
@@ -230,6 +234,60 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
                     .unwrap(),
             ))
         }
+    } else if path == "/github/switch" {
+        // Chrome extension endpoint: switch based on GitHub URL info
+        let owner = params.github_owner.as_deref();
+        let repo = params.github_repo.as_deref();
+        let pr = params.github_pr;
+        let land_in = params.land_in.clone();
+
+        let project_name = match (owner, repo, pr) {
+            (Some(owner), Some(repo), Some(pr_num)) => {
+                // PR page: get branch name from GitHub API
+                crate::github::get_pr_branch(owner, repo, pr_num)
+            }
+            (_, Some(repo), None) => {
+                // Repo page: use repo name as project
+                Some(repo.to_string())
+            }
+            _ => None,
+        };
+
+        match project_name {
+            Some(name) => {
+                let skip_editor = params.skip_editor;
+                let focus_terminal = params.focus_terminal;
+                let do_switch = move || -> Result<(), String> {
+                    if crate::task::get_task(&name).is_some() {
+                        crate::task::open_task(&name, None, None, land_in, skip_editor, focus_terminal)
+                    } else {
+                        let project_path = {
+                            let mut projects = projects::lock();
+                            resolve_project(&mut projects, &name, vec![])
+                        };
+                        if let Some(pp) = project_path {
+                            pp.open(Mutation::Insert, land_in);
+                        }
+                        Ok(())
+                    }
+                };
+                match do_switch() {
+                    Ok(()) => Ok(cors_response(Response::new(Body::from("ok")))),
+                    Err(e) => Ok(cors_response(
+                        Response::builder()
+                            .status(StatusCode::BAD_REQUEST)
+                            .body(Body::from(e))
+                            .unwrap(),
+                    )),
+                }
+            }
+            None => Ok(cors_response(
+                Response::builder()
+                    .status(StatusCode::BAD_REQUEST)
+                    .body(Body::from("Could not determine project name"))
+                    .unwrap(),
+            )),
+        }
     } else if path == "/kv" {
         Ok(crate::kv::get_all_kv())
     } else if let Some(kv_path) = path.strip_prefix("/kv/") {
@@ -371,6 +429,9 @@ impl QueryParams {
             skip_editor: false,
             focus_terminal: false,
             sync: false,
+            github_owner: None,
+            github_repo: None,
+            github_pr: None,
         };
         if let Some(query) = query {
             for (key, val) in form_urlencoded::parse(query.as_bytes()).collect::<Vec<(_, _)>>() {
@@ -402,6 +463,12 @@ impl QueryParams {
                     params.focus_terminal = val.to_lowercase() == "true";
                 } else if key_lower == "sync" {
                     params.sync = val == "true" || val == "1";
+                } else if key_lower == "owner" {
+                    params.github_owner = Some(val.to_string());
+                } else if key_lower == "repo" {
+                    params.github_repo = Some(val.to_string());
+                } else if key_lower == "pr" {
+                    params.github_pr = val.parse::<u64>().ok();
                 }
             }
         }

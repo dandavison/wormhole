@@ -1,5 +1,5 @@
 // Wormhole GitHub Integration
-// Adds Terminal and Cursor buttons to GitHub PR and repo pages
+// Adds Terminal and Cursor buttons to GitHub pages
 
 const WORMHOLE_PORT = 7117;
 const WORMHOLE_BASE = `http://localhost:${WORMHOLE_PORT}`;
@@ -7,67 +7,22 @@ const WORMHOLE_BASE = `http://localhost:${WORMHOLE_PORT}`;
 function getPageInfo() {
     const path = window.location.pathname;
 
-    // PR page: /owner/repo/pull/123
+    // PR page: /owner/repo/pull/123[/...]
     const prMatch = path.match(/^\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
     if (prMatch) {
-        return { type: 'pr', owner: prMatch[1], repo: prMatch[2], prNumber: prMatch[3] };
+        return { owner: prMatch[1], repo: prMatch[2], pr: parseInt(prMatch[3], 10) };
     }
 
-    // Other repo pages: /owner/repo/...
+    // Repo page: /owner/repo[/...]
     const repoMatch = path.match(/^\/([^/]+)\/([^/]+)/);
-    if (repoMatch && !['settings', 'notifications', 'new'].includes(repoMatch[2])) {
-        return { type: 'repo', owner: repoMatch[1], repo: repoMatch[2] };
+    if (repoMatch && !['settings', 'notifications', 'new', 'login', 'signup'].includes(repoMatch[2])) {
+        return { owner: repoMatch[1], repo: repoMatch[2], pr: null };
     }
 
     return null;
 }
 
-function getBranchName() {
-    // PR page: look for the branch name in the head ref
-    // GitHub shows it as "user:branch" or just "branch" in the PR header
-
-    // Try various selectors - GitHub's DOM varies by page/tab
-    const selectors = [
-        '.head-ref a span',
-        '.head-ref span',
-        '.head-ref',
-        '.commit-ref.head-ref',
-        '[data-testid="head-ref-name"]',
-        '.gh-header-meta .commit-ref:last-child',
-        // For /files and /changes tabs - look for the "from" branch link
-        'a.Link--secondary[href*="/tree/"]',
-    ];
-
-    for (const selector of selectors) {
-        const el = document.querySelector(selector);
-        if (el) {
-            let text = el.textContent.trim();
-            if (text) {
-                console.log('[Wormhole] Found branch with selector:', selector, 'text:', text);
-                // Handle "user:branch" format
-                if (text.includes(':')) {
-                    text = text.split(':')[1];
-                }
-                return text;
-            }
-        }
-    }
-
-    // Last resort: look for any element containing the branch pattern in href
-    const branchLinks = document.querySelectorAll('a[href*="/tree/"]');
-    for (const link of branchLinks) {
-        const href = link.getAttribute('href');
-        const match = href.match(/\/tree\/([^/?]+)/);
-        if (match && match[1] !== 'main' && match[1] !== 'master') {
-            console.log('[Wormhole] Found branch from href:', match[1]);
-            return match[1];
-        }
-    }
-
-    return null;
-}
-
-function createButtons(projectName) {
+function createButtons(pageInfo) {
     const container = document.createElement('div');
     container.className = 'wormhole-buttons';
     container.innerHTML = `
@@ -78,27 +33,34 @@ function createButtons(projectName) {
     container.querySelector('.wormhole-btn-terminal').addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        switchProject(projectName, 'terminal');
+        switchProject(pageInfo, 'terminal');
     });
 
     container.querySelector('.wormhole-btn-cursor').addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        switchProject(projectName, 'editor');
+        switchProject(pageInfo, 'editor');
     });
 
     return container;
 }
 
-async function switchProject(name, landIn) {
+async function switchProject(pageInfo, landIn) {
     const params = new URLSearchParams({
+        owner: pageInfo.owner,
+        repo: pageInfo.repo,
         'land-in': landIn,
-        'skip-editor': landIn === 'terminal' ? 'true' : 'false',
-        'focus-terminal': landIn === 'terminal' ? 'true' : 'false'
     });
+    if (pageInfo.pr) {
+        params.set('pr', pageInfo.pr.toString());
+    }
+    if (landIn === 'terminal') {
+        params.set('skip-editor', 'true');
+        params.set('focus-terminal', 'true');
+    }
 
-    const url = `${WORMHOLE_BASE}/project/switch/${encodeURIComponent(name)}?${params}`;
-    console.log('[Wormhole] Switching to:', name, 'landIn:', landIn, 'url:', url);
+    const url = `${WORMHOLE_BASE}/github/switch?${params}`;
+    console.log('[Wormhole] Switching:', url);
 
     try {
         const response = await fetch(url);
@@ -106,7 +68,7 @@ async function switchProject(name, landIn) {
         if (!response.ok) {
             console.warn('[Wormhole] Switch failed:', response.status, text);
         } else {
-            console.log('[Wormhole] Switch succeeded:', text);
+            console.log('[Wormhole] Switch succeeded');
         }
     } catch (err) {
         console.warn('[Wormhole] Server not reachable:', err.message);
@@ -152,97 +114,54 @@ function injectStyles() {
 }
 
 function injectButtons() {
-    // Don't inject twice
     if (document.querySelector('.wormhole-buttons')) return;
 
     const pageInfo = getPageInfo();
-    if (!pageInfo) {
-        console.log('[Wormhole] Not a recognized page type');
-        return;
-    }
+    if (!pageInfo) return;
 
     injectStyles();
 
-    let projectName;
-    let targetElement;
+    // Find a place to insert buttons - try multiple selectors
+    const selectors = [
+        '.gh-header-title',
+        '.gh-header-actions',
+        '.gh-header-meta',
+        '#partial-discussion-header',
+        '.AppHeader-context-full',
+    ];
 
-    if (pageInfo.type === 'pr') {
-        // For PRs, use branch name as project/task name
-        projectName = getBranchName();
-        console.log('[Wormhole] PR page, branch name:', projectName);
-        if (!projectName) {
-            // Retry after a short delay (GitHub loads content dynamically)
-            // But limit retries to avoid infinite loop
-            if (!injectButtons.retryCount) injectButtons.retryCount = 0;
-            injectButtons.retryCount++;
-            if (injectButtons.retryCount < 10) {
-                console.log('[Wormhole] Branch name not found, retry', injectButtons.retryCount);
-                setTimeout(injectButtons, 500);
-            } else {
-                console.log('[Wormhole] Branch name not found after 10 retries, giving up');
-            }
-            return;
-        }
-        injectButtons.retryCount = 0;
-
-        // Insert in the PR header area - try multiple selectors
-        const selectors = [
-            '.gh-header-title',
-            '.gh-header-actions',
-            '[data-testid="issue-title"]',
-            '.gh-header-meta',
-            '#partial-discussion-header',
-            '.pr-header',
-        ];
-        for (const sel of selectors) {
-            targetElement = document.querySelector(sel);
-            if (targetElement) {
-                console.log('[Wormhole] Found target element:', sel);
-                break;
-            }
-        }
-        if (!targetElement) {
-            console.log('[Wormhole] No target element found, tried:', selectors);
-        }
-    } else {
-        // For repo pages, use repo name
-        projectName = pageInfo.repo;
-
-        // Insert in the repo header area
-        targetElement = document.querySelector('.AppHeader-context-full');
-        if (!targetElement) {
-            targetElement = document.querySelector('[data-testid="repository-title-link"]')?.parentElement;
-        }
+    let targetElement = null;
+    for (const sel of selectors) {
+        targetElement = document.querySelector(sel);
+        if (targetElement) break;
     }
 
-    if (targetElement && projectName) {
-        const buttons = createButtons(projectName);
+    if (targetElement) {
+        const buttons = createButtons(pageInfo);
         targetElement.appendChild(buttons);
-    } else if (projectName) {
-        // Target element not found, retry shortly
-        setTimeout(injectButtons, 500);
+    } else {
+        // Retry - GitHub loads content dynamically
+        if (!injectButtons.retryCount) injectButtons.retryCount = 0;
+        if (injectButtons.retryCount++ < 10) {
+            setTimeout(injectButtons, 300);
+        }
     }
 }
 
 // Run on page load
 injectButtons();
 
-// Re-run on navigation and when GitHub re-renders (tab switches, etc.)
+// Re-run on navigation (GitHub uses client-side routing)
 let lastPath = window.location.pathname;
-let retryCount = 0;
 const observer = new MutationObserver(() => {
-    const currentPath = window.location.pathname;
-    const buttonsExist = document.querySelector('.wormhole-buttons');
-
-    if (currentPath !== lastPath) {
-        lastPath = currentPath;
-        retryCount = 0;
+    if (window.location.pathname !== lastPath) {
+        lastPath = window.location.pathname;
+        injectButtons.retryCount = 0;
         document.querySelectorAll('.wormhole-buttons').forEach(el => el.remove());
         setTimeout(injectButtons, 100);
-    } else if (!buttonsExist && retryCount < 5) {
-        // Buttons missing (GitHub re-rendered), try to inject again
-        retryCount++;
-        setTimeout(injectButtons, 200);
+    } else if (!document.querySelector('.wormhole-buttons')) {
+        // Buttons disappeared (GitHub re-rendered), try again
+        setTimeout(injectButtons, 100);
     }
 });
 observer.observe(document.body, { childList: true, subtree: true });

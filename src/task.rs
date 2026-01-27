@@ -115,6 +115,7 @@ pub fn open_task(
     branch: Option<&str>,
     land_in: Option<Application>,
     skip_editor: bool,
+    focus_terminal: bool,
 ) -> Result<(), String> {
     let project = if let Some(task) = get_task(task_id) {
         task
@@ -153,6 +154,9 @@ pub fn open_task(
 
     if skip_editor {
         open_terminal();
+        if focus_terminal {
+            config::TERMINAL.focus();
+        }
     } else {
         match land_in {
             Some(Application::Terminal) => {

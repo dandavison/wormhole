@@ -34,6 +34,7 @@ pub struct QueryParams {
     pub branch: Option<String>,
     pub format: Option<String>,
     pub skip_editor: bool,
+    pub focus_terminal: bool,
 }
 
 pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
@@ -175,6 +176,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         let land_in = params.land_in.clone();
         let names = params.names.clone();
         let skip_editor = params.skip_editor;
+        let focus_terminal = params.focus_terminal;
         thread::spawn(move || {
             if home_project.is_some() || crate::task::get_task(&name_or_path).is_some() {
                 if let Err(e) = crate::task::open_task(
@@ -183,6 +185,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
                     branch.as_deref(),
                     land_in,
                     skip_editor,
+                    focus_terminal,
                 ) {
                     crate::util::error(&e);
                 }
@@ -341,6 +344,7 @@ impl QueryParams {
             branch: None,
             format: None,
             skip_editor: false,
+            focus_terminal: false,
         };
         if let Some(query) = query {
             for (key, val) in form_urlencoded::parse(query.as_bytes()).collect::<Vec<(_, _)>>() {
@@ -368,6 +372,8 @@ impl QueryParams {
                     params.format = Some(val.to_string());
                 } else if key_lower == "skip-editor" {
                     params.skip_editor = val.to_lowercase() == "true";
+                } else if key_lower == "focus-terminal" {
+                    params.focus_terminal = val.to_lowercase() == "true";
                 }
             }
         }

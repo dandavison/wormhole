@@ -209,7 +209,7 @@ fn render_card(item: &crate::status::SprintShowItem, jira_instance: Option<&str>
                 Ok(port) => {
                     let folder_encoded = url_encode(&task.path.to_string_lossy());
                     format!(
-                        r#"<div class="card-actions"><button class="btn btn-open">Open</button><button class="btn btn-cursor">Cursor</button><button class="btn btn-terminal">Terminal</button><button class="btn btn-maximize">Maximize</button></div>
+                        r#"<div class="card-actions"><button class="btn btn-open">Open</button><button class="btn btn-maximize">Maximize</button><button class="btn btn-cursor">Cursor</button><button class="btn btn-terminal">Terminal</button></div>
 <div class="iframe-container"><iframe data-src="http://localhost:{}/?folder={}"></iframe></div>"#,
                         port, folder_encoded
                     )

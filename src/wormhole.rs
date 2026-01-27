@@ -42,6 +42,12 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
     let method = req.method().clone();
     let uri = req.uri();
     let path = uri.path().to_string();
+
+    // Handle CORS preflight
+    if method == Method::OPTIONS {
+        return Ok(cors_response(Response::new(Body::from(""))));
+    }
+
     if &path == "/favicon.ico" {
         return Ok(Response::new(Body::from("")));
     }
@@ -201,11 +207,13 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         };
         if params.sync {
             match do_switch() {
-                Ok(()) => Ok(Response::new(Body::from("ok"))),
-                Err(e) => Ok(Response::builder()
-                    .status(StatusCode::BAD_REQUEST)
-                    .body(Body::from(e))
-                    .unwrap()),
+                Ok(()) => Ok(cors_response(Response::new(Body::from("ok")))),
+                Err(e) => Ok(cors_response(
+                    Response::builder()
+                        .status(StatusCode::BAD_REQUEST)
+                        .body(Body::from(e))
+                        .unwrap(),
+                )),
             }
         } else {
             thread::spawn(move || {
@@ -213,12 +221,14 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
                     crate::util::error(&e);
                 }
             });
-            Ok(Response::builder()
-                .header("Content-Type", "text/html")
-                .body(Body::from(
-                    "<html><body><script>window.close()</script>Sent into wormhole.</body></html>",
-                ))
-                .unwrap())
+            Ok(cors_response(
+                Response::builder()
+                    .header("Content-Type", "text/html")
+                    .body(Body::from(
+                        "<html><body><script>window.close()</script>Sent into wormhole.</body></html>",
+                    ))
+                    .unwrap(),
+            ))
         }
     } else if path == "/kv" {
         Ok(crate::kv::get_all_kv())
@@ -397,4 +407,21 @@ impl QueryParams {
         }
         params
     }
+}
+
+fn cors_response(response: Response<Body>) -> Response<Body> {
+    let (mut parts, body) = response.into_parts();
+    parts.headers.insert(
+        header::ACCESS_CONTROL_ALLOW_ORIGIN,
+        "*".parse().unwrap(),
+    );
+    parts.headers.insert(
+        header::ACCESS_CONTROL_ALLOW_METHODS,
+        "GET, POST, OPTIONS".parse().unwrap(),
+    );
+    parts.headers.insert(
+        header::ACCESS_CONTROL_ALLOW_HEADERS,
+        "Content-Type".parse().unwrap(),
+    );
+    Response::from_parts(parts, body)
 }

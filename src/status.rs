@@ -84,9 +84,10 @@ pub fn get_status(project: &Project) -> TaskStatus {
 
 pub fn get_status_by_name(name: &str) -> Option<TaskStatus> {
     let projects = projects::lock();
-    let project = projects
-        .resolve(name)
-        .or_else(|| projects.by_path(std::path::Path::new(name)))?;
+    let project = projects.resolve(name).or_else(|| {
+        let path = std::path::Path::new(name);
+        crate::task::task_by_path(path).or_else(|| projects.by_path(path))
+    })?;
     Some(get_status(&project))
 }
 

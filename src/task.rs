@@ -78,6 +78,11 @@ pub fn get_task(id: &str) -> Option<Project> {
     tasks().get(id).cloned()
 }
 
+pub fn task_by_path(path: &std::path::Path) -> Option<Project> {
+    let path = std::fs::canonicalize(path).ok()?;
+    tasks().into_values().find(|t| path.starts_with(&t.path))
+}
+
 pub fn create_task(task_id: &str, home: &str, branch: Option<&str>) -> Result<Project, String> {
     if let Some(task) = get_task(task_id) {
         return Ok(task);

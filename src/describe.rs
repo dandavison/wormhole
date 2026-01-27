@@ -1,5 +1,8 @@
+use rayon::prelude::*;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::sync::mpsc;
+use std::thread;
 
 use crate::github;
 use crate::task;
@@ -69,49 +72,55 @@ fn parse_github_url(url: &str) -> Option<GitHubUrl> {
 }
 
 fn describe_github(gh: &GitHubUrl) -> DescribeResponse {
-    let pr_branch = gh
-        .pr
-        .and_then(|pr| github::get_pr_branch(&gh.owner, &gh.repo, pr));
+    let (tx, rx) = mpsc::channel();
 
-    // Try to find a task with this PR
-    if let Some(pr_num) = gh.pr {
-        if let Some((task_name, home)) = find_task_by_pr(&gh.owner, &gh.repo, pr_num) {
-            return DescribeResponse {
-                name: Some(task_name),
-                kind: Some("task".to_string()),
-                home_project: Some(home),
-                pr_branch,
-            };
-        }
-    }
+    // Fetch PR branch in parallel with task search
+    let owner = gh.owner.clone();
+    let repo = gh.repo.clone();
+    let pr = gh.pr;
+    thread::spawn(move || {
+        let branch = pr.and_then(|n| github::get_pr_branch(&owner, &repo, n));
+        let _ = tx.send(branch);
+    });
 
-    // Fall back to repo name as project
-    DescribeResponse {
-        name: Some(gh.repo.clone()),
-        kind: Some("project".to_string()),
-        home_project: None,
-        pr_branch,
+    // Search tasks in parallel
+    let task_match = gh.pr.and_then(|pr_num| find_task_by_pr(&gh.owner, &gh.repo, pr_num));
+
+    let pr_branch = rx.recv().ok().flatten();
+
+    match task_match {
+        Some((task_name, home)) => DescribeResponse {
+            name: Some(task_name),
+            kind: Some("task".to_string()),
+            home_project: Some(home),
+            pr_branch,
+        },
+        None => DescribeResponse {
+            name: Some(gh.repo.clone()),
+            kind: Some("project".to_string()),
+            home_project: None,
+            pr_branch,
+        },
     }
 }
 
 fn find_task_by_pr(owner: &str, repo: &str, pr_number: u64) -> Option<(String, String)> {
-    let tasks = task::tasks();
-    for (name, project) in &tasks {
-        if let Some(task_pr) = github::get_open_pr_number(&project.path) {
-            if task_pr == pr_number {
-                // Verify it's the same repo
-                if let Some(task_repo) = github::get_repo_name(&project.path) {
-                    if task_repo == format!("{}/{}", owner, repo) {
-                        return Some((
-                            name.clone(),
-                            project.home_project.clone().unwrap_or_default(),
-                        ));
-                    }
-                }
+    let expected_repo = format!("{}/{}", owner, repo);
+    let tasks: Vec<_> = task::tasks().into_iter().collect();
+
+    tasks
+        .par_iter()
+        .find_map_any(|(name, project)| {
+            let task_pr = github::get_open_pr_number(&project.path)?;
+            if task_pr != pr_number {
+                return None;
             }
-        }
-    }
-    None
+            let task_repo = github::get_repo_name(&project.path)?;
+            if task_repo != expected_repo {
+                return None;
+            }
+            Some((name.clone(), project.home_project.clone().unwrap_or_default()))
+        })
 }
 
 #[cfg(test)]

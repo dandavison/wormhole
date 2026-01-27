@@ -1,86 +1,24 @@
-use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::RwLock;
 use std::thread;
-
-use rayon::prelude::*;
 
 use crate::wormhole::Application;
 use crate::{config, editor, git, project::Project, projects, util::warn};
 
-static TASK_CACHE: RwLock<Option<HashMap<String, Project>>> = RwLock::new(None);
-
-pub fn discover_tasks() -> HashMap<String, Project> {
-    let mut project_name_to_path: HashMap<String, PathBuf> =
-        config::available_projects().into_iter().collect();
-    for project in projects::lock().all() {
-        if project.home_project.is_none() {
-            project_name_to_path
-                .entry(project.name.clone())
-                .or_insert_with(|| project.path.clone());
-        }
-    }
-
-    project_name_to_path
-        .into_par_iter()
-        .flat_map(|(project_name, project_path)| {
-            if !git::is_git_repo(&project_path) {
-                return vec![];
-            }
-            let worktrees_dir = git::worktree_base_path(&project_path);
-            git::list_worktrees(&project_path)
-                .into_iter()
-                .filter(|wt| wt.path.starts_with(&worktrees_dir))
-                .filter_map(|wt| {
-                    let task_id = wt.path.file_name()?.to_str()?;
-                    if task_id == project_name {
-                        return None;
-                    }
-                    Some((
-                        task_id.to_string(),
-                        Project {
-                            name: task_id.to_string(),
-                            path: wt.path,
-                            aliases: vec![],
-                            kv: HashMap::new(),
-                            last_application: None,
-                            home_project: Some(project_name.clone()),
-                        },
-                    ))
-                })
-                .collect::<Vec<_>>()
-        })
-        .collect()
-}
-
-pub fn tasks() -> HashMap<String, Project> {
-    let cache = TASK_CACHE.read().unwrap();
-    if let Some(tasks) = cache.as_ref() {
-        return tasks.clone();
-    }
-    drop(cache);
-
-    let tasks = discover_tasks();
-    let mut cache = TASK_CACHE.write().unwrap();
-    *cache = Some(tasks.clone());
-    tasks
-}
-
-fn refresh_cache() -> HashMap<String, Project> {
-    let tasks = discover_tasks();
-    let mut cache = TASK_CACHE.write().unwrap();
-    *cache = Some(tasks.clone());
-    tasks
-}
-
 pub fn get_task(id: &str) -> Option<Project> {
-    tasks().get(id).cloned()
+    let projects = projects::lock();
+    projects.by_name(id).filter(|p| p.home_project.is_some())
 }
 
-pub fn task_by_path(path: &std::path::Path) -> Option<Project> {
+pub fn task_by_path(path: &Path) -> Option<Project> {
     let path = std::fs::canonicalize(path).ok()?;
-    tasks().into_values().find(|t| path.starts_with(&t.path))
+    let projects = projects::lock();
+    projects
+        .all()
+        .into_iter()
+        .filter(|p| p.home_project.is_some())
+        .find(|p| path.starts_with(&p.path))
+        .cloned()
 }
 
 pub fn create_task(task_id: &str, home: &str, branch: Option<&str>) -> Result<Project, String> {
@@ -102,16 +40,10 @@ pub fn create_task(task_id: &str, home: &str, branch: Option<&str>) -> Result<Pr
         setup_task_directory(&worktree_path)?;
     }
 
-    refresh_cache();
+    // Refresh to pick up the new task
+    projects::refresh_tasks();
 
-    Ok(Project {
-        name: task_id.to_string(),
-        path: worktree_path,
-        aliases: vec![],
-        kv: HashMap::new(),
-        last_application: None,
-        home_project: Some(home.to_string()),
-    })
+    get_task(task_id).ok_or_else(|| format!("Failed to create task '{}'", task_id))
 }
 
 pub fn open_task(
@@ -132,9 +64,7 @@ pub fn open_task(
 
     {
         let mut projects = projects::lock();
-        if projects.by_name(&project.name).is_none() {
-            projects.add_project(project.clone());
-        }
+        projects.add_project(project.clone());
         projects.apply(projects::Mutation::Insert, &project.name);
     }
 
@@ -197,7 +127,12 @@ pub fn remove_task(task_id: &str) -> Result<(), String> {
 
     crate::serve_web::manager().stop(task_id);
     git::remove_worktree(&home_path, &task.path)?;
-    refresh_cache();
+
+    // Remove from unified store
+    {
+        let mut projects = projects::lock();
+        projects.remove(task_id);
+    }
 
     Ok(())
 }

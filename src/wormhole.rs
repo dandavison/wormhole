@@ -185,6 +185,32 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
                     .unwrap(),
             )),
         }
+    } else if let Some(name) = path.strip_prefix("/project/refresh/") {
+        if method != &Method::POST {
+            return Ok(Response::builder()
+                .status(StatusCode::METHOD_NOT_ALLOWED)
+                .body(Body::from("Use POST"))
+                .unwrap());
+        }
+        let name = name.trim();
+        let mut projects = projects::lock();
+        if let Some(project) = projects.get_mut(name) {
+            crate::github::refresh_github_info(project);
+            let json = serde_json::json!({
+                "name": project.name,
+                "github_pr": project.github_pr,
+                "github_repo": project.github_repo,
+            });
+            Ok(Response::builder()
+                .header("Content-Type", "application/json")
+                .body(Body::from(serde_json::to_string_pretty(&json).unwrap()))
+                .unwrap())
+        } else {
+            Ok(Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(Body::from(format!("Project '{}' not found", name)))
+                .unwrap())
+        }
     } else if let Some(task_id) = path.strip_prefix("/project/create/") {
         let task_id = task_id.trim();
         let home = match params.home_project.as_deref() {

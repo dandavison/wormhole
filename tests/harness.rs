@@ -47,14 +47,21 @@ impl WormholeTest {
         }
         notify_start();
 
-        let tmux = TmuxSession::new(&format!("wormhole-test-{}", port), "wormhole");
+        let socket_name = format!("wormhole-test-{}", port);
+        let tmux = TmuxSession::new(&socket_name, "wormhole");
         let current_dir =
             std::env::current_dir().unwrap_or_else(|_| panic!("Failed to get current directory"));
+
+        // Construct the tmux socket path that the daemon should use
+        let uid = Command::new("id").args(["-u"]).output().unwrap();
+        let uid = String::from_utf8_lossy(&uid.stdout).trim().to_string();
+        let socket_path = format!("/private/tmp/tmux-{}/{}", uid, socket_name);
+
         tmux.start(
             "./target/debug/wormhole",
             Some(port),
             Some(current_dir.to_str().unwrap()),
-            &[],
+            &[("WORMHOLE_TMUX", &socket_path)],
         )
         .expect("Failed to start wormhole in tmux");
 

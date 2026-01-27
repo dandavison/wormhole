@@ -31,11 +31,9 @@ pub async fn set_value(project_name: &str, key: &str, body: Body) -> Response<Bo
 
     let mut projects = projects::lock();
 
-    if let Some(project_idx) = projects.all().iter().position(|p| p.name == project_name) {
-        projects.all_mut()[project_idx]
-            .kv
-            .insert(key.to_string(), value.clone());
-        save_project_kv(&projects.all()[project_idx]);
+    if let Some(project) = projects.get_mut(project_name) {
+        project.kv.insert(key.to_string(), value);
+        save_project_kv(project);
         Response::new(Body::empty())
     } else {
         Response::builder()
@@ -48,20 +46,18 @@ pub async fn set_value(project_name: &str, key: &str, body: Body) -> Response<Bo
 pub fn set_value_sync(project_name: &str, key: &str, value: &str) {
     let mut projects = projects::lock();
 
-    if let Some(project_idx) = projects.all().iter().position(|p| p.name == project_name) {
-        projects.all_mut()[project_idx]
-            .kv
-            .insert(key.to_string(), value.to_string());
-        save_project_kv(&projects.all()[project_idx]);
+    if let Some(project) = projects.get_mut(project_name) {
+        project.kv.insert(key.to_string(), value.to_string());
+        save_project_kv(project);
     }
 }
 
 pub fn delete_value(project_name: &str, key: &str) -> Response<Body> {
     let mut projects = projects::lock();
 
-    if let Some(project_idx) = projects.all().iter().position(|p| p.name == project_name) {
-        if projects.all_mut()[project_idx].kv.remove(key).is_some() {
-            save_project_kv(&projects.all()[project_idx]);
+    if let Some(project) = projects.get_mut(project_name) {
+        if project.kv.remove(key).is_some() {
+            save_project_kv(project);
             Response::new(Body::empty())
         } else {
             Response::builder()

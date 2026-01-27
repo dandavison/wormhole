@@ -14,6 +14,8 @@ pub struct Project {
     pub kv: HashMap<String, String>,
     pub last_application: Option<Application>,
     pub home_project: Option<String>,
+    pub github_pr: Option<u64>,
+    pub github_repo: Option<String>,
 }
 
 impl Project {

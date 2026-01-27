@@ -2,11 +2,11 @@ use std::collections::VecDeque;
 
 use hyper::{Body, Response, StatusCode};
 
-use crate::{config, git, hammerspoon, projects, task, util::debug};
+use crate::{config, git, hammerspoon, projects, util::debug};
 
 /// Return JSON with current and available projects (including tasks)
 pub fn list_projects() -> Response<Body> {
-    let tasks = task::tasks();
+    let tasks = projects::tasks();
 
     // Get currently open projects, using task info where available
     let mut current: VecDeque<_> = projects::lock()

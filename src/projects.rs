@@ -270,7 +270,20 @@ pub fn load() {
 }
 
 fn discover_tasks() -> HashMap<String, Project> {
-    let project_paths: HashMap<String, PathBuf> = config::available_projects().into_iter().collect();
+    let mut project_paths: HashMap<String, PathBuf> = config::available_projects().into_iter().collect();
+
+    // Also include any projects already in the store (e.g., dynamically opened ones)
+    {
+        if let Ok(store) = STORE.lock() {
+            for (name, project) in &store.all {
+                if project.home_project.is_none() {
+                    project_paths
+                        .entry(name.clone())
+                        .or_insert_with(|| project.path.clone());
+                }
+            }
+        }
+    }
 
     project_paths
         .into_par_iter()

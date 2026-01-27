@@ -244,27 +244,36 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         let project_name = match (owner, repo, pr) {
             (Some(owner), Some(repo), Some(pr_num)) => {
                 // PR page: get branch name from GitHub API
-                crate::github::get_pr_branch(owner, repo, pr_num)
+                let branch = crate::github::get_pr_branch(owner, repo, pr_num);
+                ps!("/github/switch: PR {}/{}/{}  branch={:?}", owner, repo, pr_num, branch);
+                branch
             }
             (_, Some(repo), None) => {
                 // Repo page: use repo name as project
+                ps!("/github/switch: repo={}", repo);
                 Some(repo.to_string())
             }
-            _ => None,
+            _ => {
+                ps!("/github/switch: missing owner/repo");
+                None
+            }
         };
 
         match project_name {
             Some(name) => {
                 let skip_editor = params.skip_editor;
                 let focus_terminal = params.focus_terminal;
+                let is_task = crate::task::get_task(&name).is_some();
+                ps!("/github/switch: name={} is_task={}", name, is_task);
                 let do_switch = move || -> Result<(), String> {
-                    if crate::task::get_task(&name).is_some() {
+                    if is_task {
                         crate::task::open_task(&name, None, None, land_in, skip_editor, focus_terminal)
                     } else {
                         let project_path = {
                             let mut projects = projects::lock();
                             resolve_project(&mut projects, &name, vec![])
                         };
+                        ps!("/github/switch: project_path={:?}", project_path.is_some());
                         if let Some(pp) = project_path {
                             pp.open(Mutation::Insert, land_in);
                         }
@@ -273,12 +282,15 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
                 };
                 match do_switch() {
                     Ok(()) => Ok(cors_response(Response::new(Body::from("ok")))),
-                    Err(e) => Ok(cors_response(
-                        Response::builder()
-                            .status(StatusCode::BAD_REQUEST)
-                            .body(Body::from(e))
-                            .unwrap(),
-                    )),
+                    Err(e) => {
+                        ps!("/github/switch: error={}", e);
+                        Ok(cors_response(
+                            Response::builder()
+                                .status(StatusCode::BAD_REQUEST)
+                                .body(Body::from(e))
+                                .unwrap(),
+                        ))
+                    }
                 }
             }
             None => Ok(cors_response(

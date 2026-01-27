@@ -152,7 +152,11 @@ impl TaskStatus {
 
         if let Some(ref pr) = self.pr {
             let pr_linked = crate::format_osc8_hyperlink(&pr.url, &pr.display());
-            lines.push(format!("PR:        {}", pr_linked));
+            let comments = pr
+                .comments_display()
+                .map(|c| format!(" [{}]", c))
+                .unwrap_or_default();
+            lines.push(format!("PR:        {}{}", pr_linked, comments));
         } else {
             lines.push("PR:        ✗".to_string());
         }

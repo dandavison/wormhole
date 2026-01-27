@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
 
@@ -9,6 +10,14 @@ pub struct PrStatus {
     #[serde(rename = "isDraft")]
     pub is_draft: bool,
     pub url: String,
+    #[serde(default, skip_deserializing)]
+    pub comments: Vec<CommentCount>,
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct CommentCount {
+    pub author: String,
+    pub count: usize,
 }
 
 impl PrStatus {
@@ -25,6 +34,18 @@ impl PrStatus {
         };
         format!("#{} ({})", self.number, state)
     }
+
+    pub fn comments_display(&self) -> Option<String> {
+        if self.comments.is_empty() {
+            return None;
+        }
+        let parts: Vec<String> = self
+            .comments
+            .iter()
+            .map(|c| format!("{}:{}", c.author, c.count))
+            .collect();
+        Some(parts.join(" "))
+    }
 }
 
 pub fn get_pr_status(project_path: &Path) -> Option<PrStatus> {
@@ -38,5 +59,55 @@ pub fn get_pr_status(project_path: &Path) -> Option<PrStatus> {
         return None;
     }
 
-    serde_json::from_slice(&output.stdout).ok()
+    let mut pr: PrStatus = serde_json::from_slice(&output.stdout).ok()?;
+    pr.comments = get_pr_comments(project_path, pr.number);
+    Some(pr)
+}
+
+fn get_pr_comments(project_path: &Path, pr_number: u64) -> Vec<CommentCount> {
+    let output = Command::new("gh")
+        .args([
+            "api",
+            &format!("repos/{{owner}}/{{repo}}/pulls/{}/comments", pr_number),
+            "--jq",
+            ".[].user.login",
+        ])
+        .current_dir(project_path)
+        .output()
+        .ok();
+
+    let review_comments: Vec<String> = output
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.lines().map(String::from).collect())
+        .unwrap_or_default();
+
+    let output = Command::new("gh")
+        .args([
+            "api",
+            &format!("repos/{{owner}}/{{repo}}/issues/{}/comments", pr_number),
+            "--jq",
+            ".[].user.login",
+        ])
+        .current_dir(project_path)
+        .output()
+        .ok();
+
+    let issue_comments: Vec<String> = output
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.lines().map(String::from).collect())
+        .unwrap_or_default();
+
+    let mut counts: HashMap<String, usize> = HashMap::new();
+    for author in review_comments.into_iter().chain(issue_comments) {
+        *counts.entry(author).or_default() += 1;
+    }
+
+    let mut result: Vec<CommentCount> = counts
+        .into_iter()
+        .map(|(author, count)| CommentCount { author, count })
+        .collect();
+    result.sort_by(|a, b| b.count.cmp(&a.count).then(a.author.cmp(&b.author)));
+    result
 }

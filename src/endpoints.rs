@@ -181,10 +181,15 @@ fn render_card(item: &crate::status::SprintShowItem, jira_instance: Option<&str>
                 .unwrap_or_default();
 
             let pr_html = if let Some(ref pr) = task.pr {
+                let comments = pr
+                    .comments_display()
+                    .map(|c| format!(" [{}]", html_escape(&c)))
+                    .unwrap_or_default();
                 format!(
-                    r#"<span class="meta-item">PR: <a href="{}" target="_blank">{}</a></span>"#,
+                    r#"<span class="meta-item">PR: <a href="{}" target="_blank">{}</a>{}</span>"#,
                     pr.url,
-                    html_escape(&pr.display())
+                    html_escape(&pr.display()),
+                    comments
                 )
             } else {
                 r#"<span class="meta-item">PR: <span class="cross">✗</span></span>"#.to_string()

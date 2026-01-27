@@ -25,18 +25,25 @@ function getPageInfo() {
 function getBranchName() {
     // PR page: look for the branch name in the head ref
     // GitHub shows it as "user:branch" or just "branch" in the PR header
-    const headRefSpan = document.querySelector('.head-ref a span');
-    if (headRefSpan) {
-        const text = headRefSpan.textContent.trim();
-        // Handle "user:branch" format
-        return text.includes(':') ? text.split(':')[1] : text;
-    }
 
-    // Fallback: try the commit ref badge
-    const commitRef = document.querySelector('.commit-ref.head-ref');
-    if (commitRef) {
-        const text = commitRef.textContent.trim();
-        return text.includes(':') ? text.split(':')[1] : text;
+    // Try various selectors - GitHub's DOM varies by page/tab
+    const selectors = [
+        '.head-ref a span',
+        '.head-ref span',
+        '.commit-ref.head-ref',
+        '[data-testid="head-ref-name"]',
+        '.gh-header-meta .commit-ref:last-child',
+    ];
+
+    for (const selector of selectors) {
+        const el = document.querySelector(selector);
+        if (el) {
+            const text = el.textContent.trim();
+            if (text) {
+                // Handle "user:branch" format
+                return text.includes(':') ? text.split(':')[1] : text;
+            }
+        }
     }
 
     return null;
@@ -141,11 +148,11 @@ function injectButtons() {
             return;
         }
 
-        // Insert after the PR title
-        targetElement = document.querySelector('.gh-header-title');
-        if (!targetElement) {
-            targetElement = document.querySelector('[data-testid="issue-title"]')?.parentElement;
-        }
+        // Insert in the PR header area - try multiple selectors
+        targetElement = document.querySelector('.gh-header-title')
+            || document.querySelector('.gh-header-actions')
+            || document.querySelector('[data-testid="issue-title"]')?.parentElement
+            || document.querySelector('.gh-header-meta');
     } else {
         // For repo pages, use repo name
         projectName = pageInfo.repo;
@@ -160,20 +167,31 @@ function injectButtons() {
     if (targetElement && projectName) {
         const buttons = createButtons(projectName);
         targetElement.appendChild(buttons);
+    } else if (projectName) {
+        // Target element not found, retry shortly
+        setTimeout(injectButtons, 500);
     }
 }
 
 // Run on page load
 injectButtons();
 
-// Re-run on navigation (GitHub uses client-side routing)
+// Re-run on navigation and when GitHub re-renders (tab switches, etc.)
 let lastPath = window.location.pathname;
+let retryCount = 0;
 const observer = new MutationObserver(() => {
-    if (window.location.pathname !== lastPath) {
-        lastPath = window.location.pathname;
-        // Remove old buttons and re-inject
+    const currentPath = window.location.pathname;
+    const buttonsExist = document.querySelector('.wormhole-buttons');
+
+    if (currentPath !== lastPath) {
+        lastPath = currentPath;
+        retryCount = 0;
         document.querySelectorAll('.wormhole-buttons').forEach(el => el.remove());
         setTimeout(injectButtons, 100);
+    } else if (!buttonsExist && retryCount < 5) {
+        // Buttons missing (GitHub re-rendered), try to inject again
+        retryCount++;
+        setTimeout(injectButtons, 200);
     }
 });
 observer.observe(document.body, { childList: true, subtree: true });

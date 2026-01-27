@@ -44,8 +44,6 @@ impl ServeWebManager {
         }
 
         let port = self.port_for_task(task_id);
-        let home = std::env::var("HOME").map_err(|_| "HOME not set")?;
-        let server_data_dir = format!("{}/.vscode-server/data", home);
 
         let child = Command::new("/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code")
             .args([
@@ -54,8 +52,6 @@ impl ServeWebManager {
                 &port.to_string(),
                 "--without-connection-token",
                 "--accept-server-license-terms",
-                "--server-data-dir",
-                &server_data_dir,
             ])
             .stdout(Stdio::null())
             .stderr(Stdio::null())

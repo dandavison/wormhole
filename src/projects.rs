@@ -127,10 +127,13 @@ impl<'a> Projects<'a> {
         }
     }
 
-    pub fn remove(&mut self, name: &str) {
-        self.index_by_name(name).map(|i| {
+    pub fn remove(&mut self, name: &str) -> bool {
+        if let Some(i) = self.index_by_name(name) {
             self.0.remove(i);
-        });
+            true
+        } else {
+            false
+        }
     }
 
     pub fn move_to_back(&mut self, name: &str) {

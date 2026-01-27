@@ -298,7 +298,7 @@ impl Client {
     fn get(&self, path: &str) -> Result<String, String> {
         ureq::get(&format!("{}{}", self.base_url, path))
             .call()
-            .map_err(|e| format!("Request failed: {}", e))?
+            .map_err(map_ureq_error)?
             .into_string()
             .map_err(|e| format!("Failed to read response: {}", e))
     }
@@ -306,7 +306,7 @@ impl Client {
     fn post(&self, path: &str) -> Result<String, String> {
         ureq::post(&format!("{}{}", self.base_url, path))
             .call()
-            .map_err(|e| format!("Request failed: {}", e))?
+            .map_err(map_ureq_error)?
             .into_string()
             .map_err(|e| format!("Failed to read response: {}", e))
     }
@@ -314,7 +314,7 @@ impl Client {
     fn put(&self, path: &str, body: &str) -> Result<String, String> {
         ureq::put(&format!("{}{}", self.base_url, path))
             .send_string(body)
-            .map_err(|e| format!("Request failed: {}", e))?
+            .map_err(map_ureq_error)?
             .into_string()
             .map_err(|e| format!("Failed to read response: {}", e))
     }
@@ -322,9 +322,18 @@ impl Client {
     fn delete(&self, path: &str) -> Result<String, String> {
         ureq::delete(&format!("{}{}", self.base_url, path))
             .call()
-            .map_err(|e| format!("Request failed: {}", e))?
+            .map_err(map_ureq_error)?
             .into_string()
             .map_err(|e| format!("Failed to read response: {}", e))
+    }
+}
+
+fn map_ureq_error(e: ureq::Error) -> String {
+    match e {
+        ureq::Error::Status(_code, response) => response
+            .into_string()
+            .unwrap_or_else(|_| "Unknown error".to_string()),
+        e => format!("Request failed: {}", e),
     }
 }
 
@@ -349,7 +358,7 @@ fn build_switch_query(
     home_project: &Option<String>,
     branch: &Option<String>,
 ) -> String {
-    let mut params = vec![];
+    let mut params = vec!["sync=true".to_string()];
     if let Some(app) = land_in {
         params.push(format!("land-in={}", app));
     }
@@ -362,11 +371,7 @@ fn build_switch_query(
     if let Some(b) = branch {
         params.push(format!("branch={}", b));
     }
-    if params.is_empty() {
-        String::new()
-    } else {
-        format!("?{}", params.join("&"))
-    }
+    format!("?{}", params.join("&"))
 }
 
 fn prompt_for_branch_if_needed(

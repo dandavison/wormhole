@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use hyper::{Body, Response};
+use hyper::{Body, Response, StatusCode};
 
 use crate::{config, git, hammerspoon, projects, task, util::debug};
 
@@ -88,12 +88,18 @@ pub fn debug_projects() -> Response<Body> {
 
 pub fn remove_project(name: &str) -> Response<Body> {
     let mut projects = projects::lock();
-    if let Some(p) = projects.resolve(name) {
+    if let Some(p) = projects.by_name(name) {
         config::TERMINAL.close(&p);
     }
-    projects.remove(name);
-    projects.print();
-    Response::new(Body::from(format!("removed project: {}", name)))
+    if projects.remove(name) {
+        projects.print();
+        Response::new(Body::from(format!("removed project: {}", name)))
+    } else {
+        Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(Body::from(format!("Project '{}' not found", name)))
+            .unwrap()
+    }
 }
 
 pub fn close_project(name: &str) {

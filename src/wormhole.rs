@@ -35,6 +35,7 @@ pub struct QueryParams {
     pub format: Option<String>,
     pub skip_editor: bool,
     pub focus_terminal: bool,
+    pub sync: bool,
 }
 
 pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
@@ -177,18 +178,16 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         let names = params.names.clone();
         let skip_editor = params.skip_editor;
         let focus_terminal = params.focus_terminal;
-        thread::spawn(move || {
+        let do_switch = move || -> Result<(), String> {
             if home_project.is_some() || crate::task::get_task(&name_or_path).is_some() {
-                if let Err(e) = crate::task::open_task(
+                crate::task::open_task(
                     &name_or_path,
                     home_project.as_deref(),
                     branch.as_deref(),
                     land_in,
                     skip_editor,
                     focus_terminal,
-                ) {
-                    crate::util::error(&e);
-                }
+                )
             } else {
                 let project_path = {
                     let mut projects = projects::lock();
@@ -197,14 +196,30 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
                 if let Some(pp) = project_path {
                     pp.open(Mutation::Insert, land_in);
                 }
+                Ok(())
             }
-        });
-        Ok(Response::builder()
-            .header("Content-Type", "text/html")
-            .body(Body::from(
-                "<html><body><script>window.close()</script>Sent into wormhole.</body></html>",
-            ))
-            .unwrap())
+        };
+        if params.sync {
+            match do_switch() {
+                Ok(()) => Ok(Response::new(Body::from("ok"))),
+                Err(e) => Ok(Response::builder()
+                    .status(StatusCode::BAD_REQUEST)
+                    .body(Body::from(e))
+                    .unwrap()),
+            }
+        } else {
+            thread::spawn(move || {
+                if let Err(e) = do_switch() {
+                    crate::util::error(&e);
+                }
+            });
+            Ok(Response::builder()
+                .header("Content-Type", "text/html")
+                .body(Body::from(
+                    "<html><body><script>window.close()</script>Sent into wormhole.</body></html>",
+                ))
+                .unwrap())
+        }
     } else if path == "/kv" {
         Ok(crate::kv::get_all_kv())
     } else if let Some(kv_path) = path.strip_prefix("/kv/") {
@@ -345,6 +360,7 @@ impl QueryParams {
             format: None,
             skip_editor: false,
             focus_terminal: false,
+            sync: false,
         };
         if let Some(query) = query {
             for (key, val) in form_urlencoded::parse(query.as_bytes()).collect::<Vec<(_, _)>>() {
@@ -374,6 +390,8 @@ impl QueryParams {
                     params.skip_editor = val.to_lowercase() == "true";
                 } else if key_lower == "focus-terminal" {
                     params.focus_terminal = val.to_lowercase() == "true";
+                } else if key_lower == "sync" {
+                    params.sync = val == "true" || val == "1";
                 }
             }
         }

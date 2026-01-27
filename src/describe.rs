@@ -5,7 +5,7 @@ use std::sync::mpsc;
 use std::thread;
 
 use crate::github;
-use crate::task;
+use crate::projects;
 
 #[derive(Debug, Deserialize)]
 pub struct DescribeRequest {
@@ -106,16 +106,16 @@ fn describe_github(gh: &GitHubUrl) -> DescribeResponse {
 
 fn find_task_by_pr(owner: &str, repo: &str, pr_number: u64) -> Option<(String, String)> {
     let expected_repo = format!("{}/{}", owner, repo);
-    let tasks: Vec<_> = task::tasks().into_iter().collect();
+    let tasks: Vec<(String, crate::project::Project)> = projects::tasks().into_iter().collect();
 
     tasks
         .par_iter()
         .find_map_any(|(name, project)| {
-            let task_pr = github::get_open_pr_number(&project.path)?;
+            let task_pr = github::get_open_pr_number(project)?;
             if task_pr != pr_number {
                 return None;
             }
-            let task_repo = github::get_repo_name(&project.path)?;
+            let task_repo = github::get_repo_name(project)?;
             if task_repo != expected_repo {
                 return None;
             }

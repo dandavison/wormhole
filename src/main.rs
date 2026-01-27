@@ -45,7 +45,6 @@ async fn main() {
             command: ServerCommand::StartForeground,
         }) => {
             projects::load();
-            task::tasks(); // Pre-populate task cache
             serve_http().await;
         }
         // Other subcommands -> run as client

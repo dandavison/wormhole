@@ -79,13 +79,19 @@ async function switchProject(name, landIn) {
         'focus-terminal': landIn === 'terminal' ? 'true' : 'false'
     });
 
+    const url = `${WORMHOLE_BASE}/project/switch/${encodeURIComponent(name)}?${params}`;
+    console.log('[Wormhole] Switching to:', name, 'landIn:', landIn, 'url:', url);
+
     try {
-        const response = await fetch(`${WORMHOLE_BASE}/project/switch/${name}?${params}`);
+        const response = await fetch(url);
+        const text = await response.text();
         if (!response.ok) {
-            console.warn('Wormhole switch failed:', await response.text());
+            console.warn('[Wormhole] Switch failed:', response.status, text);
+        } else {
+            console.log('[Wormhole] Switch succeeded:', text);
         }
     } catch (err) {
-        console.warn('Wormhole server not reachable:', err.message);
+        console.warn('[Wormhole] Server not reachable:', err.message);
     }
 }
 
@@ -132,7 +138,10 @@ function injectButtons() {
     if (document.querySelector('.wormhole-buttons')) return;
 
     const pageInfo = getPageInfo();
-    if (!pageInfo) return;
+    if (!pageInfo) {
+        console.log('[Wormhole] Not a recognized page type');
+        return;
+    }
 
     injectStyles();
 
@@ -142,17 +151,33 @@ function injectButtons() {
     if (pageInfo.type === 'pr') {
         // For PRs, use branch name as project/task name
         projectName = getBranchName();
+        console.log('[Wormhole] PR page, branch name:', projectName);
         if (!projectName) {
             // Retry after a short delay (GitHub loads content dynamically)
+            console.log('[Wormhole] Branch name not found, retrying...');
             setTimeout(injectButtons, 500);
             return;
         }
 
         // Insert in the PR header area - try multiple selectors
-        targetElement = document.querySelector('.gh-header-title')
-            || document.querySelector('.gh-header-actions')
-            || document.querySelector('[data-testid="issue-title"]')?.parentElement
-            || document.querySelector('.gh-header-meta');
+        const selectors = [
+            '.gh-header-title',
+            '.gh-header-actions',
+            '[data-testid="issue-title"]',
+            '.gh-header-meta',
+            '#partial-discussion-header',
+            '.pr-header',
+        ];
+        for (const sel of selectors) {
+            targetElement = document.querySelector(sel);
+            if (targetElement) {
+                console.log('[Wormhole] Found target element:', sel);
+                break;
+            }
+        }
+        if (!targetElement) {
+            console.log('[Wormhole] No target element found, tried:', selectors);
+        }
     } else {
         // For repo pages, use repo name
         projectName = pageInfo.repo;

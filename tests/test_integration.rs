@@ -489,3 +489,43 @@ fn test_project_status() {
         status
     );
 }
+
+#[test]
+fn test_task_respects_land_in_kv() {
+    // Tests that switching to a task respects the land-in KV value.
+    // This is a regression test: open_task() was not reading the KV.
+    let test = harness::WormholeTest::new(8942);
+
+    let home_proj = format!("{}kv-task-home", TEST_PREFIX);
+    let home_dir = format!("/tmp/{}", home_proj);
+    let task_id = format!("{}KV-TASK", TEST_PREFIX);
+
+    let _ = std::fs::remove_dir_all(&home_dir);
+    std::fs::create_dir_all(&home_dir).unwrap();
+    Command::new("git")
+        .args(["init"])
+        .current_dir(&home_dir)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["commit", "--allow-empty", "-m", "initial"])
+        .current_dir(&home_dir)
+        .output()
+        .unwrap();
+
+    test.create_project(&home_dir, &home_proj);
+    test.create_task(&task_id, &home_proj);
+
+    // Directly set land-in=terminal for the task
+    test.hs_put(&format!("/kv/{}/land-in", task_id), "terminal")
+        .unwrap();
+
+    // Switch to home project first (so we're not on the task)
+    test.hs_get(&format!("/project/switch/{}", home_proj))
+        .unwrap();
+    test.assert_focus(Editor(&home_proj));
+
+    // Switch to task - should respect land-in=terminal
+    test.hs_get(&format!("/project/switch/{}", task_id)).unwrap();
+    test.assert_focus(Terminal(&task_id));
+}

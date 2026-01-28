@@ -165,10 +165,14 @@ fn test_project_list_sorted() {
         .unwrap();
     test.hs_get(&format!("/project/switch/{}", proj_a)).unwrap();
 
-    // Get project list
-    let list_json = test.hs_get("/project/list").unwrap();
-    let list: Value = serde_json::from_str(&list_json).unwrap();
-    let current = list["current"].as_array().unwrap();
+    // Get project list via curl (Hammerspoon can timeout with many rapid calls)
+    let output = Command::new("curl")
+        .args(["-s", &format!("http://127.0.0.1:8944/project/list")])
+        .output()
+        .expect("curl failed");
+    let list_json = String::from_utf8_lossy(&output.stdout);
+    let list: Value = serde_json::from_str(&list_json).expect("invalid JSON from /project/list");
+    let current = list["current"].as_array().expect("missing 'current' array");
 
     let names: Vec<&str> = current
         .iter()

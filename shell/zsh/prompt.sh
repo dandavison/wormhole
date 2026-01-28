@@ -7,7 +7,8 @@ export GIT_PS1_UNSTAGED="અ "
 export GIT_PS1_STAGED="જ "
 
 function osc8_link {
-    printf '\e]8;;%s\e\\%s\e]8;;\e\\' "$1" "$2"
+    local esc=$'\e'
+    print -rn -- "${esc}]8;;$1${esc}\\$2${esc}]8;;${esc}\\"
 }
 
 function prompt_dir_display {
@@ -17,13 +18,13 @@ function prompt_dir_display {
     elif [[ -n $WORMHOLE_PROJECT_DIR ]] && [[ $PWD == $WORMHOLE_PROJECT_DIR ]]; then
         name="${WORMHOLE_PROJECT_NAME}"
     else
-        echo -n "${PWD/#$HOME/~}"
+        print -rn -- "${PWD/#$HOME/~}"
         return
     fi
     if [[ -n $WORMHOLE_JIRA_URL ]]; then
         osc8_link "$WORMHOLE_JIRA_URL" "$name"
     else
-        echo -n "$name"
+        print -rn -- "$name"
     fi
 }
 
@@ -37,19 +38,14 @@ function prompt_git_branch {
         url="https://github.com/${WORMHOLE_GITHUB_REPO}/compare/${branch}?expand=1"
     fi
     if [[ -n $url ]]; then
-        echo -n "($(osc8_link "$url" "$branch"))"
+        print -rn -- "("; osc8_link "$url" "$branch"; print -rn -- ")"
     else
-        echo -n "($branch)"
+        print -rn -- "($branch)"
     fi
 }
 
-PROMPT='%(?:'                   # Introduce ternary expression using last exit status as condition
-PROMPT+='%{$fg_bold[cyan]%}'    # Cyan for condition-true branch
-PROMPT+='$(prompt_dir_display)' # Call function to get directory display
-PROMPT+=':'                     # Ternary expression separator
-PROMPT+='%{$fg[red]%}'          # Red for condition-false branch
-PROMPT+='$(prompt_dir_display)' # Call function to get directory display
-PROMPT+=')'                     # End ternary expression
+PROMPT='%(?.%{$fg_bold[cyan]%}.%{$fg[red]%})' # Color: cyan if success, red if error
+PROMPT+='$(prompt_dir_display)'               # Dir display (must be outside ternary to avoid : conflicts)
 PROMPT+='%{$reset_color%}'
 PROMPT+='%{$fg[red]%}'
 PROMPT+='$(prompt_git_branch)'

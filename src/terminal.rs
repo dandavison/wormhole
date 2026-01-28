@@ -72,7 +72,7 @@ pub fn write_wormhole_env_vars(project: &Project) {
         fs::write(
             env_file,
             format!(
-                "export WORMHOLE_PROJECT_NAME={} WORMHOLE_PROJECT_DIR={} WORMHOLE_JIRA_URL={} WORMHOLE_GITHUB_REPO={} WORMHOLE_GITHUB_PR_URL={}",
+                "export WORMHOLE_PROJECT_NAME='{}' WORMHOLE_PROJECT_DIR='{}' WORMHOLE_JIRA_URL='{}' WORMHOLE_GITHUB_REPO='{}' WORMHOLE_GITHUB_PR_URL='{}'",
                 &project.name,
                 project.path.as_path().to_str().unwrap(),
                 jira_url,

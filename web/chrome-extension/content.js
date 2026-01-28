@@ -233,16 +233,20 @@ function toggleMaximizeToolbar(btn) {
     const container = document.querySelector('.wormhole-vscode-container');
     if (!container) return;
 
+    const closeBtn = container.querySelector('.wormhole-control-close');
+
     if (vscodeMaximized) {
         container.classList.remove('maximized');
         btn.textContent = 'Maximize';
         document.body.style.overflow = '';
         vscodeMaximized = false;
+        if (closeBtn) closeBtn.style.display = '';
     } else {
         container.classList.add('maximized');
         btn.textContent = 'Restore';
         document.body.style.overflow = 'hidden';
         vscodeMaximized = true;
+        if (closeBtn) closeBtn.style.display = 'none';
     }
 
     // Sync the header button if it exists

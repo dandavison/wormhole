@@ -1,5 +1,5 @@
-// Wormhole GitHub Integration
-// Adds Terminal, Cursor, and JIRA buttons to GitHub pages
+// Wormhole GitHub/JIRA Integration
+// Adds Terminal, Cursor, and cross-linking buttons to GitHub and JIRA pages
 
 const WORMHOLE_PORT = 7117;
 const WORMHOLE_BASE = `http://localhost:${WORMHOLE_PORT}`;
@@ -7,6 +7,14 @@ const WORMHOLE_BASE = `http://localhost:${WORMHOLE_PORT}`;
 // Cache describe result for current page
 let cachedDescribe = null;
 let cachedUrl = null;
+
+function isGitHubPage() {
+    return window.location.hostname === 'github.com';
+}
+
+function isJiraPage() {
+    return window.location.hostname.endsWith('.atlassian.net');
+}
 
 async function getDescribe() {
     if (cachedUrl === window.location.href && cachedDescribe) {
@@ -29,30 +37,52 @@ async function getDescribe() {
     return null;
 }
 
-function createButtons(jiraUrl) {
+function createButtons(info) {
     const container = document.createElement('div');
     container.className = 'wormhole-buttons';
 
-    let html = `
-        <button class="wormhole-btn wormhole-btn-terminal" title="Open in Terminal">Terminal</button>
-        <button class="wormhole-btn wormhole-btn-cursor" title="Open in Cursor">Cursor</button>
-    `;
-    if (jiraUrl) {
-        html += `<a class="wormhole-btn wormhole-btn-jira" href="${jiraUrl}" title="Open JIRA">JIRA</a>`;
+    let html = '';
+
+    // Only show Terminal/Cursor buttons if we have a task/project to switch to
+    if (info?.name && info?.kind) {
+        html += `
+            <button class="wormhole-btn wormhole-btn-terminal" title="Open in Terminal">Terminal</button>
+            <button class="wormhole-btn wormhole-btn-cursor" title="Open in Cursor">Cursor</button>
+        `;
     }
+
+    // Add GitHub link on JIRA pages
+    if (info?.github_url) {
+        html += `<a class="wormhole-btn wormhole-btn-github" href="${info.github_url}" title="Open GitHub PR">GitHub</a>`;
+    }
+
+    // Add JIRA link on GitHub pages
+    if (info?.jira_url && isGitHubPage()) {
+        html += `<a class="wormhole-btn wormhole-btn-jira" href="${info.jira_url}" title="Open JIRA">JIRA</a>`;
+    }
+
+    if (!html) return null;
+
     container.innerHTML = html;
 
-    container.querySelector('.wormhole-btn-terminal').addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        switchProject('terminal');
-    });
+    const termBtn = container.querySelector('.wormhole-btn-terminal');
+    const cursorBtn = container.querySelector('.wormhole-btn-cursor');
 
-    container.querySelector('.wormhole-btn-cursor').addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        switchProject('editor');
-    });
+    if (termBtn) {
+        termBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            switchProject('terminal');
+        });
+    }
+
+    if (cursorBtn) {
+        cursorBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            switchProject('editor');
+        });
+    }
 
     return container;
 }
@@ -128,29 +158,59 @@ function injectStyles() {
             background: #0052cc;
             color: #fff;
         }
+        .wormhole-btn-github {
+            border-color: #238636;
+            color: #238636;
+        }
+        .wormhole-btn-github:hover {
+            background: #238636;
+            color: #fff;
+        }
     `;
     document.head.appendChild(style);
 }
 
+function getTargetSelectors() {
+    if (isGitHubPage()) {
+        return [
+            '.gh-header-title',
+            '.gh-header-actions',
+            '.gh-header-meta',
+            '#partial-discussion-header',
+            '.AppHeader-context-full',
+        ];
+    } else if (isJiraPage()) {
+        return [
+            '[data-testid="issue.views.issue-base.foundation.summary.heading"]',
+            '[data-testid="issue-header"]',
+            '#jira-issue-header',
+            '#summary-val',
+            '.issue-header-content',
+            '[data-test-id="issue.views.issue-base.foundation.breadcrumbs.current-issue.item"]',
+        ];
+    }
+    return [];
+}
+
+function shouldInject() {
+    if (isGitHubPage()) {
+        const path = window.location.pathname;
+        if (!path.match(/^\/[^/]+\/[^/]+/)) return false;
+        if (path.match(/^\/(settings|notifications|new|login|signup)/)) return false;
+        return true;
+    } else if (isJiraPage()) {
+        return window.location.pathname.includes('/browse/');
+    }
+    return false;
+}
+
 async function injectButtons() {
     if (document.querySelector('.wormhole-buttons')) return;
-
-    // Only inject on github.com repo/PR pages
-    const path = window.location.pathname;
-    if (!path.match(/^\/[^/]+\/[^/]+/)) return;
-    if (path.match(/^\/(settings|notifications|new|login|signup)/)) return;
+    if (!shouldInject()) return;
 
     injectStyles();
 
-    // Find a place to insert buttons - try multiple selectors
-    const selectors = [
-        '.gh-header-title',
-        '.gh-header-actions',
-        '.gh-header-meta',
-        '#partial-discussion-header',
-        '.AppHeader-context-full',
-    ];
-
+    const selectors = getTargetSelectors();
     let targetElement = null;
     for (const sel of selectors) {
         targetElement = document.querySelector(sel);
@@ -158,15 +218,15 @@ async function injectButtons() {
     }
 
     if (targetElement) {
-        // Fetch describe to get JIRA URL
         const info = await getDescribe();
-        const jiraUrl = info?.jira_url || null;
-        const buttons = createButtons(jiraUrl);
-        targetElement.appendChild(buttons);
+        const buttons = createButtons(info);
+        if (buttons) {
+            targetElement.appendChild(buttons);
+        }
     } else {
-        // Retry - GitHub loads content dynamically
+        // Retry - pages load content dynamically
         if (!injectButtons.retryCount) injectButtons.retryCount = 0;
-        if (injectButtons.retryCount++ < 10) {
+        if (injectButtons.retryCount++ < 15) {
             setTimeout(injectButtons, 300);
         }
     }
@@ -175,18 +235,17 @@ async function injectButtons() {
 // Run on page load
 injectButtons();
 
-// Re-run on navigation (GitHub uses client-side routing)
-let lastPath = window.location.pathname;
+// Re-run on navigation (SPA routing)
+let lastUrl = window.location.href;
 const observer = new MutationObserver(() => {
-    if (window.location.pathname !== lastPath) {
-        lastPath = window.location.pathname;
+    if (window.location.href !== lastUrl) {
+        lastUrl = window.location.href;
         injectButtons.retryCount = 0;
-        cachedDescribe = null;  // Invalidate cache on navigation
+        cachedDescribe = null;
         cachedUrl = null;
         document.querySelectorAll('.wormhole-buttons').forEach(el => el.remove());
         setTimeout(injectButtons, 100);
-    } else if (!document.querySelector('.wormhole-buttons')) {
-        // Buttons disappeared (GitHub re-rendered), try again
+    } else if (!document.querySelector('.wormhole-buttons') && shouldInject()) {
         setTimeout(injectButtons, 100);
     }
 });

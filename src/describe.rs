@@ -19,6 +19,7 @@ pub struct DescribeResponse {
     pub home_project: Option<String>,
     pub pr_branch: Option<String>,
     pub jira_url: Option<String>,
+    pub github_url: Option<String>,
 }
 
 impl DescribeResponse {
@@ -29,6 +30,7 @@ impl DescribeResponse {
             home_project: None,
             pr_branch: None,
             jira_url: None,
+            github_url: None,
         }
     }
 }
@@ -37,6 +39,9 @@ pub fn describe(req: &DescribeRequest) -> DescribeResponse {
     if let Some(url) = &req.url {
         if let Some(gh) = parse_github_url(url) {
             return describe_github(&gh);
+        }
+        if let Some(jira_key) = parse_jira_url(url) {
+            return describe_jira(&jira_key);
         }
     }
     DescribeResponse::empty()
@@ -101,6 +106,7 @@ fn describe_github(gh: &GitHubUrl) -> DescribeResponse {
                 home_project: Some(home),
                 pr_branch,
                 jira_url,
+                github_url: None,
             }
         }
         None => DescribeResponse {
@@ -109,7 +115,45 @@ fn describe_github(gh: &GitHubUrl) -> DescribeResponse {
             home_project: None,
             pr_branch,
             jira_url: None,
+            github_url: None,
         },
+    }
+}
+
+fn parse_jira_url(url: &str) -> Option<String> {
+    // Match URLs like https://temporalio.atlassian.net/browse/ACT-108
+    let re = Regex::new(r"atlassian\.net/browse/([A-Z]+-\d+)").ok()?;
+    re.captures(url).map(|caps| caps[1].to_string())
+}
+
+fn describe_jira(jira_key: &str) -> DescribeResponse {
+    // Find task by JIRA key (task name = JIRA key)
+    let tasks = projects::tasks();
+
+    if let Some(project) = tasks.get(jira_key) {
+        let github_url = github::get_open_pr_number(project).and_then(|pr| {
+            github::get_repo_name(project).map(|repo| format!("https://github.com/{}/pull/{}", repo, pr))
+        });
+        let jira_url = jira_url_for_key(jira_key);
+
+        DescribeResponse {
+            name: Some(jira_key.to_string()),
+            kind: Some("task".to_string()),
+            home_project: project.home_project.clone(),
+            pr_branch: None,
+            jira_url,
+            github_url,
+        }
+    } else {
+        // No task found, but we know it's a valid JIRA key
+        DescribeResponse {
+            name: Some(jira_key.to_string()),
+            kind: None,
+            home_project: None,
+            pr_branch: None,
+            jira_url: jira_url_for_key(jira_key),
+            github_url: None,
+        }
     }
 }
 
@@ -202,5 +246,25 @@ mod tests {
         std::env::set_var("JIRA_INSTANCE", "testinst");
         let url = jira_url_for_key("temporal");
         assert_eq!(url, None);
+    }
+
+    #[test]
+    fn test_parse_jira_url() {
+        let url = "https://temporalio.atlassian.net/browse/ACT-108";
+        let key = parse_jira_url(url).unwrap();
+        assert_eq!(key, "ACT-108");
+    }
+
+    #[test]
+    fn test_parse_jira_url_with_query() {
+        let url = "https://temporalio.atlassian.net/browse/ACT-108?focusedWorklogId=123";
+        let key = parse_jira_url(url).unwrap();
+        assert_eq!(key, "ACT-108");
+    }
+
+    #[test]
+    fn test_parse_jira_url_invalid() {
+        let url = "https://github.com/temporalio/temporal/pull/9146";
+        assert!(parse_jira_url(url).is_none());
     }
 }

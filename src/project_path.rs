@@ -28,7 +28,9 @@ impl ProjectPath {
             editor::open_workspace(&project);
         }
         let land_in = land_in.or_else(|| match mutation {
-            Mutation::RotateLeft | Mutation::RotateRight => self.project.last_application.clone(),
+            Mutation::None | Mutation::RotateLeft | Mutation::RotateRight => {
+                self.project.last_application.clone()
+            }
             _ => parse_application(self.project.kv.get("land-in")).or_else(|| {
                 if is_already_open {
                     current_app
@@ -37,6 +39,11 @@ impl ProjectPath {
                 }
             }),
         });
+        projects.apply(mutation, &self.project.name);
+        if util::debug() {
+            projects.print();
+        }
+        drop(projects);
         let open_terminal = move || {
             config::TERMINAL.open(&project).unwrap_or_else(|err| {
                 warn(&format!(
@@ -75,10 +82,6 @@ impl ProjectPath {
                     hammerspoon::launch_or_focus(config::EDITOR.application_name())
                 });
             }
-        }
-        projects.apply(mutation, &self.project.name);
-        if util::debug() {
-            projects.print();
         }
     }
 

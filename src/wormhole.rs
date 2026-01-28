@@ -90,22 +90,30 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         Ok(Response::new(Body::from(shell_code)))
     } else if &path == "/project/previous" {
         let p = {
-            let projects = projects::lock();
-            projects.previous().map(|p| p.as_project_path())
+            let mut projects = projects::lock();
+            let pp = projects.previous().map(|p| p.as_project_path());
+            if let Some(ref pp) = pp {
+                projects.apply(Mutation::RotateLeft, &pp.project.name);
+            }
+            pp
         };
         if let Some(project_path) = p {
             let land_in = params.land_in.clone();
-            thread::spawn(move || project_path.open(Mutation::RotateLeft, land_in));
+            thread::spawn(move || project_path.open(Mutation::None, land_in));
         }
         Ok(Response::new(Body::from("")))
     } else if &path == "/project/next" {
         let p = {
-            let projects = projects::lock();
-            projects.next().map(|p| p.as_project_path())
+            let mut projects = projects::lock();
+            let pp = projects.next().map(|p| p.as_project_path());
+            if let Some(ref pp) = pp {
+                projects.apply(Mutation::RotateRight, &pp.project.name);
+            }
+            pp
         };
         if let Some(project_path) = p {
             let land_in = params.land_in.clone();
-            thread::spawn(move || project_path.open(Mutation::RotateRight, land_in));
+            thread::spawn(move || project_path.open(Mutation::None, land_in));
         }
         Ok(Response::new(Body::from("")))
     } else if let Some(name) = path.strip_prefix("/project/remove/") {

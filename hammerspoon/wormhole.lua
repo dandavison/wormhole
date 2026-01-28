@@ -17,6 +17,12 @@ local selectActive = false
 local selectReverse = false
 local lastMoveTime = 0
 
+-- Neighbor overlay state (must be declared before M.previous/M.next)
+local neighborAlertId = nil
+local neighborTap = nil
+local neighborOverlayActive = false
+local refreshNeighborOverlay -- forward declaration
+
 local function sendMove()
     local now = hs.timer.secondsSinceEpoch()
     if now - lastMoveTime < M.selectDebounce then return end
@@ -93,11 +99,15 @@ function M.select()
 end
 
 function M.previous()
-    hs.http.asyncGet(M.host .. "/project/previous", nil, function() end)
+    hs.http.asyncGet(M.host .. "/project/previous", nil, function()
+        if neighborOverlayActive then refreshNeighborOverlay() end
+    end)
 end
 
 function M.next()
-    hs.http.asyncGet(M.host .. "/project/next", nil, function() end)
+    hs.http.asyncGet(M.host .. "/project/next", nil, function()
+        if neighborOverlayActive then refreshNeighborOverlay() end
+    end)
 end
 
 function M.pin()
@@ -189,13 +199,9 @@ function M.bindProjectHotkeys(keymap)
 end
 
 -- Neighbor overlay (shows prev/next when ctrl+cmd held)
-local neighborAlertId = nil
-local neighborTap = nil
-
-local function showNeighborOverlay()
-    if neighborAlertId then return end
+local function renderNeighborOverlay()
     hs.http.asyncGet(M.host .. "/project/neighbors", nil, function(status, body)
-        if status ~= 200 or neighborAlertId then return end
+        if status ~= 200 or not neighborOverlayActive then return end
         local ok, data = pcall(hs.json.decode, body)
         if not ok then return end
 
@@ -203,30 +209,51 @@ local function showNeighborOverlay()
         local curr = data.current or "—"
         local next = data.next or "—"
 
-        local styledText = hs.styledtext.new(prev .. " ←", {
-            font = { size = 14 },
-            color = { white = 0.6, alpha = 1 }
-        }) .. hs.styledtext.new("       " .. curr .. "       ", {
-            font = { size = 16, name = "Menlo-Bold" },
-            color = { white = 1, alpha = 1 }
-        }) .. hs.styledtext.new("→ " .. next, {
-            font = { size = 14 },
-            color = { white = 0.6, alpha = 1 }
-        })
+        -- Schedule on main runloop to ensure UI updates work
+        hs.timer.doAfter(0, function()
+            if not neighborOverlayActive then return end
 
-        neighborAlertId = hs.alert.show(styledText, {
-            fillColor = { white = 0.1, alpha = 0.9 },
-            strokeColor = { white = 0.3, alpha = 1 },
-            strokeWidth = 2,
-            radius = 10,
-            fadeInDuration = 0.1,
-            fadeOutDuration = 0.1,
-            atScreenEdge = 0
-        }, "♾️")
+            local styledText = hs.styledtext.new(prev .. " ←", {
+                font = { size = 14 },
+                color = { white = 0.6, alpha = 1 }
+            }) .. hs.styledtext.new("       " .. curr .. "       ", {
+                font = { size = 16, name = "Menlo-Bold" },
+                color = { white = 1, alpha = 1 }
+            }) .. hs.styledtext.new("→ " .. next, {
+                font = { size = 14 },
+                color = { white = 0.6, alpha = 1 }
+            })
+
+            if neighborAlertId then
+                hs.alert.closeSpecific(neighborAlertId)
+            end
+            neighborAlertId = hs.alert.show(styledText, {
+                fillColor = { white = 0.1, alpha = 0.9 },
+                strokeColor = { white = 0.3, alpha = 1 },
+                strokeWidth = 2,
+                radius = 10,
+                fadeInDuration = 0,
+                fadeOutDuration = 0,
+                atScreenEdge = 0
+            }, "♾️")
+        end)
     end)
 end
 
+local function showNeighborOverlay()
+    if neighborOverlayActive then return end
+    neighborOverlayActive = true
+    renderNeighborOverlay()
+end
+
+refreshNeighborOverlay = function()
+    if neighborOverlayActive then
+        renderNeighborOverlay()
+    end
+end
+
 local function hideNeighborOverlay()
+    neighborOverlayActive = false
     if neighborAlertId then
         hs.alert.closeSpecific(neighborAlertId)
         neighborAlertId = nil

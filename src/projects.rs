@@ -42,6 +42,7 @@ pub fn lock<'a>() -> Projects<'a> {
 
 #[derive(Debug)]
 pub enum Mutation {
+    None,
     RotateLeft,
     RotateRight,
     Insert,
@@ -49,7 +50,11 @@ pub enum Mutation {
 
 impl<'a> Projects<'a> {
     pub fn all(&self) -> Vec<&Project> {
-        self.0.ring.iter().filter_map(|n| self.0.all.get(n)).collect()
+        self.0
+            .ring
+            .iter()
+            .filter_map(|n| self.0.all.get(n))
+            .collect()
     }
 
     pub fn all_mut(&mut self) -> impl Iterator<Item = &mut Project> {
@@ -74,6 +79,7 @@ impl<'a> Projects<'a> {
 
     pub fn apply(&mut self, mutation: Mutation, name: &str) {
         match mutation {
+            Mutation::None => {}
             Mutation::Insert => {
                 self.move_to_back(name);
                 self.0.ring.rotate_right(1);
@@ -276,7 +282,8 @@ pub fn load() {
 }
 
 fn discover_tasks(additional_paths: HashMap<String, PathBuf>) -> HashMap<String, Project> {
-    let mut project_paths: HashMap<String, PathBuf> = config::available_projects().into_iter().collect();
+    let mut project_paths: HashMap<String, PathBuf> =
+        config::available_projects().into_iter().collect();
 
     for (name, path) in additional_paths {
         project_paths.entry(name).or_insert(path);

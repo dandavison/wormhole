@@ -56,7 +56,6 @@ function createButtons(info) {
             <button class="wormhole-btn wormhole-btn-terminal" title="Open in Terminal">Terminal</button>
             <button class="wormhole-btn wormhole-btn-cursor" title="Open in Cursor">Cursor</button>
             <button class="wormhole-btn wormhole-btn-vscode" title="Open embedded VSCode">VSCode</button>
-            <button class="wormhole-btn wormhole-btn-maximize" title="Maximize VSCode" style="display:none;">Maximize</button>
         `;
     }
 
@@ -77,7 +76,6 @@ function createButtons(info) {
     const termBtn = container.querySelector('.wormhole-btn-terminal');
     const cursorBtn = container.querySelector('.wormhole-btn-cursor');
     const vscodeBtn = container.querySelector('.wormhole-btn-vscode');
-    const maximizeBtn = container.querySelector('.wormhole-btn-maximize');
 
     if (termBtn) {
         termBtn.addEventListener('click', (e) => {
@@ -99,22 +97,14 @@ function createButtons(info) {
         vscodeBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
-            toggleVSCode(info.name, vscodeBtn, maximizeBtn);
-        });
-    }
-
-    if (maximizeBtn) {
-        maximizeBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            toggleMaximize(maximizeBtn);
+            toggleVSCode(info.name, vscodeBtn);
         });
     }
 
     return container;
 }
 
-async function toggleVSCode(projectName, vscodeBtn, maximizeBtn) {
+async function toggleVSCode(projectName, vscodeBtn) {
     let container = document.querySelector('.wormhole-vscode-container');
 
     if (vscodeExpanded) {
@@ -123,13 +113,13 @@ async function toggleVSCode(projectName, vscodeBtn, maximizeBtn) {
             container.classList.remove('expanded');
         }
         vscodeBtn.textContent = 'VSCode';
-        vscodeBtn.classList.remove('active');
-        maximizeBtn.style.display = 'none';
+        vscodeBtn.style.display = '';
         vscodeExpanded = false;
 
         // If maximized, restore first
         if (vscodeMaximized) {
-            toggleMaximize(maximizeBtn);
+            const controlBtn = container?.querySelector('.wormhole-control-maximize');
+            if (controlBtn) toggleMaximizeToolbar(controlBtn);
         }
     } else {
         // Open
@@ -155,9 +145,8 @@ async function toggleVSCode(projectName, vscodeBtn, maximizeBtn) {
             iframe.src = data.url;
 
             container.classList.add('expanded');
-            vscodeBtn.textContent = 'Close';
-            vscodeBtn.classList.add('active');
-            maximizeBtn.style.display = 'inline-block';
+            // Hide header VSCode button - iframe has its own controls
+            vscodeBtn.style.display = 'none';
             vscodeExpanded = true;
 
             // Also switch to the project (skip editor since we're showing embedded)
@@ -165,35 +154,11 @@ async function toggleVSCode(projectName, vscodeBtn, maximizeBtn) {
         } catch (err) {
             console.warn('[Wormhole] VSCode error:', err.message);
             vscodeBtn.textContent = 'VSCode';
+            vscodeBtn.style.display = '';
         } finally {
             vscodeBtn.disabled = false;
         }
     }
-}
-
-function toggleMaximize(maximizeBtn) {
-    const container = document.querySelector('.wormhole-vscode-container');
-    if (!container) return;
-
-    const toolbarBtn = container.querySelector('.wormhole-toolbar-maximize');
-    const newText = vscodeMaximized ? 'Maximize' : 'Restore';
-
-    if (vscodeMaximized) {
-        container.classList.remove('maximized');
-        document.body.style.overflow = '';
-        vscodeMaximized = false;
-    } else {
-        container.classList.add('maximized');
-        document.body.style.overflow = 'hidden';
-        vscodeMaximized = true;
-    }
-
-    maximizeBtn.textContent = newText;
-    if (toolbarBtn) toolbarBtn.textContent = newText;
-
-    // Sync floating control button
-    const controlBtn = document.querySelector('.wormhole-control-maximize');
-    if (controlBtn) controlBtn.textContent = newText;
 }
 
 function createVSCodeContainer() {
@@ -248,12 +213,6 @@ function toggleMaximizeToolbar(btn) {
         vscodeMaximized = true;
         if (closeBtn) closeBtn.style.display = 'none';
     }
-
-    // Sync the header button if it exists
-    const headerMaxBtn = document.querySelector('.wormhole-btn-maximize');
-    if (headerMaxBtn) {
-        headerMaxBtn.textContent = btn.textContent;
-    }
 }
 
 function closeVSCode() {
@@ -262,21 +221,18 @@ function closeVSCode() {
         container.classList.remove('expanded', 'maximized');
         const iframe = container.querySelector('iframe');
         if (iframe) iframe.src = '';
+        const closeBtn = container.querySelector('.wormhole-control-close');
+        if (closeBtn) closeBtn.style.display = '';
     }
     document.body.style.overflow = '';
     vscodeExpanded = false;
     vscodeMaximized = false;
 
-    // Update header buttons
+    // Restore header VSCode button
     const vscodeBtn = document.querySelector('.wormhole-btn-vscode');
-    const maximizeBtn = document.querySelector('.wormhole-btn-maximize');
     if (vscodeBtn) {
         vscodeBtn.textContent = 'VSCode';
-        vscodeBtn.classList.remove('active');
-    }
-    if (maximizeBtn) {
-        maximizeBtn.style.display = 'none';
-        maximizeBtn.textContent = 'Maximize';
+        vscodeBtn.style.display = '';
     }
 }
 

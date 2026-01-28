@@ -18,6 +18,7 @@ pub struct DescribeResponse {
     pub kind: Option<String>,
     pub home_project: Option<String>,
     pub pr_branch: Option<String>,
+    pub jira_url: Option<String>,
 }
 
 impl DescribeResponse {
@@ -27,6 +28,7 @@ impl DescribeResponse {
             kind: None,
             home_project: None,
             pr_branch: None,
+            jira_url: None,
         }
     }
 }
@@ -84,43 +86,61 @@ fn describe_github(gh: &GitHubUrl) -> DescribeResponse {
     });
 
     // Search tasks in parallel
-    let task_match = gh.pr.and_then(|pr_num| find_task_by_pr(&gh.owner, &gh.repo, pr_num));
+    let task_match = gh
+        .pr
+        .and_then(|pr_num| find_task_by_pr(&gh.owner, &gh.repo, pr_num));
 
     let pr_branch = rx.recv().ok().flatten();
 
     match task_match {
-        Some((task_name, home)) => DescribeResponse {
-            name: Some(task_name),
-            kind: Some("task".to_string()),
-            home_project: Some(home),
-            pr_branch,
-        },
+        Some((task_name, home)) => {
+            let jira_url = jira_url_for_key(&task_name);
+            DescribeResponse {
+                name: Some(task_name),
+                kind: Some("task".to_string()),
+                home_project: Some(home),
+                pr_branch,
+                jira_url,
+            }
+        }
         None => DescribeResponse {
             name: Some(gh.repo.clone()),
             kind: Some("project".to_string()),
             home_project: None,
             pr_branch,
+            jira_url: None,
         },
     }
+}
+
+fn jira_url_for_key(key: &str) -> Option<String> {
+    // Check if key looks like a JIRA key (e.g., "ACT-708", "PROJ-123")
+    let jira_key_re = Regex::new(r"^[A-Z]+-\d+").ok()?;
+    if !jira_key_re.is_match(key) {
+        return None;
+    }
+    let instance = std::env::var("JIRA_INSTANCE").ok()?;
+    Some(format!("https://{}.atlassian.net/browse/{}", instance, key))
 }
 
 fn find_task_by_pr(owner: &str, repo: &str, pr_number: u64) -> Option<(String, String)> {
     let expected_repo = format!("{}/{}", owner, repo);
     let tasks: Vec<(String, crate::project::Project)> = projects::tasks().into_iter().collect();
 
-    tasks
-        .par_iter()
-        .find_map_any(|(name, project)| {
-            let task_pr = github::get_open_pr_number(project)?;
-            if task_pr != pr_number {
-                return None;
-            }
-            let task_repo = github::get_repo_name(project)?;
-            if task_repo != expected_repo {
-                return None;
-            }
-            Some((name.clone(), project.home_project.clone().unwrap_or_default()))
-        })
+    tasks.par_iter().find_map_any(|(name, project)| {
+        let task_pr = github::get_open_pr_number(project)?;
+        if task_pr != pr_number {
+            return None;
+        }
+        let task_repo = github::get_repo_name(project)?;
+        if task_repo != expected_repo {
+            return None;
+        }
+        Some((
+            name.clone(),
+            project.home_project.clone().unwrap_or_default(),
+        ))
+    })
 }
 
 #[cfg(test)]
@@ -161,5 +181,26 @@ mod tests {
         assert_eq!(gh.owner, "temporalio");
         assert_eq!(gh.repo, "temporal");
         assert_eq!(gh.pr, None);
+    }
+
+    #[test]
+    fn test_jira_url_for_valid_key() {
+        std::env::set_var("JIRA_INSTANCE", "testinst");
+        let url = jira_url_for_key("ACT-708");
+        assert_eq!(url, Some("https://testinst.atlassian.net/browse/ACT-708".to_string()));
+    }
+
+    #[test]
+    fn test_jira_url_for_invalid_key() {
+        std::env::set_var("JIRA_INSTANCE", "testinst");
+        let url = jira_url_for_key("not-a-jira-key");
+        assert_eq!(url, None);
+    }
+
+    #[test]
+    fn test_jira_url_for_repo_name() {
+        std::env::set_var("JIRA_INSTANCE", "testinst");
+        let url = jira_url_for_key("temporal");
+        assert_eq!(url, None);
     }
 }

@@ -1,16 +1,46 @@
 // Wormhole GitHub Integration
-// Adds Terminal and Cursor buttons to GitHub pages
+// Adds Terminal, Cursor, and JIRA buttons to GitHub pages
 
 const WORMHOLE_PORT = 7117;
 const WORMHOLE_BASE = `http://localhost:${WORMHOLE_PORT}`;
 
-function createButtons() {
+// Cache describe result for current page
+let cachedDescribe = null;
+let cachedUrl = null;
+
+async function getDescribe() {
+    if (cachedUrl === window.location.href && cachedDescribe) {
+        return cachedDescribe;
+    }
+    try {
+        const resp = await fetch(`${WORMHOLE_BASE}/project/describe`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: window.location.href })
+        });
+        if (resp.ok) {
+            cachedDescribe = await resp.json();
+            cachedUrl = window.location.href;
+            return cachedDescribe;
+        }
+    } catch (err) {
+        console.warn('[Wormhole] describe error:', err.message);
+    }
+    return null;
+}
+
+function createButtons(jiraUrl) {
     const container = document.createElement('div');
     container.className = 'wormhole-buttons';
-    container.innerHTML = `
+
+    let html = `
         <button class="wormhole-btn wormhole-btn-terminal" title="Open in Terminal">Terminal</button>
         <button class="wormhole-btn wormhole-btn-cursor" title="Open in Cursor">Cursor</button>
     `;
+    if (jiraUrl) {
+        html += `<a class="wormhole-btn wormhole-btn-jira" href="${jiraUrl}" title="Open JIRA">JIRA</a>`;
+    }
+    container.innerHTML = html;
 
     container.querySelector('.wormhole-btn-terminal').addEventListener('click', (e) => {
         e.preventDefault();
@@ -29,27 +59,12 @@ function createButtons() {
 
 async function switchProject(landIn) {
     try {
-        // Ask wormhole to describe the current URL
-        const describeResp = await fetch(`${WORMHOLE_BASE}/project/describe`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: window.location.href })
-        });
-
-        if (!describeResp.ok) {
-            console.warn('[Wormhole] describe failed:', await describeResp.text());
-            return;
-        }
-
-        const info = await describeResp.json();
-        console.log('[Wormhole] describe:', info);
-
-        if (!info.name) {
+        const info = await getDescribe();
+        if (!info || !info.name) {
             console.warn('[Wormhole] No project/task found');
             return;
         }
 
-        // Switch to the project/task
         const params = new URLSearchParams({ 'land-in': landIn });
         if (landIn === 'terminal') {
             params.set('skip-editor', 'true');
@@ -91,6 +106,7 @@ function injectStyles() {
             color: #666;
             cursor: pointer;
             transition: background 0.1s, color 0.1s;
+            text-decoration: none;
         }
         .wormhole-btn:hover {
             background: #666;
@@ -104,11 +120,19 @@ function injectStyles() {
             background: #0066cc;
             color: #fff;
         }
+        .wormhole-btn-jira {
+            border-color: #0052cc;
+            color: #0052cc;
+        }
+        .wormhole-btn-jira:hover {
+            background: #0052cc;
+            color: #fff;
+        }
     `;
     document.head.appendChild(style);
 }
 
-function injectButtons() {
+async function injectButtons() {
     if (document.querySelector('.wormhole-buttons')) return;
 
     // Only inject on github.com repo/PR pages
@@ -134,7 +158,10 @@ function injectButtons() {
     }
 
     if (targetElement) {
-        const buttons = createButtons();
+        // Fetch describe to get JIRA URL
+        const info = await getDescribe();
+        const jiraUrl = info?.jira_url || null;
+        const buttons = createButtons(jiraUrl);
         targetElement.appendChild(buttons);
     } else {
         // Retry - GitHub loads content dynamically
@@ -154,6 +181,8 @@ const observer = new MutationObserver(() => {
     if (window.location.pathname !== lastPath) {
         lastPath = window.location.pathname;
         injectButtons.retryCount = 0;
+        cachedDescribe = null;  // Invalidate cache on navigation
+        cachedUrl = null;
         document.querySelectorAll('.wormhole-buttons').forEach(el => el.remove());
         setTimeout(injectButtons, 100);
     } else if (!document.querySelector('.wormhole-buttons')) {

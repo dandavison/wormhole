@@ -47,18 +47,19 @@ impl ServeWebManager {
 
         let port = self.port_for_task(task_id);
 
-        let child = Command::new("/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code")
-            .args([
-                "serve-web",
-                "--port",
-                &port.to_string(),
-                "--without-connection-token",
-                "--accept-server-license-terms",
-            ])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .map_err(|e| format!("Failed to start VS Code serve-web: {}", e))?;
+        let child =
+            Command::new("/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code")
+                .args([
+                    "serve-web",
+                    "--port",
+                    &port.to_string(),
+                    "--without-connection-token",
+                    "--accept-server-license-terms",
+                ])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .map_err(|e| format!("Failed to start VS Code serve-web: {}", e))?;
 
         self.instances.insert(
             task_id.to_string(),
@@ -109,7 +110,10 @@ fn wait_for_port(port: u16) -> Result<(), String> {
         }
         std::thread::sleep(poll);
     }
-    Err(format!("VSCode server failed to start on port {} within 10s", port))
+    Err(format!(
+        "VSCode server failed to start on port {} within 10s",
+        port
+    ))
 }
 
 impl Drop for ServeWebManager {

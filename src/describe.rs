@@ -270,7 +270,10 @@ mod tests {
     fn test_jira_url_for_valid_key() {
         std::env::set_var("JIRA_INSTANCE", "testinst");
         let url = jira_url_for_key("ACT-708");
-        assert_eq!(url, Some("https://testinst.atlassian.net/browse/ACT-708".to_string()));
+        assert_eq!(
+            url,
+            Some("https://testinst.atlassian.net/browse/ACT-708".to_string())
+        );
     }
 
     #[test]

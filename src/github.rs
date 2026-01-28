@@ -172,16 +172,19 @@ fn fetch_pr_number(project_path: &Path) -> Option<u64> {
         return None;
     }
 
-    String::from_utf8(output.stdout)
-        .ok()?
-        .trim()
-        .parse()
-        .ok()
+    String::from_utf8(output.stdout).ok()?.trim().parse().ok()
 }
 
 fn fetch_repo_name(project_path: &Path) -> Option<String> {
     let output = Command::new("gh")
-        .args(["repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"])
+        .args([
+            "repo",
+            "view",
+            "--json",
+            "nameWithOwner",
+            "--jq",
+            ".nameWithOwner",
+        ])
         .current_dir(project_path)
         .output()
         .ok()?;

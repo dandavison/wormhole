@@ -792,10 +792,13 @@ fn sprint_list(output: &str) -> Result<(), String> {
                 issue.key.clone()
             };
 
-            let pr_display = pr.as_ref().map(|p| {
-                let linked = crate::format_osc8_hyperlink(&p.url, &p.display());
-                format!(" {}", linked)
-            }).unwrap_or_default();
+            let pr_display = pr
+                .as_ref()
+                .map(|p| {
+                    let linked = crate::format_osc8_hyperlink(&p.url, &p.display());
+                    format!(" {}", linked)
+                })
+                .unwrap_or_default();
 
             println!(
                 "{} {}: {}{}",

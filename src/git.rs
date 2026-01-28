@@ -131,15 +131,26 @@ pub fn create_worktree(
             .map_err(|e| format!("Failed to create directory {}: {}", parent.display(), e))?;
     }
 
-    let output = Command::new("git")
-        .args([
+    let args = if branch_exists(repo_path, branch_name) {
+        vec![
+            "worktree",
+            "add",
+            worktree_path.to_str().unwrap(),
+            branch_name,
+        ]
+    } else {
+        vec![
             "worktree",
             "add",
             "-b",
             branch_name,
             worktree_path.to_str().unwrap(),
             "HEAD",
-        ])
+        ]
+    };
+
+    let output = Command::new("git")
+        .args(&args)
         .current_dir(repo_path)
         .output()
         .map_err(|e| format!("Failed to run git worktree: {}", e))?;
@@ -150,6 +161,20 @@ pub fn create_worktree(
         let stderr = String::from_utf8_lossy(&output.stderr);
         Err(format!("git worktree add failed: {}", stderr.trim()))
     }
+}
+
+fn branch_exists(repo_path: &Path, branch_name: &str) -> bool {
+    Command::new("git")
+        .args([
+            "show-ref",
+            "--verify",
+            "--quiet",
+            &format!("refs/heads/{}", branch_name),
+        ])
+        .current_dir(repo_path)
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
 }
 
 pub fn worktree_base_path(repo_path: &Path) -> PathBuf {
@@ -311,5 +336,39 @@ detached
             "worktree base should be in parent's modules: {:?}",
             base
         );
+    }
+
+    #[test]
+    fn test_create_worktree_existing_branch() {
+        use std::fs;
+
+        let temp = tempfile::tempdir().unwrap();
+        let repo = temp.path().join("repo");
+
+        fs::create_dir_all(&repo).unwrap();
+        Command::new("git")
+            .args(["init"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "--allow-empty", "-m", "init"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+
+        // Create branch without worktree
+        Command::new("git")
+            .args(["branch", "ACT-123"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+
+        assert!(branch_exists(&repo, "ACT-123"));
+
+        let worktree_path = repo.join("worktrees/ACT-123");
+        let result = create_worktree(&repo, &worktree_path, "ACT-123");
+        assert!(result.is_ok(), "create_worktree failed: {:?}", result);
+        assert!(worktree_path.exists());
     }
 }

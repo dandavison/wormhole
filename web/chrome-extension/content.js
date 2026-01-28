@@ -175,36 +175,101 @@ function toggleMaximize(maximizeBtn) {
     const container = document.querySelector('.wormhole-vscode-container');
     if (!container) return;
 
+    const toolbarBtn = container.querySelector('.wormhole-toolbar-maximize');
+    const newText = vscodeMaximized ? 'Maximize' : 'Restore';
+
     if (vscodeMaximized) {
         container.classList.remove('maximized');
-        maximizeBtn.textContent = 'Maximize';
         document.body.style.overflow = '';
         vscodeMaximized = false;
     } else {
         container.classList.add('maximized');
-        maximizeBtn.textContent = 'Restore';
         document.body.style.overflow = 'hidden';
         vscodeMaximized = true;
     }
+
+    maximizeBtn.textContent = newText;
+    if (toolbarBtn) toolbarBtn.textContent = newText;
 }
 
 function createVSCodeContainer() {
     const container = document.createElement('div');
     container.className = 'wormhole-vscode-container';
-    container.innerHTML = '<iframe></iframe>';
+    container.innerHTML = `
+        <div class="wormhole-vscode-toolbar">
+            <button class="wormhole-toolbar-btn wormhole-toolbar-maximize">Maximize</button>
+            <button class="wormhole-toolbar-btn wormhole-toolbar-close">Close</button>
+        </div>
+        <iframe></iframe>
+    `;
     document.body.appendChild(container);
+
+    const toolbarMaximize = container.querySelector('.wormhole-toolbar-maximize');
+    const toolbarClose = container.querySelector('.wormhole-toolbar-close');
+
+    toolbarMaximize.addEventListener('click', () => {
+        toggleMaximizeToolbar(toolbarMaximize);
+    });
+
+    toolbarClose.addEventListener('click', () => {
+        closeVSCode();
+    });
 
     // ESC to restore from maximized
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && vscodeMaximized) {
-            const maximizeBtn = document.querySelector('.wormhole-btn-maximize');
-            if (maximizeBtn) {
-                toggleMaximize(maximizeBtn);
-            }
+            toggleMaximizeToolbar(container.querySelector('.wormhole-toolbar-maximize'));
         }
     });
 
     return container;
+}
+
+function toggleMaximizeToolbar(btn) {
+    const container = document.querySelector('.wormhole-vscode-container');
+    if (!container) return;
+
+    if (vscodeMaximized) {
+        container.classList.remove('maximized');
+        btn.textContent = 'Maximize';
+        document.body.style.overflow = '';
+        vscodeMaximized = false;
+    } else {
+        container.classList.add('maximized');
+        btn.textContent = 'Restore';
+        document.body.style.overflow = 'hidden';
+        vscodeMaximized = true;
+    }
+
+    // Sync the header button if it exists
+    const headerMaxBtn = document.querySelector('.wormhole-btn-maximize');
+    if (headerMaxBtn) {
+        headerMaxBtn.textContent = btn.textContent;
+    }
+}
+
+function closeVSCode() {
+    const container = document.querySelector('.wormhole-vscode-container');
+    if (container) {
+        container.classList.remove('expanded', 'maximized');
+        const iframe = container.querySelector('iframe');
+        if (iframe) iframe.src = '';
+    }
+    document.body.style.overflow = '';
+    vscodeExpanded = false;
+    vscodeMaximized = false;
+
+    // Update header buttons
+    const vscodeBtn = document.querySelector('.wormhole-btn-vscode');
+    const maximizeBtn = document.querySelector('.wormhole-btn-maximize');
+    if (vscodeBtn) {
+        vscodeBtn.textContent = 'VSCode';
+        vscodeBtn.classList.remove('active');
+    }
+    if (maximizeBtn) {
+        maximizeBtn.style.display = 'none';
+        maximizeBtn.textContent = 'Maximize';
+    }
 }
 
 async function switchProject(landIn) {
@@ -307,11 +372,33 @@ function injectStyles() {
             box-shadow: 0 -4px 20px rgba(0,0,0,0.2);
         }
         .wormhole-vscode-container.expanded {
-            display: block;
+            display: flex;
+            flex-direction: column;
+        }
+        .wormhole-vscode-toolbar {
+            display: flex;
+            gap: 0.5rem;
+            padding: 0.25rem 0.5rem;
+            background: #1e1e1e;
+            justify-content: flex-end;
+            flex-shrink: 0;
+        }
+        .wormhole-toolbar-btn {
+            font-family: "SF Mono", "Menlo", "Monaco", monospace;
+            font-size: 0.7rem;
+            padding: 0.2rem 0.6rem;
+            border: 1px solid #555;
+            background: #333;
+            color: #ccc;
+            cursor: pointer;
+        }
+        .wormhole-toolbar-btn:hover {
+            background: #555;
+            color: #fff;
         }
         .wormhole-vscode-container iframe {
             width: 100%;
-            height: 100%;
+            flex: 1;
             border: none;
         }
         .wormhole-vscode-container.maximized {

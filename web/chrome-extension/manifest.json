@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Wormhole",
-  "version": "3.6",
+  "version": "3.7",
   "description": "GitHub/JIRA integration for Wormhole: redirects file links and adds project switch buttons",
   "permissions": [
     "declarativeNetRequest"

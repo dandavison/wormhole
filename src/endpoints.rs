@@ -28,26 +28,6 @@ pub fn list_projects() -> Response<Body> {
         current.rotate_left(1);
     }
 
-    // Add discovered tasks that aren't already open
-    let open_names: std::collections::HashSet<_> = current
-        .iter()
-        .filter_map(|v| v.get("name").and_then(|n| n.as_str()))
-        .map(|s| s.to_string())
-        .collect();
-
-    for (task_name, task_project) in &tasks {
-        if !open_names.contains(task_name) {
-            let mut obj = serde_json::json!({ "name": task_name });
-            if let Some(home) = &task_project.home_project {
-                obj["home_project"] = serde_json::json!(home);
-                if let Some(branch) = git::current_branch(&task_project.path) {
-                    obj["branch"] = serde_json::json!(branch);
-                }
-            }
-            current.push_back(obj);
-        }
-    }
-
     let available = config::available_projects();
     let available: Vec<&str> = available.keys().map(|s| s.as_str()).collect();
 

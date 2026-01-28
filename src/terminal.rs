@@ -2,7 +2,7 @@ use std::fs;
 
 use regex::Regex;
 
-use crate::{config, hammerspoon, project::Project, tmux, util::warn, wezterm};
+use crate::{config, git, hammerspoon, project::Project, tmux, util::warn, wezterm};
 
 #[allow(dead_code)]
 pub enum Terminal {
@@ -63,7 +63,11 @@ impl Terminal {
 pub fn write_wormhole_env_vars(project: &Project) {
     if let Some(env_file) = config::ENV_FILE {
         let jira_url = jira_url_for_name(&project.name).unwrap_or_default();
-        let github_repo = project.github_repo.clone().unwrap_or_default();
+        let github_repo = project
+            .github_repo
+            .clone()
+            .or_else(|| git::github_repo_from_remote(&project.path))
+            .unwrap_or_default();
         let github_pr_url = match (&project.github_repo, project.github_pr) {
             (Some(repo), Some(pr)) => format!("https://github.com/{}/pull/{}", repo, pr),
             _ => String::new(),

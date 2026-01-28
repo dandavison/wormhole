@@ -50,7 +50,12 @@ function createButtons(info) {
 
     let html = '';
 
-    // Only show Terminal/Cursor/VSCode buttons if we have a task/project to switch to
+    // On JIRA: GitHub link first
+    if (isJiraPage() && info?.github_url && info?.github_label) {
+        html += `<a class="wormhole-link wormhole-link-github" href="${info.github_url}" title="Open GitHub PR">${info.github_label}</a>`;
+    }
+
+    // Terminal/Cursor/VSCode buttons if we have a task/project
     if (info?.name && info?.kind) {
         html += `
             <button class="wormhole-btn wormhole-btn-terminal" title="Open in Terminal">Terminal</button>
@@ -59,13 +64,8 @@ function createButtons(info) {
         `;
     }
 
-    // Add GitHub link on JIRA pages (show as "repo#123")
-    if (info?.github_url && info?.github_label) {
-        html += `<a class="wormhole-link wormhole-link-github" href="${info.github_url}" title="Open GitHub PR">${info.github_label}</a>`;
-    }
-
-    // Add JIRA link on GitHub pages (show as "ACT-123")
-    if (info?.jira_url && info?.jira_key && isGitHubPage()) {
+    // On GitHub: JIRA link at the end
+    if (isGitHubPage() && info?.jira_url && info?.jira_key) {
         html += `<a class="wormhole-link wormhole-link-jira" href="${info.jira_url}" title="Open JIRA">${info.jira_key}</a>`;
     }
 
@@ -385,16 +385,16 @@ function getTargetSelectors() {
         ];
     } else if (isJiraPage()) {
         return [
+            // Breadcrumbs area (preferred - above title)
+            '[data-testid="issue.views.issue-base.foundation.breadcrumbs.breadcrumb-current-issue-container"]',
+            '[data-test-id="issue.views.issue-base.foundation.breadcrumbs.current-issue.item"]',
+            '[data-testid="issue.views.issue-base.foundation.breadcrumbs.parent-issue.item"]',
             // Board view modal selectors
             '[data-testid="issue.views.issue-base.foundation.summary.heading"]',
-            '[data-testid="issue.views.issue-details.issue-layout.visible-when-published"]',
             '[data-testid="issue-details-panel-header"]',
             // Browse page selectors
             '[data-testid="issue-header"]',
             '#jira-issue-header',
-            '#summary-val',
-            '.issue-header-content',
-            '[data-test-id="issue.views.issue-base.foundation.breadcrumbs.current-issue.item"]',
         ];
     }
     return [];

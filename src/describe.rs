@@ -122,8 +122,19 @@ fn describe_github(gh: &GitHubUrl) -> DescribeResponse {
 
 fn parse_jira_url(url: &str) -> Option<String> {
     // Match URLs like https://temporalio.atlassian.net/browse/ACT-108
-    let re = Regex::new(r"atlassian\.net/browse/([A-Z]+-\d+)").ok()?;
-    re.captures(url).map(|caps| caps[1].to_string())
+    let browse_re = Regex::new(r"atlassian\.net/browse/([A-Z]+-\d+)").ok()?;
+    if let Some(caps) = browse_re.captures(url) {
+        return Some(caps[1].to_string());
+    }
+
+    // Match board URLs with selectedIssue query param
+    // e.g., .../boards/72?...&selectedIssue=ACT-108
+    let selected_re = Regex::new(r"selectedIssue=([A-Z]+-\d+)").ok()?;
+    if let Some(caps) = selected_re.captures(url) {
+        return Some(caps[1].to_string());
+    }
+
+    None
 }
 
 fn describe_jira(jira_key: &str) -> DescribeResponse {
@@ -266,5 +277,12 @@ mod tests {
     fn test_parse_jira_url_invalid() {
         let url = "https://github.com/temporalio/temporal/pull/9146";
         assert!(parse_jira_url(url).is_none());
+    }
+
+    #[test]
+    fn test_parse_jira_board_url() {
+        let url = "https://temporalio.atlassian.net/jira/software/c/projects/ACT/boards/72?assignee=712020&selectedIssue=ACT-108";
+        let key = parse_jira_url(url).unwrap();
+        assert_eq!(key, "ACT-108");
     }
 }

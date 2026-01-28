@@ -181,7 +181,11 @@ function getTargetSelectors() {
         ];
     } else if (isJiraPage()) {
         return [
+            // Board view modal selectors
             '[data-testid="issue.views.issue-base.foundation.summary.heading"]',
+            '[data-testid="issue.views.issue-details.issue-layout.visible-when-published"]',
+            '[data-testid="issue-details-panel-header"]',
+            // Browse page selectors
             '[data-testid="issue-header"]',
             '#jira-issue-header',
             '#summary-val',
@@ -199,7 +203,9 @@ function shouldInject() {
         if (path.match(/^\/(settings|notifications|new|login|signup)/)) return false;
         return true;
     } else if (isJiraPage()) {
-        return window.location.pathname.includes('/browse/');
+        // /browse/ACT-108 or board view with ?selectedIssue=ACT-108
+        return window.location.pathname.includes('/browse/') ||
+               window.location.search.includes('selectedIssue=');
     }
     return false;
 }

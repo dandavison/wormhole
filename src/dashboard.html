@@ -113,15 +113,15 @@ h1 {
     background: #666;
     color: #fff;
 }
-.btn-open {
+.btn-vscode, .btn-cursor {
     border-color: #0066cc;
     color: #0066cc;
 }
-.btn-open:hover {
+.btn-vscode:hover, .btn-cursor:hover {
     background: #0066cc;
     color: #fff;
 }
-.btn-open.active {
+.btn-vscode.active {
     background: #0066cc;
     color: #fff;
 }
@@ -185,7 +185,7 @@ h1 {
 <body>
 <div class="grid">{{CARDS}}</div>
 <script>
-document.querySelectorAll('.btn-open').forEach(btn => {
+document.querySelectorAll('.btn-vscode').forEach(btn => {
     btn.addEventListener('click', e => {
         e.stopPropagation();
         const card = btn.closest('.card');
@@ -196,7 +196,7 @@ document.querySelectorAll('.btn-open').forEach(btn => {
         container.classList.toggle('expanded');
         card.classList.toggle('expanded');
         btn.classList.toggle('active');
-        btn.textContent = isExpanding ? 'Close' : 'Open';
+        btn.textContent = isExpanding ? 'Close' : 'VSCode';
 
         if (isExpanding) {
             if (!iframe.src) {

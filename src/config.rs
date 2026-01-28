@@ -21,11 +21,6 @@ pub fn wormhole_port() -> u16 {
     })
 }
 
-// If you set this to Some(path) then project name and directory will be written
-// to that file whenever wormhole changes project. This can be used for shell
-// integration (e.g. prompt, cd-to-project-root).
-pub const ENV_FILE: Option<&'static str> = Some("/tmp/wormhole.env");
-
 /// Returns directories to search for projects, from WORMHOLE_PATH env var.
 /// Format is colon-separated like PATH.
 pub fn search_paths() -> Vec<std::path::PathBuf> {

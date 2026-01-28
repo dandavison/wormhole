@@ -1,8 +1,7 @@
 use serde::Deserialize;
-use std::{str, thread};
+use std::str;
 
 use crate::project::Project;
-use crate::terminal::write_wormhole_env_vars;
 use crate::util::{execute_command, panic};
 
 #[allow(dead_code)]
@@ -46,8 +45,6 @@ pub fn open(project: &Project) -> Result<(), String> {
         ["cli", "activate-tab", "--tab-id", &pane.tab_id.to_string()],
         &project.path,
     );
-    let project = project.clone();
-    thread::spawn(move || write_wormhole_env_vars(&project));
     Ok(())
 }
 

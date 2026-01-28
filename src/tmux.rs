@@ -1,10 +1,9 @@
 use core::str;
 use std::collections::HashMap;
 use std::process::Command;
-use std::thread;
 
 use crate::project::Project;
-use crate::terminal::write_wormhole_env_vars;
+use crate::terminal::shell_env_vars;
 use crate::util::{get_stdout, panic};
 
 struct Window {
@@ -60,16 +59,25 @@ pub fn open(project: &Project) -> Result<(), String> {
     if let Some(window) = get_window(&project.name) {
         tmux(["select-window", "-t", &window.id]);
     } else {
-        tmux([
-            "new-window",
-            "-n",
-            &project.name,
-            "-c",
-            project.path.to_str().unwrap(),
+        let vars = shell_env_vars(project);
+        tmux_vec(vec![
+            "new-window".to_string(),
+            "-n".to_string(),
+            project.name.clone(),
+            "-c".to_string(),
+            project.path.to_string_lossy().to_string(),
+            "-e".to_string(),
+            format!("WORMHOLE_PROJECT_NAME={}", vars.project_name),
+            "-e".to_string(),
+            format!("WORMHOLE_PROJECT_DIR={}", vars.project_dir),
+            "-e".to_string(),
+            format!("WORMHOLE_JIRA_URL={}", vars.jira_url),
+            "-e".to_string(),
+            format!("WORMHOLE_GITHUB_REPO={}", vars.github_repo),
+            "-e".to_string(),
+            format!("WORMHOLE_GITHUB_PR_URL={}", vars.github_pr_url),
         ]);
     }
-    let project = project.clone();
-    thread::spawn(move || write_wormhole_env_vars(&project));
     Ok(())
 }
 
@@ -105,9 +113,10 @@ pub fn tmux<'a, I>(args: I) -> String
 where
     I: IntoIterator<Item = &'a str>,
 {
-    // WORMHOLE_TMUX takes precedence (used by daemon to target user's session)
-    // Falls back to TMUX (set by tmux for processes inside a session)
-    // E.g. /private/tmp/tmux-501/default,89323,0
+    tmux_vec(args.into_iter().map(|s| s.to_string()).collect())
+}
+
+fn tmux_vec(args: Vec<String>) -> String {
     let socket_path = std::env::var("WORMHOLE_TMUX")
         .or_else(|_| std::env::var("TMUX"))
         .unwrap_or_else(|_| panic("TMUX env var is not set"))
@@ -119,7 +128,7 @@ where
     let program = "tmux";
     let output = Command::new(program)
         .args(["-S", &socket_path])
-        .args(args)
+        .args(&args)
         .output()
         .unwrap_or_else(|_| panic("Failed to execute command"));
     get_stdout(program, output)

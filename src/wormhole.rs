@@ -36,6 +36,7 @@ pub struct QueryParams {
     pub skip_editor: bool,
     pub focus_terminal: bool,
     pub sync: bool,
+    pub pwd: Option<String>,
 }
 
 pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
@@ -63,6 +64,19 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         Ok(endpoints::sprint())
     } else if &path == "/dashboard" {
         Ok(endpoints::dashboard())
+    } else if &path == "/shell" {
+        let shell_code = if let Some(pwd) = &params.pwd {
+            let path = std::path::Path::new(pwd);
+            let projects = projects::lock();
+            if let Some(project) = projects.by_path(path) {
+                crate::terminal::shell_env_code(&project)
+            } else {
+                String::new()
+            }
+        } else {
+            String::new()
+        };
+        Ok(Response::new(Body::from(shell_code)))
     } else if &path == "/project/previous" {
         let p = {
             let projects = projects::lock();
@@ -464,6 +478,7 @@ impl QueryParams {
             skip_editor: false,
             focus_terminal: false,
             sync: false,
+            pwd: None,
         };
         if let Some(query) = query {
             for (key, val) in form_urlencoded::parse(query.as_bytes()).collect::<Vec<(_, _)>>() {
@@ -495,6 +510,8 @@ impl QueryParams {
                     params.focus_terminal = val.to_lowercase() == "true";
                 } else if key_lower == "sync" {
                     params.sync = val == "true" || val == "1";
+                } else if key_lower == "pwd" {
+                    params.pwd = Some(val.to_string());
                 }
             }
         }

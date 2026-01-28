@@ -1,11 +1,9 @@
 # using __git_ps1 from https://github.com/git/git/blob/master/contrib/completion/git-prompt.sh
 setopt prompt_subst
 
-_wormhole_precmd() {
-    [[ -f /tmp/wormhole.env ]] && source /tmp/wormhole.env
+wormhole-shell-reset() {
+    eval "$(curl -s "localhost:7117/shell?pwd=$PWD")"
 }
-autoload -Uz add-zsh-hook
-add-zsh-hook precmd _wormhole_precmd
 
 export GIT_PS1_SHOWDIRTYSTATE=yes
 export GIT_PS1_UNSTAGED="અ "

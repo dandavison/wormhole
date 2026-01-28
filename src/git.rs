@@ -43,6 +43,33 @@ pub fn current_branch(path: &Path) -> Option<String> {
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
 }
 
+pub fn github_repo_from_remote(path: &Path) -> Option<String> {
+    let output = Command::new("git")
+        .args(["remote", "get-url", "origin"])
+        .current_dir(path)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let url = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    parse_github_repo(&url)
+}
+
+fn parse_github_repo(url: &str) -> Option<String> {
+    let rest = if let Some(r) = url.strip_prefix("git@github.com:") {
+        r
+    } else if let Some(r) = url.strip_prefix("https://github.com/") {
+        r
+    } else if url.contains("@github.com:") {
+        // Handle org-*@github.com:owner/repo format (GitHub App SSH URLs)
+        url.split("@github.com:").nth(1)?
+    } else {
+        return None;
+    };
+    Some(rest.strip_suffix(".git").unwrap_or(rest).to_string())
+}
+
 pub struct Worktree {
     pub path: PathBuf,
     #[allow(dead_code)]

@@ -120,6 +120,8 @@ impl<'a> Projects<'a> {
                     github_repo: None,
                 },
             );
+        }
+        if !self.0.ring.contains(&name) {
             self.0.ring.push_front(name);
         }
     }
@@ -132,6 +134,8 @@ impl<'a> Projects<'a> {
         if !self.0.all.contains_key(&name) {
             ps!("projects::add_project");
             self.0.all.insert(name.clone(), project);
+        }
+        if !self.0.ring.contains(&name) {
             self.0.ring.push_front(name);
         }
     }

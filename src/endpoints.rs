@@ -218,17 +218,23 @@ fn render_card(item: &crate::status::SprintShowItem, jira_instance: Option<&str>
                 Err(_) => String::new(),
             };
 
+            let status_attr = task
+                .jira
+                .as_ref()
+                .map(|j| status_data_attr(&j.status))
+                .unwrap_or_default();
+
             format!(
-                r#"<div class="card" data-task="{}">
-<div class="card-header">{}{}</div>
-<div class="card-summary">{}</div>
+                r#"<div class="card" data-task="{}"{}>
+<div class="card-header">{}<span class="card-summary">{}</span>{}</div>
 <div class="card-meta">{}{}</div>
 {}
 </div>"#,
                 html_escape(&task.name),
+                status_attr,
                 key_html,
-                status_html,
                 summary,
+                status_html,
                 pr_html,
                 plan_html,
                 iframe_html
@@ -252,15 +258,17 @@ fn render_card(item: &crate::status::SprintShowItem, jira_instance: Option<&str>
                 html_escape(&issue.status)
             );
 
+            let status_attr = status_data_attr(&issue.status);
+
             format!(
-                r#"<div class="card">
-<div class="card-header">{}{}</div>
-<div class="card-summary">{}</div>
+                r#"<div class="card"{}>
+<div class="card-header">{}<span class="card-summary">{}</span>{}</div>
 <div class="no-task">no wormhole task</div>
 </div>"#,
+                status_attr,
                 key_html,
-                status_html,
-                html_escape(&issue.summary)
+                html_escape(&issue.summary),
+                status_html
             )
         }
     }
@@ -271,6 +279,13 @@ fn html_escape(s: &str) -> String {
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('"', "&quot;")
+}
+
+fn status_data_attr(status: &str) -> String {
+    match status.to_lowercase().as_str() {
+        "done" | "closed" | "resolved" => r#" data-status="done""#.to_string(),
+        _ => String::new(),
+    }
 }
 
 pub fn url_encode(s: &str) -> String {

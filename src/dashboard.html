@@ -49,11 +49,31 @@ h1 {
 .card[data-task].switching {
     opacity: 0.6;
 }
+.card.folded .card-meta,
+.card.folded .card-actions,
+.card.folded .iframe-container,
+.card.folded .no-task {
+    display: none;
+}
+.card.folded .card-header {
+    margin-bottom: 0;
+}
 .card-header {
     display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
+    align-items: baseline;
+    gap: 0.75rem;
     margin-bottom: 0.5rem;
+}
+.card-header .card-summary {
+    flex: 1;
+    margin-bottom: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.card-header .card-status {
+    margin-left: auto;
+    flex-shrink: 0;
 }
 .card-key {
     font-weight: normal;
@@ -73,7 +93,6 @@ h1 {
     font-weight: 600;
     font-size: 0.85rem;
     color: #444;
-    margin-bottom: 0.75rem;
     line-height: 1.4;
 }
 .card-meta {
@@ -185,6 +204,19 @@ h1 {
 <body>
 <div class="grid">{{CARDS}}</div>
 <script>
+document.querySelectorAll('.card[data-status="done"]').forEach(card => {
+    card.classList.add('folded');
+});
+
+document.querySelectorAll('.card[data-status="done"] .card-header').forEach(header => {
+    header.style.cursor = 'pointer';
+    header.addEventListener('click', e => {
+        if (e.target.tagName === 'A') return;
+        e.stopPropagation();
+        header.closest('.card').classList.toggle('folded');
+    });
+});
+
 document.querySelectorAll('.btn-vscode').forEach(btn => {
     btn.addEventListener('click', e => {
         e.stopPropagation();

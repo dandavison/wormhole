@@ -284,6 +284,87 @@ function M.bindNeighborOverlay()
     neighborTap:start()
 end
 
+local dashboardPreviousApp = nil
+
+function M.focusDashboard()
+    local frontApp = hs.application.frontmostApplication()
+    local isIsland = frontApp and frontApp:name() == "Island"
+
+    if isIsland and dashboardPreviousApp then
+        dashboardPreviousApp:activate()
+        dashboardPreviousApp = nil
+        return
+    end
+
+    if not isIsland then
+        dashboardPreviousApp = frontApp
+    end
+
+    local dashboardUrl = M.host .. "/dashboard"
+    local script = [[
+        (() => {
+            const island = Application("Island");
+            island.activate();
+            const windows = island.windows();
+            for (const win of windows) {
+                const tabs = win.tabs();
+                for (let i = 0; i < tabs.length; i++) {
+                    if (tabs[i].url().includes("wormhole") && tabs[i].url().includes("/dashboard")) {
+                        win.activeTabIndex = i + 1;
+                        return true;
+                    }
+                }
+            }
+            if (windows.length > 0) {
+                island.openLocation("]] .. dashboardUrl .. [[");
+            }
+            return false;
+        })()
+    ]]
+    hs.osascript.javascript(script)
+end
+
+local dashboardTap = nil
+
+function M.bindDashboardKey()
+    local wasRightAlt = false
+    local otherKeyPressed = false
+
+    dashboardTap = hs.eventtap.new({
+        hs.eventtap.event.types.flagsChanged,
+        hs.eventtap.event.types.keyDown
+    }, function(event)
+        local eventType = event:getType()
+
+        if eventType == hs.eventtap.event.types.keyDown then
+            if wasRightAlt then
+                otherKeyPressed = true
+            end
+            return false
+        end
+
+        local flags = event:getFlags()
+        local rawFlags = event:getRawEventData().CGEventData.flags
+
+        -- Right Alt: bit 0x40 in rawFlags indicates right-side modifier
+        local isRightAlt = flags.alt and (rawFlags & 0x40) ~= 0
+
+        if isRightAlt and not wasRightAlt then
+            wasRightAlt = true
+            otherKeyPressed = false
+        elseif wasRightAlt and not flags.alt then
+            if not otherKeyPressed then
+                M.focusDashboard()
+            end
+            wasRightAlt = false
+            otherKeyPressed = false
+        end
+
+        return false
+    end)
+    dashboardTap:start()
+end
+
 function M.bindKeys(keymap)
     M.bindSelect({ "cmd" }, "f13")
     hs.hotkey.bind({ "cmd", "control" }, "left", M.previous)
@@ -292,6 +373,7 @@ function M.bindKeys(keymap)
     hs.hotkey.bind({ "cmd", "alt" }, "k", M.createHotkeyOverlay(keymap))
     M.bindProjectHotkeys(keymap)
     M.bindNeighborOverlay()
+    M.bindDashboardKey()
 end
 
 return M

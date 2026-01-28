@@ -4,8 +4,22 @@ use glob::Pattern;
 use serde::Deserialize;
 use std::sync::OnceLock;
 
-pub const EDITOR: Editor = Editor::Cursor;
 pub const TERMINAL: Terminal = Terminal::Alacritty { tmux: true };
+
+static EDITOR: OnceLock<Editor> = OnceLock::new();
+
+pub fn editor() -> &'static Editor {
+    EDITOR.get_or_init(|| match std::env::var("WORMHOLE_EDITOR").ok().as_deref() {
+        Some("none") => Editor::None,
+        Some("cursor") | None => Editor::Cursor,
+        Some("code") => Editor::VSCode,
+        Some("code-insiders") => Editor::VSCodeInsiders,
+        Some("emacs") => Editor::Emacs,
+        Some("idea") => Editor::IntelliJ,
+        Some("pycharm") => Editor::PyCharm,
+        _ => Editor::Cursor,
+    })
+}
 
 // This port number is currently hardcoded in http clients such as the MacOS GUI
 // app and the CLI utilities under cli/.

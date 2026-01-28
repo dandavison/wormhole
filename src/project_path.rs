@@ -70,7 +70,7 @@ impl ProjectPath {
             }
             Some(Application::Editor) => {
                 open_editor();
-                config::EDITOR.focus();
+                config::editor().focus();
                 open_terminal();
             }
             None => {
@@ -79,7 +79,7 @@ impl ProjectPath {
                 terminal_thread.join().unwrap();
                 editor_thread.join().unwrap();
                 thread::spawn(move || {
-                    hammerspoon::launch_or_focus(config::EDITOR.application_name())
+                    hammerspoon::launch_or_focus(config::editor().application_name())
                 });
             }
         }

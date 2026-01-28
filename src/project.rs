@@ -37,13 +37,11 @@ impl Project {
         }
     }
 
-    pub fn editor(&self) -> Editor {
-        if false && self.name.to_lowercase().contains("java") {
-            Editor::IntelliJ
-        } else if self.name == "mathematics" {
-            Editor::Emacs
+    pub fn editor(&self) -> &'static Editor {
+        if self.name == "mathematics" {
+            &Editor::Emacs
         } else {
-            config::EDITOR
+            config::editor()
         }
     }
 }

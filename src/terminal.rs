@@ -47,6 +47,9 @@ impl Terminal {
     }
 
     pub fn focus(&self) {
+        if std::env::var("WORMHOLE_EDITOR").ok().as_deref() == Some("none") {
+            return;
+        }
         hammerspoon::launch_or_focus(self.application_name())
     }
 

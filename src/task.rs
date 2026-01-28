@@ -102,7 +102,7 @@ pub fn open_task(
             }
             Some(Application::Editor) => {
                 open_editor();
-                config::EDITOR.focus();
+                config::editor().focus();
                 open_terminal();
             }
             None => {
@@ -110,7 +110,7 @@ pub fn open_task(
                 let editor_thread = thread::spawn(open_editor);
                 terminal_thread.join().unwrap();
                 editor_thread.join().unwrap();
-                config::EDITOR.focus();
+                config::editor().focus();
             }
         }
     }

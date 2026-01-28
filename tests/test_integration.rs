@@ -4,6 +4,10 @@ use harness::TEST_PREFIX;
 use serde_json::Value;
 use std::process::Command;
 
+fn editor_is_none() -> bool {
+    std::env::var("WORMHOLE_EDITOR").ok().as_deref() == Some("none")
+}
+
 #[test]
 fn test_open_project() {
     // open-project preserves application by default, but respects land-in (from query parameter and
@@ -290,6 +294,9 @@ fn test_open_file() {
 fn test_pin() {
     // Test that /pin/ sets the land-in KV based on current application.
     // The actual effect of land-in on navigation is tested in test_open_project.
+    if editor_is_none() {
+        return; // Pin relies on detecting focused GUI app
+    }
     let test = harness::WormholeTest::new(8935);
 
     let proj = format!("{}pin-proj", TEST_PREFIX);

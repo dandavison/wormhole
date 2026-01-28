@@ -96,7 +96,7 @@ pub fn close_project(name: &str) {
     let projects = projects::lock();
     if let Some(p) = projects.resolve(name) {
         config::TERMINAL.close(&p);
-        config::EDITOR.close(&p);
+        config::editor().close(&p);
     }
     projects.print();
 }

@@ -5,8 +5,9 @@ use crate::project::Project;
 use crate::{project_path::ProjectPath, util::execute_command};
 
 #[allow(dead_code)]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Editor {
+    None,
     Cursor,
     Emacs,
     IntelliJ,
@@ -41,6 +42,7 @@ use Editor::*;
 impl Editor {
     pub fn application_name(&self) -> &'static str {
         match self {
+            None => "",
             Cursor => "Cursor",
             Emacs => "Emacs",
             VSCodeInsiders => "Code - Insiders",
@@ -51,8 +53,13 @@ impl Editor {
         }
     }
 
+    pub fn is_none(&self) -> bool {
+        matches!(self, None)
+    }
+
     pub fn cli_executable_name(&self) -> &'static str {
         match self {
+            None => "",
             Cursor => "cursor",
             Emacs => "emacsclient",
             VSCodeInsiders => "code-insiders",
@@ -63,38 +70,46 @@ impl Editor {
         }
     }
 
-    fn open_directory_uri(&self, absolute_path: &Path) -> String {
+    fn open_directory_uri(&self, absolute_path: &Path) -> Option<String> {
         let path = absolute_path.to_str().unwrap();
         match self {
-            Cursor => format!("cursor://file/{path}"),
-            Emacs => panic!("Emacs does not support a URL for opening a directory"),
-            IntelliJ => format!("idea://open?file={path}"),
-            PyCharm => format!("pycharm://open?file={path}"),
-            PyCharmCE => format!("pycharm://open?file={path}"),
-            VSCode => format!("vscode://file/{path}"),
-            VSCodeInsiders => format!("vscode-insiders://file/{path}"),
+            None => Option::None,
+            Cursor => Some(format!("cursor://file/{path}")),
+            Emacs => Option::None,
+            IntelliJ => Some(format!("idea://open?file={path}")),
+            PyCharm => Some(format!("pycharm://open?file={path}")),
+            PyCharmCE => Some(format!("pycharm://open?file={path}")),
+            VSCode => Some(format!("vscode://file/{path}")),
+            VSCodeInsiders => Some(format!("vscode-insiders://file/{path}")),
         }
     }
 
-    fn open_file_uri(&self, absolute_path: &Path, line: Option<usize>) -> String {
+    fn open_file_uri(&self, absolute_path: &Path, line: Option<usize>) -> Option<String> {
         let path = absolute_path.to_str().unwrap();
         let line = line.unwrap_or(1);
         match self {
-            Cursor => format!("cursor://file/{path}:{line}"),
-            Emacs => panic!("Emacs does not support a URL for opening a file"),
-            IntelliJ => format!("idea://open?file={path}&line={line}"),
-            PyCharm => format!("pycharm://open?file={path}&line={line}"),
-            PyCharmCE => format!("pycharm://open?file={path}&line={line}"),
-            VSCode => format!("vscode://file/{path}:{line}"),
-            VSCodeInsiders => format!("vscode-insiders://file/{path}:{line}"),
+            None => Option::None,
+            Cursor => Some(format!("cursor://file/{path}:{line}")),
+            Emacs => Option::None,
+            IntelliJ => Some(format!("idea://open?file={path}&line={line}")),
+            PyCharm => Some(format!("pycharm://open?file={path}&line={line}")),
+            PyCharmCE => Some(format!("pycharm://open?file={path}&line={line}")),
+            VSCode => Some(format!("vscode://file/{path}:{line}")),
+            VSCodeInsiders => Some(format!("vscode-insiders://file/{path}:{line}")),
         }
     }
 
     pub fn close(&self, project: &Project) {
+        if self.is_none() {
+            return;
+        }
         hammerspoon::close_window(self.application_name(), &project.name);
     }
 
     pub fn focus(&self) {
+        if self.is_none() {
+            return;
+        }
         hammerspoon::launch_or_focus(self.application_name())
     }
 }
@@ -102,8 +117,12 @@ impl Editor {
 pub fn open_workspace(project: &Project) {
     ps!("open_workspace({project:?})");
     let editor = project.editor();
+    if editor.is_none() {
+        return;
+    }
     let project_dir = project.root().absolute_path();
     match editor {
+        None => {}
         Cursor | VSCode | VSCodeInsiders => {
             execute_command(
                 editor.cli_executable_name(),
@@ -114,7 +133,7 @@ pub fn open_workspace(project: &Project) {
         Emacs => {
             execute_command("emacsclient", ["-n", "."], project_dir);
         }
-        _ => {
+        IntelliJ | PyCharm | PyCharmCE => {
             execute_command(
                 "bash",
                 [
@@ -144,6 +163,11 @@ pub fn open_path(path: &ProjectPath) -> Result<(), String> {
     if crate::util::debug() {
         ps!("Editor::open_path(path={path:?})");
     }
+    let editor = path.project.editor();
+    if editor.is_none() {
+        return Ok(());
+    }
+
     let line = path
         .relative_path
         .as_ref()
@@ -151,23 +175,20 @@ pub fn open_path(path: &ProjectPath) -> Result<(), String> {
     let root = path.project.root();
     let root_abspath = root.absolute_path();
 
-    let editor = path.project.editor();
-    if editor == Emacs {
+    if *editor == Emacs {
         execute_command("emacsclient", ["-n", "."], &root_abspath);
         return Ok(());
     }
 
-    // This is slow.
-    // execute_command("cursor", ["."], &root_abspath);
-
     // This is fast. But it can hijack windows.
-    let dir_uri = editor.open_directory_uri(&root_abspath);
-    execute_command("open", ["-g", dir_uri.as_str()], &root_abspath);
+    if let Some(dir_uri) = editor.open_directory_uri(&root_abspath) {
+        execute_command("open", ["-g", dir_uri.as_str()], &root_abspath);
+    }
 
     let file_line_uri = if path.absolute_path().is_dir() {
-        None
+        Option::None
     } else {
-        Some(editor.open_file_uri(&path.absolute_path(), line))
+        editor.open_file_uri(&path.absolute_path(), line)
     };
     if let Some(file_line_uri) = file_line_uri {
         execute_command("open", [file_line_uri.as_str()], &root_abspath);

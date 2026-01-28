@@ -9,6 +9,10 @@ pub const TEST_PREFIX: &str = "wh-test-";
 
 const NOTIFICATION_GROUP: &str = "wormhole-test";
 
+fn editor_is_none() -> bool {
+    std::env::var("WORMHOLE_EDITOR").ok().as_deref() == Some("none")
+}
+
 fn notify_start() {
     let _ = Command::new("terminal-notifier")
         .args([
@@ -45,7 +49,9 @@ impl WormholeTest {
                 But if you are an AI, do not run tests since they focus application windows "
             );
         }
-        notify_start();
+        if !editor_is_none() {
+            notify_start();
+        }
 
         let socket_name = format!("wormhole-test-{}", port);
         let tmux = TmuxSession::new(&socket_name, "wormhole");
@@ -57,11 +63,16 @@ impl WormholeTest {
         let uid = String::from_utf8_lossy(&uid.stdout).trim().to_string();
         let socket_path = format!("/private/tmp/tmux-{}/{}", uid, socket_name);
 
+        let mut env_vars: Vec<(&str, &str)> = vec![("WORMHOLE_TMUX", &socket_path)];
+        let wormhole_editor = std::env::var("WORMHOLE_EDITOR").ok();
+        if let Some(ref editor) = wormhole_editor {
+            env_vars.push(("WORMHOLE_EDITOR", editor));
+        }
         tmux.start(
             "./target/debug/wormhole",
             Some(port),
             Some(current_dir.to_str().unwrap()),
-            &[("WORMHOLE_TMUX", &socket_path)],
+            &env_vars,
         )
         .expect("Failed to start wormhole in tmux");
 
@@ -159,6 +170,11 @@ impl WormholeTest {
             Focus::Terminal(p) => p,
         };
         self.assert_tmux_window(project);
+
+        if editor_is_none() {
+            return;
+        }
+
         match focus {
             Focus::Editor(expected_window) => {
                 let expected = expected_window.to_string();
@@ -180,6 +196,9 @@ impl WormholeTest {
     }
 
     pub fn focus_terminal(&self) {
+        if editor_is_none() {
+            return;
+        }
         let lua = r#"hs.application.launchOrFocus("/Applications/Alacritty.app")"#;
         self.run_hs(lua).unwrap();
         assert!(
@@ -191,11 +210,15 @@ impl WormholeTest {
     pub fn create_project(&self, dir: &str, name: &str) {
         self.hs_get(&format!("/project/switch/{}?name={}", dir, name))
             .unwrap();
-        assert!(
-            self.wait_for_window_containing(name, 10),
-            "Project window '{}' did not appear",
-            name
-        );
+        if editor_is_none() {
+            self.assert_tmux_window(name);
+        } else {
+            assert!(
+                self.wait_for_window_containing(name, 10),
+                "Project window '{}' did not appear",
+                name
+            );
+        }
     }
 
     pub fn create_task(&self, task_id: &str, home_project: &str) {
@@ -204,11 +227,15 @@ impl WormholeTest {
             task_id, home_project
         ))
         .unwrap();
-        assert!(
-            self.wait_for_window_containing(task_id, 10),
-            "Task window '{}' did not appear",
-            task_id
-        );
+        if editor_is_none() {
+            self.assert_tmux_window(task_id);
+        } else {
+            assert!(
+                self.wait_for_window_containing(task_id, 10),
+                "Task window '{}' did not appear",
+                task_id
+            );
+        }
     }
 
     pub fn wait_for_kv(&self, project: &str, key: &str, expected: &str, timeout_secs: u64) -> bool {
@@ -298,16 +325,20 @@ impl WormholeTest {
 
 impl Drop for WormholeTest {
     fn drop(&mut self) {
-        let _ = self.wait_until(
-            || {
-                self.close_cursor_window(TEST_PREFIX);
-                !self.window_exists(TEST_PREFIX)
-            },
-            10,
-        );
+        if !editor_is_none() {
+            let _ = self.wait_until(
+                || {
+                    self.close_cursor_window(TEST_PREFIX);
+                    !self.window_exists(TEST_PREFIX)
+                },
+                10,
+            );
+        }
         self.tmux.stop();
         let _ = std::fs::remove_file("/tmp/wormhole.env");
-        self.focus_terminal();
-        notify_end();
+        if !editor_is_none() {
+            self.focus_terminal();
+            notify_end();
+        }
     }
 }

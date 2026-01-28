@@ -2,6 +2,10 @@ mod harness;
 
 #[test]
 fn test_close_cursor_window() {
+    if std::env::var("WORMHOLE_EDITOR").ok().as_deref() == Some("none") {
+        return; // Skip GUI-only test in headless mode
+    }
+
     let test = harness::WormholeTest::new(8950);
 
     let proj = format!("{}close-test", harness::TEST_PREFIX);

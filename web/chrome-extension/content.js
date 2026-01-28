@@ -8,6 +8,9 @@ const WORMHOLE_BASE = `http://localhost:${WORMHOLE_PORT}`;
 let cachedDescribe = null;
 let cachedUrl = null;
 
+// Prevent concurrent injection
+let injecting = false;
+
 function isGitHubPage() {
     return window.location.hostname === 'github.com';
 }
@@ -210,49 +213,70 @@ function shouldInject() {
     return false;
 }
 
+let retryCount = 0;
+
 async function injectButtons() {
+    // Prevent concurrent injections
+    if (injecting) return;
     if (document.querySelector('.wormhole-buttons')) return;
     if (!shouldInject()) return;
 
-    injectStyles();
+    injecting = true;
 
-    const selectors = getTargetSelectors();
-    let targetElement = null;
-    for (const sel of selectors) {
-        targetElement = document.querySelector(sel);
-        if (targetElement) break;
-    }
+    try {
+        injectStyles();
 
-    if (targetElement) {
-        const info = await getDescribe();
-        const buttons = createButtons(info);
-        if (buttons) {
-            targetElement.appendChild(buttons);
+        const selectors = getTargetSelectors();
+        let targetElement = null;
+        for (const sel of selectors) {
+            targetElement = document.querySelector(sel);
+            if (targetElement) break;
         }
-    } else {
-        // Retry - pages load content dynamically
-        if (!injectButtons.retryCount) injectButtons.retryCount = 0;
-        if (injectButtons.retryCount++ < 15) {
-            setTimeout(injectButtons, 300);
+
+        if (targetElement) {
+            // Double-check no buttons were added while we waited
+            if (document.querySelector('.wormhole-buttons')) return;
+
+            const info = await getDescribe();
+
+            // Triple-check after async call
+            if (document.querySelector('.wormhole-buttons')) return;
+
+            const buttons = createButtons(info);
+            if (buttons) {
+                targetElement.appendChild(buttons);
+            }
+            retryCount = 0;
+        } else {
+            // Retry - pages load content dynamically
+            if (retryCount++ < 15) {
+                setTimeout(injectButtons, 300);
+            }
         }
+    } finally {
+        injecting = false;
     }
 }
 
 // Run on page load
 injectButtons();
 
-// Re-run on navigation (SPA routing)
+// Re-run on navigation (SPA routing) - debounced
 let lastUrl = window.location.href;
+let debounceTimer = null;
+
 const observer = new MutationObserver(() => {
     if (window.location.href !== lastUrl) {
         lastUrl = window.location.href;
-        injectButtons.retryCount = 0;
+        retryCount = 0;
         cachedDescribe = null;
         cachedUrl = null;
         document.querySelectorAll('.wormhole-buttons').forEach(el => el.remove());
-        setTimeout(injectButtons, 100);
-    } else if (!document.querySelector('.wormhole-buttons') && shouldInject()) {
-        setTimeout(injectButtons, 100);
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(injectButtons, 100);
+    } else if (!document.querySelector('.wormhole-buttons') && shouldInject() && !injecting) {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(injectButtons, 200);
     }
 });
 observer.observe(document.body, { childList: true, subtree: true });

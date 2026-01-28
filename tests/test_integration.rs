@@ -158,9 +158,11 @@ fn test_project_list_sorted() {
     test.create_task(&task_a1, &proj_a);
 
     // Open all in reverse alphabetical order
-    test.hs_get(&format!("/project/switch/{}", task_b1)).unwrap();
+    test.hs_get(&format!("/project/switch/{}", task_b1))
+        .unwrap();
     test.hs_get(&format!("/project/switch/{}", proj_b)).unwrap();
-    test.hs_get(&format!("/project/switch/{}", task_a1)).unwrap();
+    test.hs_get(&format!("/project/switch/{}", task_a1))
+        .unwrap();
     test.hs_get(&format!("/project/switch/{}", proj_a)).unwrap();
 
     // Get project list
@@ -207,7 +209,8 @@ fn test_close_task_removes_from_list() {
     test.create_task(&task_id, &home_proj);
 
     // Switch to task so it appears in project list
-    test.hs_get(&format!("/project/switch/{}", task_id)).unwrap();
+    test.hs_get(&format!("/project/switch/{}", task_id))
+        .unwrap();
     test.assert_focus(Editor(&task_id));
 
     // Verify task is in project list
@@ -220,7 +223,8 @@ fn test_close_task_removes_from_list() {
     );
 
     // Close the task
-    test.hs_post(&format!("/project/close/{}", task_id)).unwrap();
+    test.hs_post(&format!("/project/close/{}", task_id))
+        .unwrap();
 
     // Wait for window to close
     assert!(
@@ -235,7 +239,10 @@ fn test_close_task_removes_from_list() {
     assert!(
         !current.iter().any(|e| e["name"].as_str() == Some(&task_id)),
         "Task should NOT be in list after close, got: {:?}",
-        current.iter().map(|e| e["name"].as_str()).collect::<Vec<_>>()
+        current
+            .iter()
+            .map(|e| e["name"].as_str())
+            .collect::<Vec<_>>()
     );
 }
 
@@ -543,7 +550,10 @@ fn test_task_switching_updates_ring_order() {
     let list: Value = serde_json::from_str(&list_json).unwrap();
     let current = list["current"].as_array().unwrap();
     let names: Vec<_> = current.iter().filter_map(|e| e["name"].as_str()).collect();
-    assert!(names.contains(&home_proj.as_str()), "Home should be in list");
+    assert!(
+        names.contains(&home_proj.as_str()),
+        "Home should be in list"
+    );
     assert!(names.contains(&task_id.as_str()), "Task should be in list");
 
     // Toggle back via previous - should go to home
@@ -627,6 +637,7 @@ fn test_task_respects_land_in_kv() {
     test.assert_focus(Editor(&home_proj));
 
     // Switch to task - should respect land-in=terminal
-    test.hs_get(&format!("/project/switch/{}", task_id)).unwrap();
+    test.hs_get(&format!("/project/switch/{}", task_id))
+        .unwrap();
     test.assert_focus(Terminal(&task_id));
 }

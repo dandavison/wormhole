@@ -50,9 +50,12 @@ function createButtons(info) {
 
     let html = '';
 
-    // On JIRA: GitHub link first
+    // Cross-platform link first
     if (isJiraPage() && info?.github_url && info?.github_label) {
         html += `<a class="wormhole-link wormhole-link-github" href="${info.github_url}" title="Open GitHub PR">${info.github_label}</a>`;
+    }
+    if (isGitHubPage() && info?.jira_url && info?.jira_key) {
+        html += `<a class="wormhole-link wormhole-link-jira" href="${info.jira_url}" title="Open JIRA">${info.jira_key}</a>`;
     }
 
     // Terminal/Cursor/VSCode buttons if we have a task/project
@@ -62,11 +65,6 @@ function createButtons(info) {
             <button class="wormhole-btn wormhole-btn-cursor" title="Open in Cursor">Cursor</button>
             <button class="wormhole-btn wormhole-btn-vscode" title="Open embedded VSCode">VSCode</button>
         `;
-    }
-
-    // On GitHub: JIRA link at the end
-    if (isGitHubPage() && info?.jira_url && info?.jira_key) {
-        html += `<a class="wormhole-link wormhole-link-jira" href="${info.jira_url}" title="Open JIRA">${info.jira_key}</a>`;
     }
 
     if (!html) return null;

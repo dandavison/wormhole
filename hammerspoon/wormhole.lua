@@ -207,12 +207,12 @@ local function renderNeighborOverlay()
         if not ok or not data.ring then return end
 
         local ring = data.ring
-        local current = ring[1]
         local n = #ring
         if n == 0 then return end
 
+        local currentName = ring[1] and ring[1].name
+
         -- Lock display order on first show, keep it fixed while overlay is visible
-        -- Reverse so that "prev" is to the left of "current" visually
         if not neighborDisplayOrder then
             neighborDisplayOrder = {}
             for i = #ring, 1, -1 do
@@ -224,14 +224,33 @@ local function renderNeighborOverlay()
             if not neighborOverlayActive then return end
 
             local styledText = hs.styledtext.new("")
-            for i, name in ipairs(neighborDisplayOrder) do
+            for i, item in ipairs(neighborDisplayOrder) do
                 if i > 1 then
-                    styledText = styledText .. hs.styledtext.new("  ", { font = { size = 14 } })
+                    styledText = styledText .. hs.styledtext.new("    ", { font = { size = 14 } })
                 end
-                local isCurrent = (name == current)
-                local color = isCurrent and { white = 1, alpha = 1 } or { white = 0.5, alpha = 0.8 }
-                local font = isCurrent and { size = 16, name = "Menlo-Bold" } or { size = 14 }
-                styledText = styledText .. hs.styledtext.new(name, { font = font, color = color })
+
+                local isCurrent = (item.name == currentName)
+                local dimColor = { white = 0.5, alpha = 0.8 }
+                local brightColor = { white = 1, alpha = 1 }
+
+                if item.home then
+                    -- Task: home(branch) format, horizontal
+                    local homeColor = isCurrent and { white = 0.7, alpha = 1 } or { white = 0.4, alpha = 0.7 }
+                    local branchColor = isCurrent and brightColor or dimColor
+                    local homeFont = { size = 12 }
+                    local branchFont = isCurrent and { size = 14, name = "Menlo-Bold" } or { size = 12 }
+
+                    local branch = item.branch or item.name
+                    styledText = styledText .. hs.styledtext.new(item.home, { font = homeFont, color = homeColor })
+                    styledText = styledText .. hs.styledtext.new("(", { font = homeFont, color = homeColor })
+                    styledText = styledText .. hs.styledtext.new(branch, { font = branchFont, color = branchColor })
+                    styledText = styledText .. hs.styledtext.new(")", { font = homeFont, color = homeColor })
+                else
+                    -- Single name for regular projects
+                    local color = isCurrent and brightColor or dimColor
+                    local font = isCurrent and { size = 14, name = "Menlo-Bold" } or { size = 12 }
+                    styledText = styledText .. hs.styledtext.new(item.name, { font = font, color = color })
+                end
             end
 
             if neighborAlertId then

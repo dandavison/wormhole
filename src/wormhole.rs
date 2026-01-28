@@ -3,6 +3,7 @@ use std::thread;
 
 use crate::config;
 use crate::endpoints;
+use crate::git;
 use crate::project_path::ProjectPath;
 use crate::projects;
 use crate::projects::Mutation;
@@ -60,12 +61,21 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         Ok(endpoints::list_projects())
     } else if &path == "/project/neighbors" {
         let projects = projects::lock();
-        let names = projects.names();
-        let current_index = 0usize;
-        let json = serde_json::json!({
-            "ring": names,
-            "current": current_index
-        });
+        let ring: Vec<serde_json::Value> = projects
+            .all()
+            .iter()
+            .map(|p| {
+                let mut obj = serde_json::json!({ "name": p.name });
+                if let Some(home) = &p.home_project {
+                    obj["home"] = serde_json::json!(home);
+                    if let Some(branch) = git::current_branch(&p.path) {
+                        obj["branch"] = serde_json::json!(branch);
+                    }
+                }
+                obj
+            })
+            .collect();
+        let json = serde_json::json!({ "ring": ring });
         Ok(Response::new(Body::from(json.to_string())))
     } else if &path == "/project/debug" {
         Ok(endpoints::debug_projects())

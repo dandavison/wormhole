@@ -93,6 +93,7 @@ pub fn open_task(
             config::TERMINAL.focus();
         }
     } else {
+        let land_in = land_in.or_else(|| parse_land_in(project.kv.get("land-in")));
         match land_in {
             Some(Application::Terminal) => {
                 open_terminal();
@@ -176,4 +177,12 @@ fn ensure_gitattributes_entry(worktree_path: &Path) -> Result<(), String> {
 
     fs::write(&gitattributes_path, new_contents)
         .map_err(|e| format!("Failed to update .gitattributes: {}", e))
+}
+
+fn parse_land_in(s: Option<&String>) -> Option<Application> {
+    s.and_then(|v| match v.as_str() {
+        "terminal" => Some(Application::Terminal),
+        "editor" => Some(Application::Editor),
+        _ => None,
+    })
 }

@@ -1,7 +1,9 @@
 use std::collections::HashMap;
+use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use lazy_static::lazy_static;
 
@@ -68,6 +70,7 @@ impl ServeWebManager {
             },
         );
 
+        wait_for_port(port)?;
         Ok(port)
     }
 
@@ -93,6 +96,20 @@ impl ServeWebManager {
 
 fn is_running(child: &mut Child) -> bool {
     matches!(child.try_wait(), Ok(None))
+}
+
+fn wait_for_port(port: u16) -> Result<(), String> {
+    let start = Instant::now();
+    let timeout = Duration::from_secs(10);
+    let poll = Duration::from_millis(100);
+
+    while start.elapsed() < timeout {
+        if TcpStream::connect(("127.0.0.1", port)).is_ok() {
+            return Ok(());
+        }
+        std::thread::sleep(poll);
+    }
+    Err(format!("VSCode server failed to start on port {} within 10s", port))
 }
 
 impl Drop for ServeWebManager {

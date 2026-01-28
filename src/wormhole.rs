@@ -60,13 +60,11 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         Ok(endpoints::list_projects())
     } else if &path == "/project/neighbors" {
         let projects = projects::lock();
-        let prev = projects.previous().map(|p| p.name);
-        let curr = projects.current().map(|p| p.name);
-        let next = projects.next().map(|p| p.name);
+        let names = projects.names();
+        let current_index = 0usize;
         let json = serde_json::json!({
-            "previous": prev,
-            "current": curr,
-            "next": next
+            "ring": names,
+            "current": current_index
         });
         Ok(Response::new(Body::from(json.to_string())))
     } else if &path == "/project/debug" {

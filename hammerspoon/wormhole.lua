@@ -21,7 +21,8 @@ local lastMoveTime = 0
 local neighborAlertId = nil
 local neighborTap = nil
 local neighborOverlayActive = false
-local refreshNeighborOverlay -- forward declaration
+local neighborDisplayOrder = nil -- locked display order while overlay is shown
+local refreshNeighborOverlay     -- forward declaration
 
 local function sendMove()
     local now = hs.timer.secondsSinceEpoch()
@@ -203,26 +204,35 @@ local function renderNeighborOverlay()
     hs.http.asyncGet(M.host .. "/project/neighbors", nil, function(status, body)
         if status ~= 200 or not neighborOverlayActive then return end
         local ok, data = pcall(hs.json.decode, body)
-        if not ok then return end
+        if not ok or not data.ring then return end
 
-        local prev = data.previous or "—"
-        local curr = data.current or "—"
-        local next = data.next or "—"
+        local ring = data.ring
+        local current = ring[1]
+        local n = #ring
+        if n == 0 then return end
 
-        -- Schedule on main runloop to ensure UI updates work
+        -- Lock display order on first show, keep it fixed while overlay is visible
+        -- Reverse so that "prev" is to the left of "current" visually
+        if not neighborDisplayOrder then
+            neighborDisplayOrder = {}
+            for i = #ring, 1, -1 do
+                table.insert(neighborDisplayOrder, ring[i])
+            end
+        end
+
         hs.timer.doAfter(0, function()
             if not neighborOverlayActive then return end
 
-            local styledText = hs.styledtext.new(prev .. " ←", {
-                font = { size = 14 },
-                color = { white = 0.6, alpha = 1 }
-            }) .. hs.styledtext.new("       " .. curr .. "       ", {
-                font = { size = 16, name = "Menlo-Bold" },
-                color = { white = 1, alpha = 1 }
-            }) .. hs.styledtext.new("→ " .. next, {
-                font = { size = 14 },
-                color = { white = 0.6, alpha = 1 }
-            })
+            local styledText = hs.styledtext.new("")
+            for i, name in ipairs(neighborDisplayOrder) do
+                if i > 1 then
+                    styledText = styledText .. hs.styledtext.new("  ", { font = { size = 14 } })
+                end
+                local isCurrent = (name == current)
+                local color = isCurrent and { white = 1, alpha = 1 } or { white = 0.5, alpha = 0.8 }
+                local font = isCurrent and { size = 16, name = "Menlo-Bold" } or { size = 14 }
+                styledText = styledText .. hs.styledtext.new(name, { font = font, color = color })
+            end
 
             if neighborAlertId then
                 hs.alert.closeSpecific(neighborAlertId)
@@ -254,6 +264,7 @@ end
 
 local function hideNeighborOverlay()
     neighborOverlayActive = false
+    neighborDisplayOrder = nil -- reset for next show
     if neighborAlertId then
         hs.alert.closeSpecific(neighborAlertId)
         neighborAlertId = nil

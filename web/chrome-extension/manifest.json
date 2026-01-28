@@ -1,13 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Wormhole",
-  "version": "3.0",
-  "description": "GitHub integration for Wormhole: redirects file links and adds project switch buttons",
+  "version": "3.3",
+  "description": "GitHub/JIRA integration for Wormhole: redirects file links and adds project switch buttons",
   "permissions": [
     "declarativeNetRequest"
   ],
   "host_permissions": [
     "https://github.com/*",
+    "https://*.atlassian.net/*",
     "http://localhost:7117/*"
   ],
   "declarative_net_request": {
@@ -21,7 +22,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://github.com/*"],
+      "matches": ["https://github.com/*", "https://*.atlassian.net/*"],
       "js": ["content.js"],
       "run_at": "document_idle"
     }

@@ -504,9 +504,8 @@ fn test_task_home_project_not_self() {
 
 #[test]
 fn test_task_switching_updates_ring_order() {
-    // Verify that switching to a task updates the ring order so toggle works.
-    // After switching: home -> task, the project list should have home first
-    // (for toggle back behavior).
+    // Verify that switching to a task updates the ring for navigation.
+    // The project list is sorted, but previous/next commands use the ring order.
     let test = harness::WormholeTest::new(8941);
 
     let home_proj = format!("{}ring-home", TEST_PREFIX);
@@ -539,35 +538,21 @@ fn test_task_switching_updates_ring_order() {
         .unwrap();
     test.assert_focus(Editor(&task_id));
 
-    // Get project list - home_proj should be first (for toggle behavior)
+    // Verify both are in the list
     let list_json = test.hs_get("/project/list").unwrap();
     let list: Value = serde_json::from_str(&list_json).unwrap();
     let current = list["current"].as_array().unwrap();
+    let names: Vec<_> = current.iter().filter_map(|e| e["name"].as_str()).collect();
+    assert!(names.contains(&home_proj.as_str()), "Home should be in list");
+    assert!(names.contains(&task_id.as_str()), "Task should be in list");
 
-    let first_name = current[0]["name"].as_str().unwrap();
-    assert_eq!(
-        first_name, &home_proj,
-        "After switching home->task, home should be first in list for toggle. Got '{}' first, list: {:?}",
-        first_name,
-        current.iter().map(|e| e["name"].as_str()).collect::<Vec<_>>()
-    );
-
-    // Switch back to home
-    test.hs_get(&format!("/project/switch/{}", home_proj))
-        .unwrap();
+    // Toggle back via previous - should go to home
+    test.hs_get("/project/previous").unwrap();
     test.assert_focus(Editor(&home_proj));
 
-    // Now task should be first in the list
-    let list_json = test.hs_get("/project/list").unwrap();
-    let list: Value = serde_json::from_str(&list_json).unwrap();
-    let current = list["current"].as_array().unwrap();
-
-    let first_name = current[0]["name"].as_str().unwrap();
-    assert_eq!(
-        first_name, &task_id,
-        "After switching task->home, task should be first in list for toggle. Got '{}' first",
-        first_name
-    );
+    // Toggle forward via next - should go to task
+    test.hs_get("/project/next").unwrap();
+    test.assert_focus(Editor(&task_id));
 }
 
 #[test]

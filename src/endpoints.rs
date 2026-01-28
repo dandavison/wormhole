@@ -1,5 +1,3 @@
-use std::collections::VecDeque;
-
 use hyper::{Body, Response, StatusCode};
 
 use crate::{config, git, hammerspoon, projects, util::debug};
@@ -9,7 +7,7 @@ pub fn list_projects() -> Response<Body> {
     let tasks = projects::tasks();
 
     // Get currently open projects, using task info where available
-    let mut current: VecDeque<_> = projects::lock()
+    let mut current: Vec<_> = projects::lock()
         .open()
         .into_iter()
         .map(|p| {
@@ -24,9 +22,21 @@ pub fn list_projects() -> Response<Body> {
             obj
         })
         .collect();
-    if !current.is_empty() {
-        current.rotate_left(1);
-    }
+
+    // Sort: projects without home_project first (alphabetically), then tasks (by home, name)
+    current.sort_by(|a, b| {
+        let a_home = a.get("home_project").and_then(|h| h.as_str());
+        let b_home = b.get("home_project").and_then(|h| h.as_str());
+        let a_name = a.get("name").and_then(|n| n.as_str()).unwrap_or("");
+        let b_name = b.get("name").and_then(|n| n.as_str()).unwrap_or("");
+
+        match (a_home, b_home) {
+            (None, Some(_)) => std::cmp::Ordering::Less,
+            (Some(_), None) => std::cmp::Ordering::Greater,
+            (None, None) => a_name.cmp(b_name),
+            (Some(ah), Some(bh)) => (ah, a_name).cmp(&(bh, b_name)),
+        }
+    });
 
     let available = config::available_projects();
     let available: Vec<&str> = available.keys().map(|s| s.as_str()).collect();

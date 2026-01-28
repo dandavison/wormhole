@@ -464,31 +464,25 @@ pub fn run(command: Command) -> Result<(), String> {
                             }
                         }
                     } else if let Some(current) = json.get("current").and_then(|v| v.as_array()) {
-                        let rows: Vec<(String, Option<String>)> = current
+                        let rows: Vec<Vec<String>> = current
                             .iter()
                             .filter_map(|item| {
                                 let name = item.get("name")?.as_str()?;
-                                let display = if let Some(home) =
+                                let row = if let Some(home) =
                                     item.get("home_project").and_then(|h| h.as_str())
                                 {
                                     let branch =
                                         item.get("branch").and_then(|b| b.as_str()).unwrap_or(name);
-                                    (home.to_string(), Some(branch.to_string()))
+                                    vec![home.to_string(), name.to_string(), branch.to_string()]
                                 } else {
-                                    (name.to_string(), None)
+                                    vec![name.to_string()]
                                 };
-                                Some(display)
+                                Some(row)
                             })
                             .collect();
                         let formatted: Vec<Vec<&str>> = rows
                             .iter()
-                            .map(|(col1, col2)| {
-                                if let Some(c2) = col2 {
-                                    vec![col1.as_str(), c2.as_str()]
-                                } else {
-                                    vec![col1.as_str()]
-                                }
-                            })
+                            .map(|row| row.iter().map(|s| s.as_str()).collect())
                             .collect();
                         for line in crate::util::format_columns(&formatted) {
                             println!("{}", line);

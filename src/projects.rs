@@ -120,8 +120,6 @@ impl<'a> Projects<'a> {
                     github_repo: None,
                 },
             );
-        }
-        if !self.0.ring.contains(&name) {
             self.0.ring.push_front(name);
         }
     }

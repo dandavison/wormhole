@@ -64,9 +64,7 @@ pub fn open_task(
 
     {
         let mut projects = projects::lock();
-        if projects.by_name(&project.name).is_none() {
-            projects.add_project(project.clone());
-        }
+        projects.add_project(project.clone());
         projects.apply(projects::Mutation::Insert, &project.name);
     }
 

@@ -1,7 +1,3 @@
-wormhole-env() {
-    source /tmp/wormhole.env
-}
-
 wormhole-cd() {
     if [ -n "$1" ]; then
         builtin cd "$1"

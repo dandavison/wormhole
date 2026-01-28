@@ -231,9 +231,13 @@ pub fn load() {
         .collect();
 
     // Load projects from terminal state into the ring
+    let home_dir = dirs::home_dir();
     for dir in config::TERMINAL.project_directories() {
         let path = PathBuf::from(&dir);
         let canonical = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
+        if Some(canonical.as_path()) == home_dir.as_deref() {
+            continue;
+        }
 
         let name = path_to_name.get(&canonical).cloned().unwrap_or_else(|| {
             path.file_name()

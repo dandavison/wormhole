@@ -165,21 +165,41 @@ fn test_project_list_sorted() {
         .unwrap();
     test.hs_get(&format!("/project/switch/{}", proj_a)).unwrap();
 
-    // Get project list
-    let list_json = test.hs_get("/project/list").unwrap();
-    let list: Value = serde_json::from_str(&list_json).unwrap();
-    let current = list["current"].as_array().unwrap();
+    // Poll for all 4 test items via curl (avoids Hammerspoon IPC overload from rapid polling)
+    let expected: Vec<&str> = vec![&proj_a, &proj_b, &task_a1, &task_b1];
+    let url = format!("http://127.0.0.1:{}/project/list", 8944);
+    let mut last_names: Vec<String> = vec![];
+    let found = test.wait_until(
+        || {
+            Command::new("curl")
+                .args(["-s", &url])
+                .output()
+                .ok()
+                .and_then(|o| String::from_utf8(o.stdout).ok())
+                .and_then(|json| serde_json::from_str::<Value>(&json).ok())
+                .and_then(|list| list["current"].as_array().cloned())
+                .map(|current| {
+                    last_names = current
+                        .iter()
+                        .filter_map(|e| e["name"].as_str())
+                        .filter(|n| n.starts_with(TEST_PREFIX))
+                        .map(|s| s.to_string())
+                        .collect();
+                    last_names.len() == 4
+                })
+                .unwrap_or(false)
+        },
+        10,
+    );
+    assert!(
+        found,
+        "Timed out waiting for all 4 test projects. Got {:?}, expected {:?}",
+        last_names, expected
+    );
 
-    let names: Vec<&str> = current
-        .iter()
-        .filter_map(|e| e["name"].as_str())
-        .filter(|n| n.starts_with(TEST_PREFIX))
-        .collect();
-
-    // Projects without home_project first (alphabetically), then tasks (by home, then name)
+    // Verify sort order
     assert_eq!(
-        names,
-        vec![&proj_a, &proj_b, &task_a1, &task_b1],
+        last_names, expected,
         "Expected sorted order: projects first alphabetically, then tasks by (home, name)"
     );
 }

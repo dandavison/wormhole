@@ -733,15 +733,83 @@ fn sprint_create(client: &Client, overrides: Vec<String>, output: &str) -> Resul
 }
 
 fn sprint_list(output: &str) -> Result<(), String> {
+    use crate::github::{self, PrStatus};
+    use crate::task;
+    use std::env;
+    use std::thread;
+
     let issues = jira::get_sprint_issues()?;
+
     if output == "json" {
+        let pr_handles: Vec<_> = issues
+            .iter()
+            .map(|issue| {
+                let key = issue.key.clone();
+                thread::spawn(move || {
+                    task::get_task(&key).and_then(|t| github::get_pr_status(&t.path))
+                })
+            })
+            .collect();
+
+        let prs: Vec<Option<PrStatus>> = pr_handles
+            .into_iter()
+            .map(|h| h.join().ok().flatten())
+            .collect();
+
+        let items: Vec<serde_json::Value> = issues
+            .into_iter()
+            .zip(prs)
+            .map(|(issue, pr)| {
+                let mut obj = serde_json::to_value(&issue).unwrap();
+                if let Some(pr) = pr {
+                    obj["pr"] = serde_json::to_value(&pr).unwrap();
+                }
+                obj
+            })
+            .collect();
+
         println!(
             "{}",
-            serde_json::to_string_pretty(&issues).map_err(|e| e.to_string())?
+            serde_json::to_string_pretty(&items).map_err(|e| e.to_string())?
         );
     } else {
-        for issue in &issues {
-            println!("{}", issue.render_terminal());
+        let jira_instance = env::var("JIRA_INSTANCE").ok();
+
+        let pr_handles: Vec<_> = issues
+            .iter()
+            .map(|issue| {
+                let key = issue.key.clone();
+                thread::spawn(move || {
+                    task::get_task(&key).and_then(|t| github::get_pr_status(&t.path))
+                })
+            })
+            .collect();
+
+        let prs: Vec<Option<PrStatus>> = pr_handles
+            .into_iter()
+            .map(|h| h.join().ok().flatten())
+            .collect();
+
+        for (issue, pr) in issues.iter().zip(prs.iter()) {
+            let key_display = if let Some(ref instance) = jira_instance {
+                let url = format!("https://{}.atlassian.net/browse/{}", instance, issue.key);
+                crate::format_osc8_hyperlink(&url, &issue.key)
+            } else {
+                issue.key.clone()
+            };
+
+            let pr_display = pr.as_ref().map(|p| {
+                let linked = crate::format_osc8_hyperlink(&p.url, &p.display());
+                format!(" {}", linked)
+            }).unwrap_or_default();
+
+            println!(
+                "{} {}: {}{}",
+                issue.status_emoji(),
+                key_display,
+                issue.summary,
+                pr_display
+            );
         }
     }
     Ok(())

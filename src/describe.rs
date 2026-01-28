@@ -19,7 +19,9 @@ pub struct DescribeResponse {
     pub home_project: Option<String>,
     pub pr_branch: Option<String>,
     pub jira_url: Option<String>,
+    pub jira_key: Option<String>,
     pub github_url: Option<String>,
+    pub github_label: Option<String>,
 }
 
 impl DescribeResponse {
@@ -30,7 +32,9 @@ impl DescribeResponse {
             home_project: None,
             pr_branch: None,
             jira_url: None,
+            jira_key: None,
             github_url: None,
+            github_label: None,
         }
     }
 }
@@ -100,13 +104,20 @@ fn describe_github(gh: &GitHubUrl) -> DescribeResponse {
     match task_match {
         Some((task_name, home)) => {
             let jira_url = jira_url_for_key(&task_name);
+            let jira_key = if jira_url.is_some() {
+                Some(task_name.clone())
+            } else {
+                None
+            };
             DescribeResponse {
                 name: Some(task_name),
                 kind: Some("task".to_string()),
                 home_project: Some(home),
                 pr_branch,
                 jira_url,
+                jira_key,
                 github_url: None,
+                github_label: None,
             }
         }
         None => DescribeResponse {
@@ -115,7 +126,9 @@ fn describe_github(gh: &GitHubUrl) -> DescribeResponse {
             home_project: None,
             pr_branch,
             jira_url: None,
+            jira_key: None,
             github_url: None,
+            github_label: None,
         },
     }
 }
@@ -142,9 +155,20 @@ fn describe_jira(jira_key: &str) -> DescribeResponse {
     let tasks = projects::tasks();
 
     if let Some(project) = tasks.get(jira_key) {
-        let github_url = github::get_open_pr_number(project).and_then(|pr| {
-            github::get_repo_name(project).map(|repo| format!("https://github.com/{}/pull/{}", repo, pr))
-        });
+        let pr_number = github::get_open_pr_number(project);
+        let repo_name = github::get_repo_name(project);
+
+        let (github_url, github_label) = match (pr_number, repo_name) {
+            (Some(pr), Some(repo)) => {
+                let short_repo = repo.split('/').last().unwrap_or(&repo);
+                (
+                    Some(format!("https://github.com/{}/pull/{}", repo, pr)),
+                    Some(format!("{}#{}", short_repo, pr)),
+                )
+            }
+            _ => (None, None),
+        };
+
         let jira_url = jira_url_for_key(jira_key);
 
         DescribeResponse {
@@ -153,7 +177,9 @@ fn describe_jira(jira_key: &str) -> DescribeResponse {
             home_project: project.home_project.clone(),
             pr_branch: None,
             jira_url,
+            jira_key: Some(jira_key.to_string()),
             github_url,
+            github_label,
         }
     } else {
         // No task found, but we know it's a valid JIRA key
@@ -163,7 +189,9 @@ fn describe_jira(jira_key: &str) -> DescribeResponse {
             home_project: None,
             pr_branch: None,
             jira_url: jira_url_for_key(jira_key),
+            jira_key: Some(jira_key.to_string()),
             github_url: None,
+            github_label: None,
         }
     }
 }

@@ -54,14 +54,14 @@ function createButtons(info) {
         `;
     }
 
-    // Add GitHub link on JIRA pages
-    if (info?.github_url) {
-        html += `<a class="wormhole-btn wormhole-btn-github" href="${info.github_url}" title="Open GitHub PR">GitHub</a>`;
+    // Add GitHub link on JIRA pages (show as "repo#123")
+    if (info?.github_url && info?.github_label) {
+        html += `<a class="wormhole-link wormhole-link-github" href="${info.github_url}" title="Open GitHub PR">${info.github_label}</a>`;
     }
 
-    // Add JIRA link on GitHub pages
-    if (info?.jira_url && isGitHubPage()) {
-        html += `<a class="wormhole-btn wormhole-btn-jira" href="${info.jira_url}" title="Open JIRA">JIRA</a>`;
+    // Add JIRA link on GitHub pages (show as "ACT-123")
+    if (info?.jira_url && info?.jira_key && isGitHubPage()) {
+        html += `<a class="wormhole-link wormhole-link-jira" href="${info.jira_url}" title="Open JIRA">${info.jira_key}</a>`;
     }
 
     if (!html) return null;
@@ -129,6 +129,7 @@ function injectStyles() {
             gap: 0.5rem;
             margin-left: 1rem;
             vertical-align: middle;
+            align-items: center;
         }
         .wormhole-btn {
             font-family: "SF Mono", "Menlo", "Monaco", monospace;
@@ -153,21 +154,20 @@ function injectStyles() {
             background: #0066cc;
             color: #fff;
         }
-        .wormhole-btn-jira {
-            border-color: #0052cc;
+        .wormhole-link {
+            font-family: "SF Mono", "Menlo", "Monaco", monospace;
+            font-size: 0.75rem;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .wormhole-link:hover {
+            text-decoration: underline;
+        }
+        .wormhole-link-jira {
             color: #0052cc;
         }
-        .wormhole-btn-jira:hover {
-            background: #0052cc;
-            color: #fff;
-        }
-        .wormhole-btn-github {
-            border-color: #238636;
+        .wormhole-link-github {
             color: #238636;
-        }
-        .wormhole-btn-github:hover {
-            background: #238636;
-            color: #fff;
         }
     `;
     document.head.appendChild(style);

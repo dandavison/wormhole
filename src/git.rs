@@ -57,13 +57,17 @@ pub fn github_repo_from_remote(path: &Path) -> Option<String> {
 }
 
 fn parse_github_repo(url: &str) -> Option<String> {
-    if let Some(rest) = url.strip_prefix("git@github.com:") {
-        Some(rest.strip_suffix(".git").unwrap_or(rest).to_string())
-    } else if let Some(rest) = url.strip_prefix("https://github.com/") {
-        Some(rest.strip_suffix(".git").unwrap_or(rest).to_string())
+    let rest = if let Some(r) = url.strip_prefix("git@github.com:") {
+        r
+    } else if let Some(r) = url.strip_prefix("https://github.com/") {
+        r
+    } else if url.contains("@github.com:") {
+        // Handle org-*@github.com:owner/repo format (GitHub App SSH URLs)
+        url.split("@github.com:").nth(1)?
     } else {
-        None
-    }
+        return None;
+    };
+    Some(rest.strip_suffix(".git").unwrap_or(rest).to_string())
 }
 
 pub struct Worktree {

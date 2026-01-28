@@ -68,9 +68,14 @@ pub fn write_wormhole_env_vars(project: &Project) {
             .clone()
             .or_else(|| git::github_repo_from_remote(&project.path))
             .unwrap_or_default();
-        let github_pr_url = match (&project.github_repo, project.github_pr) {
-            (Some(repo), Some(pr)) => format!("https://github.com/{}/pull/{}", repo, pr),
-            _ => String::new(),
+        let github_pr_url = if !github_repo.is_empty() {
+            project
+                .github_pr
+                .or_else(|| crate::github::get_open_pr_number(project))
+                .map(|pr| format!("https://github.com/{}/pull/{}", github_repo, pr))
+                .unwrap_or_default()
+        } else {
+            String::new()
         };
 
         fs::write(

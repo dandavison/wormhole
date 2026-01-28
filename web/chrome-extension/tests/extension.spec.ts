@@ -37,8 +37,8 @@ test.describe('GitHub Integration', () => {
     const container = page.locator('.wormhole-vscode-container.expanded');
     await expect(container).toBeVisible({ timeout: 15000 });
 
-    await expect(container.locator('.wormhole-toolbar-maximize')).toBeVisible();
-    await expect(container.locator('.wormhole-toolbar-close')).toBeVisible();
+    await expect(container.locator('.wormhole-control-maximize')).toBeVisible();
+    await expect(container.locator('.wormhole-control-close')).toBeVisible();
     await expect(container.locator('iframe')).toBeVisible();
   });
 
@@ -54,7 +54,7 @@ test.describe('GitHub Integration', () => {
     const container = page.locator('.wormhole-vscode-container.expanded');
     await expect(container).toBeVisible({ timeout: 15000 });
 
-    const maximizeBtn = container.locator('.wormhole-toolbar-maximize');
+    const maximizeBtn = container.locator('.wormhole-control-maximize');
     await maximizeBtn.click();
 
     await expect(container).toHaveClass(/maximized/);
@@ -78,7 +78,7 @@ test.describe('GitHub Integration', () => {
     const container = page.locator('.wormhole-vscode-container');
     await expect(container).toHaveClass(/expanded/, { timeout: 15000 });
 
-    await container.locator('.wormhole-toolbar-close').click();
+    await container.locator('.wormhole-control-close').click();
 
     await expect(container).not.toHaveClass(/expanded/);
   });

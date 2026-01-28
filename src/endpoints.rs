@@ -15,6 +15,7 @@ pub fn list_projects() -> Response<Body> {
             let mut obj = serde_json::json!({ "name": project.name });
             if let Some(home) = &project.home_project {
                 obj["home_project"] = serde_json::json!(home);
+                obj["path"] = serde_json::json!(project.path);
                 if let Some(branch) = git::current_branch(&project.path) {
                     obj["branch"] = serde_json::json!(branch);
                 }

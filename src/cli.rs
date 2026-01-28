@@ -385,6 +385,7 @@ fn build_switch_query(
 }
 
 fn prompt_for_branch_if_needed(
+    client: &Client,
     task_id: &str,
     home_project: &Option<String>,
     branch: Option<String>,
@@ -392,8 +393,21 @@ fn prompt_for_branch_if_needed(
     if branch.is_some() {
         return Ok(branch);
     }
-    let is_new_task = home_project.is_some() && crate::task::get_task(task_id).is_none();
-    if !is_new_task {
+    if home_project.is_none() {
+        return Ok(None);
+    }
+    // Check if task already exists via HTTP
+    let response = client.get("/project/list")?;
+    let task_exists = serde_json::from_str::<serde_json::Value>(&response)
+        .ok()
+        .and_then(|v| v.get("current")?.as_array().cloned())
+        .map(|arr| {
+            arr.iter()
+                .any(|v| v.get("name").and_then(|n| n.as_str()) == Some(task_id))
+        })
+        .unwrap_or(false);
+
+    if task_exists {
         return Ok(None);
     }
     eprint!("Branch name for {}: ", task_id);
@@ -454,7 +468,8 @@ pub fn run(command: Command) -> Result<(), String> {
                 home_project,
                 branch,
             } => {
-                let branch = prompt_for_branch_if_needed(&name_or_path, &home_project, branch)?;
+                let branch =
+                    prompt_for_branch_if_needed(&client, &name_or_path, &home_project, branch)?;
                 let query = build_switch_query(&land_in, &name, &home_project, &branch);
                 let path = format!("/project/switch/{}{}", name_or_path, query);
                 client.get(&path)?;
@@ -620,8 +635,8 @@ pub fn run(command: Command) -> Result<(), String> {
 
         Command::Jira { command } => match command {
             JiraCommand::Sprint { command } => match command {
-                None => sprint_list("text"),
-                Some(SprintCommand::List { output }) => sprint_list(&output),
+                None => sprint_list(&client, "text"),
+                Some(SprintCommand::List { output }) => sprint_list(&client, &output),
                 Some(SprintCommand::Show { output }) => sprint_show(&output),
                 Some(SprintCommand::Create { output, overrides }) => {
                     sprint_create(&client, overrides, &output)
@@ -669,8 +684,10 @@ pub fn run(command: Command) -> Result<(), String> {
 }
 
 fn sprint_create(client: &Client, overrides: Vec<String>, output: &str) -> Result<(), String> {
+    use rustyline::DefaultEditor;
     use std::collections::HashMap;
     use std::env;
+    use std::path::PathBuf;
 
     let default_home = env::var("WORMHOLE_DEFAULT_HOME_PROJECT").ok();
 
@@ -684,21 +701,28 @@ fn sprint_create(client: &Client, overrides: Vec<String>, output: &str) -> Resul
         home_overrides.insert(ticket.clone(), home.clone());
     }
 
-    // Get sprint issues
-    let issues = jira::get_sprint_issues()?;
-
-    // Get existing tasks
+    // Get existing tasks from daemon (includes path and branch)
     let response = client.get("/project/list")?;
-    let existing: std::collections::HashSet<String> =
+    let existing_tasks: HashMap<String, (PathBuf, String)> =
         serde_json::from_str::<serde_json::Value>(&response)
             .ok()
             .and_then(|v| v.get("current")?.as_array().cloned())
             .map(|arr| {
                 arr.iter()
-                    .filter_map(|v| v.get("name")?.as_str().map(String::from))
+                    .filter_map(|v| {
+                        let name = v.get("name")?.as_str()?;
+                        let path = v.get("path")?.as_str()?;
+                        let branch = v.get("branch")?.as_str().unwrap_or(name);
+                        Some((name.to_string(), (PathBuf::from(path), branch.to_string())))
+                    })
                     .collect()
             })
             .unwrap_or_default();
+
+    // Get sprint issues
+    let issues = jira::get_sprint_issues()?;
+
+    let mut rl = DefaultEditor::new().map_err(|e| format!("Failed to init editor: {}", e))?;
 
     let mut result = SprintCreateResult {
         created: Vec::new(),
@@ -707,11 +731,6 @@ fn sprint_create(client: &Client, overrides: Vec<String>, output: &str) -> Resul
     };
 
     for issue in &issues {
-        if existing.contains(&issue.key) {
-            result.skipped.push(issue.key.clone());
-            continue;
-        }
-
         let home = match home_overrides.get(&issue.key).or(default_home.as_ref()) {
             Some(h) => h,
             None => {
@@ -720,12 +739,49 @@ fn sprint_create(client: &Client, overrides: Vec<String>, output: &str) -> Resul
             }
         };
 
-        let path = format!("/project/create/{}?home-project={}", issue.key, home);
+        // Check if task exists and has a PR
+        let existing = existing_tasks.get(&issue.key);
+        let has_pr = existing
+            .map(|(path, _)| crate::github::get_pr_status(path).is_some())
+            .unwrap_or(false);
+
+        if let Some(_reason) = should_skip_issue(&issue.status, has_pr) {
+            result.skipped.push(issue.key.clone());
+            continue;
+        }
+
+        // Determine default branch name
+        let default_branch = existing
+            .map(|(_, branch)| branch.clone())
+            .unwrap_or_else(|| to_kebab_case(&issue.summary));
+
+        // Prompt for branch name
+        let prompt = format!("{} [{}]: ", issue.key, issue.summary);
+        let branch = match rl.readline_with_initial(&prompt, (&default_branch, "")) {
+            Ok(line) => {
+                let trimmed = line.trim();
+                if trimmed.is_empty() {
+                    default_branch
+                } else {
+                    trimmed.to_string()
+                }
+            }
+            Err(rustyline::error::ReadlineError::Interrupted)
+            | Err(rustyline::error::ReadlineError::Eof) => {
+                break;
+            }
+            Err(e) => return Err(format!("Input error: {}", e)),
+        };
+
+        let path = format!(
+            "/project/create/{}?home-project={}&branch={}",
+            issue.key, home, branch
+        );
         client.get(&path)?;
         result.created.push(CreatedTask {
             home: home.clone(),
             key: issue.key.clone(),
-            summary: issue.summary.clone(),
+            summary: branch,
         });
     }
 
@@ -740,22 +796,37 @@ fn sprint_create(client: &Client, overrides: Vec<String>, output: &str) -> Resul
     Ok(())
 }
 
-fn sprint_list(output: &str) -> Result<(), String> {
+fn sprint_list(client: &Client, output: &str) -> Result<(), String> {
     use crate::github::{self, PrStatus};
-    use crate::task;
+    use std::collections::HashMap;
     use std::env;
+    use std::path::PathBuf;
     use std::thread;
 
     let issues = jira::get_sprint_issues()?;
+
+    // Get task paths from daemon
+    let response = client.get("/project/list")?;
+    let task_paths: HashMap<String, PathBuf> = serde_json::from_str::<serde_json::Value>(&response)
+        .ok()
+        .and_then(|v| v.get("current")?.as_array().cloned())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| {
+                    let name = v.get("name")?.as_str()?;
+                    let path = v.get("path")?.as_str()?;
+                    Some((name.to_string(), PathBuf::from(path)))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
 
     if output == "json" {
         let pr_handles: Vec<_> = issues
             .iter()
             .map(|issue| {
-                let key = issue.key.clone();
-                thread::spawn(move || {
-                    task::get_task(&key).and_then(|t| github::get_pr_status(&t.path))
-                })
+                let path = task_paths.get(&issue.key).cloned();
+                thread::spawn(move || path.and_then(|p| github::get_pr_status(&p)))
             })
             .collect();
 
@@ -786,10 +857,8 @@ fn sprint_list(output: &str) -> Result<(), String> {
         let pr_handles: Vec<_> = issues
             .iter()
             .map(|issue| {
-                let key = issue.key.clone();
-                thread::spawn(move || {
-                    task::get_task(&key).and_then(|t| github::get_pr_status(&t.path))
-                })
+                let path = task_paths.get(&issue.key).cloned();
+                thread::spawn(move || path.and_then(|p| github::get_pr_status(&p)))
             })
             .collect();
 
@@ -872,4 +941,75 @@ fn sprint_show(output: &str) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+fn to_kebab_case(s: &str) -> String {
+    s.chars()
+        .filter_map(|c| {
+            if c.is_alphanumeric() {
+                Some(c.to_ascii_lowercase())
+            } else if c.is_whitespace() || c == '-' || c == '_' {
+                Some('-')
+            } else {
+                None
+            }
+        })
+        .collect::<String>()
+        .split('-')
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join("-")
+}
+
+/// Determines if we should prompt for a branch name for this issue.
+/// Returns None if we should prompt, or Some(reason) if we should skip.
+fn should_skip_issue(status: &str, has_pr: bool) -> Option<&'static str> {
+    let status_lower = status.to_lowercase();
+    if status_lower == "done" || status_lower == "closed" || status_lower == "resolved" {
+        return Some("done");
+    }
+    if has_pr {
+        return Some("has_pr");
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_to_kebab_case() {
+        assert_eq!(to_kebab_case("Hello World"), "hello-world");
+        assert_eq!(
+            to_kebab_case("[Jan] Standalone activity CLI integration"),
+            "jan-standalone-activity-cli-integration"
+        );
+        assert_eq!(
+            to_kebab_case("Fix PollActivityTaskQueueResponse proto doc comments"),
+            "fix-pollactivitytaskqueueresponse-proto-doc-comments"
+        );
+        assert_eq!(to_kebab_case("Multiple   spaces"), "multiple-spaces");
+    }
+
+    #[test]
+    fn test_should_skip_done_issues() {
+        assert_eq!(should_skip_issue("Done", false), Some("done"));
+        assert_eq!(should_skip_issue("DONE", false), Some("done"));
+        assert_eq!(should_skip_issue("Closed", false), Some("done"));
+        assert_eq!(should_skip_issue("Resolved", false), Some("done"));
+    }
+
+    #[test]
+    fn test_should_skip_issues_with_pr() {
+        assert_eq!(should_skip_issue("In Progress", true), Some("has_pr"));
+        assert_eq!(should_skip_issue("In Review", true), Some("has_pr"));
+    }
+
+    #[test]
+    fn test_should_prompt_for_active_issues_without_pr() {
+        assert_eq!(should_skip_issue("In Progress", false), None);
+        assert_eq!(should_skip_issue("In Review", false), None);
+        assert_eq!(should_skip_issue("To Do", false), None);
+    }
 }

@@ -1,5 +1,5 @@
 // Wormhole GitHub/JIRA Integration
-// Adds Terminal, Cursor, and cross-linking buttons to GitHub and JIRA pages
+// Adds Terminal, Cursor, VSCode buttons and cross-linking to GitHub and JIRA pages
 
 const WORMHOLE_PORT = 7117;
 const WORMHOLE_BASE = `http://localhost:${WORMHOLE_PORT}`;
@@ -10,6 +10,10 @@ let cachedUrl = null;
 
 // Prevent concurrent injection
 let injecting = false;
+
+// VSCode iframe state
+let vscodeExpanded = false;
+let vscodeMaximized = false;
 
 function isGitHubPage() {
     return window.location.hostname === 'github.com';
@@ -46,11 +50,13 @@ function createButtons(info) {
 
     let html = '';
 
-    // Only show Terminal/Cursor buttons if we have a task/project to switch to
+    // Only show Terminal/Cursor/VSCode buttons if we have a task/project to switch to
     if (info?.name && info?.kind) {
         html += `
             <button class="wormhole-btn wormhole-btn-terminal" title="Open in Terminal">Terminal</button>
             <button class="wormhole-btn wormhole-btn-cursor" title="Open in Cursor">Cursor</button>
+            <button class="wormhole-btn wormhole-btn-vscode" title="Open embedded VSCode">VSCode</button>
+            <button class="wormhole-btn wormhole-btn-maximize" title="Maximize VSCode" style="display:none;">Maximize</button>
         `;
     }
 
@@ -70,6 +76,8 @@ function createButtons(info) {
 
     const termBtn = container.querySelector('.wormhole-btn-terminal');
     const cursorBtn = container.querySelector('.wormhole-btn-cursor');
+    const vscodeBtn = container.querySelector('.wormhole-btn-vscode');
+    const maximizeBtn = container.querySelector('.wormhole-btn-maximize');
 
     if (termBtn) {
         termBtn.addEventListener('click', (e) => {
@@ -86,6 +94,115 @@ function createButtons(info) {
             switchProject('editor');
         });
     }
+
+    if (vscodeBtn) {
+        vscodeBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleVSCode(info.name, vscodeBtn, maximizeBtn);
+        });
+    }
+
+    if (maximizeBtn) {
+        maximizeBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleMaximize(maximizeBtn);
+        });
+    }
+
+    return container;
+}
+
+async function toggleVSCode(projectName, vscodeBtn, maximizeBtn) {
+    let container = document.querySelector('.wormhole-vscode-container');
+
+    if (vscodeExpanded) {
+        // Close
+        if (container) {
+            container.classList.remove('expanded');
+        }
+        vscodeBtn.textContent = 'VSCode';
+        vscodeBtn.classList.remove('active');
+        maximizeBtn.style.display = 'none';
+        vscodeExpanded = false;
+
+        // If maximized, restore first
+        if (vscodeMaximized) {
+            toggleMaximize(maximizeBtn);
+        }
+    } else {
+        // Open
+        vscodeBtn.textContent = 'Loading...';
+        vscodeBtn.disabled = true;
+
+        try {
+            const resp = await fetch(`${WORMHOLE_BASE}/project/vscode/${encodeURIComponent(projectName)}`);
+            if (!resp.ok) {
+                console.warn('[Wormhole] VSCode server failed:', await resp.text());
+                vscodeBtn.textContent = 'VSCode';
+                vscodeBtn.disabled = false;
+                return;
+            }
+
+            const data = await resp.json();
+
+            if (!container) {
+                container = createVSCodeContainer();
+            }
+
+            const iframe = container.querySelector('iframe');
+            iframe.src = data.url;
+
+            container.classList.add('expanded');
+            vscodeBtn.textContent = 'Close';
+            vscodeBtn.classList.add('active');
+            maximizeBtn.style.display = 'inline-block';
+            vscodeExpanded = true;
+
+            // Also switch to the project (skip editor since we're showing embedded)
+            fetch(`${WORMHOLE_BASE}/project/switch/${encodeURIComponent(projectName)}?skip-editor=true`);
+        } catch (err) {
+            console.warn('[Wormhole] VSCode error:', err.message);
+            vscodeBtn.textContent = 'VSCode';
+        } finally {
+            vscodeBtn.disabled = false;
+        }
+    }
+}
+
+function toggleMaximize(maximizeBtn) {
+    const container = document.querySelector('.wormhole-vscode-container');
+    if (!container) return;
+
+    if (vscodeMaximized) {
+        container.classList.remove('maximized');
+        maximizeBtn.textContent = 'Maximize';
+        document.body.style.overflow = '';
+        vscodeMaximized = false;
+    } else {
+        container.classList.add('maximized');
+        maximizeBtn.textContent = 'Restore';
+        document.body.style.overflow = 'hidden';
+        vscodeMaximized = true;
+    }
+}
+
+function createVSCodeContainer() {
+    const container = document.createElement('div');
+    container.className = 'wormhole-vscode-container';
+    container.innerHTML = '<iframe></iframe>';
+    document.body.appendChild(container);
+
+    // ESC to restore from maximized
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && vscodeMaximized) {
+            const maximizeBtn = document.querySelector('.wormhole-btn-maximize');
+            if (maximizeBtn) {
+                toggleMaximize(maximizeBtn);
+            }
+        }
+    });
 
     return container;
 }
@@ -146,11 +263,19 @@ function injectStyles() {
             background: #666;
             color: #fff;
         }
-        .wormhole-btn-cursor {
+        .wormhole-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .wormhole-btn-cursor, .wormhole-btn-vscode {
             border-color: #0066cc;
             color: #0066cc;
         }
-        .wormhole-btn-cursor:hover {
+        .wormhole-btn-cursor:hover, .wormhole-btn-vscode:hover {
+            background: #0066cc;
+            color: #fff;
+        }
+        .wormhole-btn-vscode.active {
             background: #0066cc;
             color: #fff;
         }
@@ -168,6 +293,30 @@ function injectStyles() {
         }
         .wormhole-link-github {
             color: #238636;
+        }
+        .wormhole-vscode-container {
+            display: none;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 50vh;
+            background: #fff;
+            border-top: 2px solid #0066cc;
+            z-index: 9999;
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.2);
+        }
+        .wormhole-vscode-container.expanded {
+            display: block;
+        }
+        .wormhole-vscode-container iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        .wormhole-vscode-container.maximized {
+            top: 0;
+            height: 100vh;
         }
     `;
     document.head.appendChild(style);
@@ -271,7 +420,11 @@ const observer = new MutationObserver(() => {
         retryCount = 0;
         cachedDescribe = null;
         cachedUrl = null;
+        vscodeExpanded = false;
+        vscodeMaximized = false;
         document.querySelectorAll('.wormhole-buttons').forEach(el => el.remove());
+        document.querySelectorAll('.wormhole-vscode-container').forEach(el => el.remove());
+        document.body.style.overflow = '';
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(injectButtons, 100);
     } else if (!document.querySelector('.wormhole-buttons') && shouldInject() && !injecting) {

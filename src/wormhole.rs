@@ -286,6 +286,43 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
                     .unwrap(),
             ))
         }
+    } else if let Some(name) = path.strip_prefix("/project/vscode/") {
+        let name = name.trim().to_string();
+        let result = {
+            let projects = projects::lock();
+            projects.by_name(&name).map(|p| (p.name.clone(), p.path.clone()))
+        };
+
+        match result {
+            Some((task_name, task_path)) => {
+                match crate::serve_web::manager().get_or_start(&task_name, &task_path) {
+                    Ok(port) => {
+                        let folder_encoded = crate::endpoints::url_encode(&task_path.to_string_lossy());
+                        let url = format!("http://localhost:{}/?folder={}", port, folder_encoded);
+                        Ok(cors_response(
+                            Response::builder()
+                                .header("Content-Type", "application/json")
+                                .body(Body::from(
+                                    serde_json::json!({ "url": url }).to_string()
+                                ))
+                                .unwrap(),
+                        ))
+                    }
+                    Err(e) => Ok(cors_response(
+                        Response::builder()
+                            .status(StatusCode::INTERNAL_SERVER_ERROR)
+                            .body(Body::from(format!("Failed to start VSCode server: {}", e)))
+                            .unwrap(),
+                    )),
+                }
+            }
+            None => Ok(cors_response(
+                Response::builder()
+                    .status(StatusCode::NOT_FOUND)
+                    .body(Body::from(format!("Project '{}' not found", name)))
+                    .unwrap(),
+            )),
+        }
     } else if path == "/kv" {
         Ok(crate::kv::get_all_kv())
     } else if let Some(kv_path) = path.strip_prefix("/kv/") {

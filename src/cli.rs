@@ -8,18 +8,28 @@ use crate::config;
 use crate::jira;
 
 #[derive(Serialize)]
+struct CreatedTask {
+    home: String,
+    key: String,
+    summary: String,
+}
+
+impl CreatedTask {
+    fn render_terminal(&self) -> String {
+        format!("{:<18} {:<10} {}", self.home, self.key, self.summary)
+    }
+}
+
+#[derive(Serialize)]
 struct SprintCreateResult {
-    created: Vec<String>,
+    created: Vec<CreatedTask>,
     skipped: Vec<String>,
     no_home: Vec<String>,
 }
 
 impl SprintCreateResult {
     fn render_terminal(&self) -> String {
-        let mut lines = Vec::new();
-        for task in &self.created {
-            lines.push(format!("Created task {}", task));
-        }
+        let mut lines: Vec<String> = self.created.iter().map(|t| t.render_terminal()).collect();
         for key in &self.no_home {
             lines.push(format!("Skipping {} (no home project)", key));
         }
@@ -712,7 +722,11 @@ fn sprint_create(client: &Client, overrides: Vec<String>, output: &str) -> Resul
 
         let path = format!("/project/create/{}?home-project={}", issue.key, home);
         client.get(&path)?;
-        result.created.push(format!("{} ({})", issue.key, home));
+        result.created.push(CreatedTask {
+            home: home.clone(),
+            key: issue.key.clone(),
+            summary: issue.summary.clone(),
+        });
     }
 
     if output == "json" {

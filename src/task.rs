@@ -43,7 +43,16 @@ pub fn create_task(task_id: &str, home: &str, branch: Option<&str>) -> Result<Pr
     // Refresh to pick up the new task
     projects::refresh_tasks();
 
-    get_task(task_id).ok_or_else(|| format!("Failed to create task '{}'", task_id))
+    let task = get_task(task_id).ok_or_else(|| format!("Failed to create task '{}'", task_id))?;
+
+    // Add to ring so it appears in project list
+    {
+        let mut projects = projects::lock();
+        projects.add_project(task.clone());
+        projects.apply(projects::Mutation::Insert, &task.name);
+    }
+
+    Ok(task)
 }
 
 pub fn open_task(

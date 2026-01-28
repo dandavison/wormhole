@@ -94,8 +94,8 @@ impl<'a> Projects<'a> {
         self.0
             .ring
             .iter()
-            .filter(|n| terminal_windows.contains(n))
             .filter_map(|n| self.0.all.get(n))
+            .filter(|p| terminal_windows.contains(&p.name) || p.home_project.is_some())
             .cloned()
             .collect()
     }
@@ -152,6 +152,12 @@ impl<'a> Projects<'a> {
             true
         } else {
             false
+        }
+    }
+
+    pub fn remove_from_ring(&mut self, name: &str) {
+        if let Some(i) = self.ring_index(name) {
+            self.0.ring.remove(i);
         }
     }
 
@@ -222,7 +228,10 @@ pub fn load() {
     // First, discover all tasks (worktrees) from known project paths
     let tasks = discover_tasks(HashMap::new());
     for (name, project) in tasks {
-        projects.0.all.insert(name, project);
+        projects.0.all.insert(name.clone(), project);
+        if !projects.0.ring.contains(&name) {
+            projects.0.ring.push_back(name);
+        }
     }
 
     // Build a reverse map from canonical path to disambiguated name

@@ -93,10 +93,14 @@ pub fn remove_project(name: &str) -> Response<Body> {
 }
 
 pub fn close_project(name: &str) {
-    let projects = projects::lock();
+    let mut projects = projects::lock();
     if let Some(p) = projects.resolve(name) {
         config::TERMINAL.close(&p);
         config::editor().close(&p);
+        // Remove tasks from ring so they don't appear in project list
+        if p.home_project.is_some() {
+            projects.remove_from_ring(&p.name);
+        }
     }
     projects.print();
 }

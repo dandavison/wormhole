@@ -212,7 +212,7 @@ pub fn load() {
     let mut projects = lock();
 
     // First, discover all tasks (worktrees) from known project paths
-    let tasks = discover_tasks();
+    let tasks = discover_tasks(HashMap::new());
     for (name, project) in tasks {
         projects.0.all.insert(name, project);
     }
@@ -269,20 +269,11 @@ pub fn load() {
     }
 }
 
-fn discover_tasks() -> HashMap<String, Project> {
+fn discover_tasks(additional_paths: HashMap<String, PathBuf>) -> HashMap<String, Project> {
     let mut project_paths: HashMap<String, PathBuf> = config::available_projects().into_iter().collect();
 
-    // Also include any projects already in the store (e.g., dynamically opened ones)
-    {
-        if let Ok(store) = STORE.lock() {
-            for (name, project) in &store.all {
-                if project.home_project.is_none() {
-                    project_paths
-                        .entry(name.clone())
-                        .or_insert_with(|| project.path.clone());
-                }
-            }
-        }
+    for (name, path) in additional_paths {
+        project_paths.entry(name).or_insert(path);
     }
 
     project_paths
@@ -320,10 +311,19 @@ fn discover_tasks() -> HashMap<String, Project> {
 }
 
 pub fn refresh_tasks() {
-    let mut projects = lock();
-    let tasks = discover_tasks();
+    let additional_paths: HashMap<String, PathBuf> = {
+        let store = STORE.lock().unwrap();
+        store
+            .all
+            .iter()
+            .filter(|(_, p)| p.home_project.is_none())
+            .map(|(name, project)| (name.clone(), project.path.clone()))
+            .collect()
+    };
 
-    // Add new tasks, update existing ones
+    let tasks = discover_tasks(additional_paths);
+
+    let mut projects = lock();
     for (name, project) in tasks {
         if !projects.0.all.contains_key(&name) {
             projects.0.all.insert(name, project);

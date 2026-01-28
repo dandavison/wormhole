@@ -1,8 +1,11 @@
 build:
 	cargo build --release
 
+test:
+	cargo nextest run --bin wormhole --fail-fast
+
 integration-test:
-	cargo nextest run --test test_integration --fail-fast --no-capture
+	cargo nextest run --test '*' --fail-fast --no-capture
 
 extension-test:
 	cd web/chrome-extension && npm install && npm test

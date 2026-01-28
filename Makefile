@@ -1,6 +1,9 @@
 build:
 	cargo build --release
 
+gui:
+	$(MAKE) -C gui clean dist
+
 test:
 	cargo nextest run --bin wormhole --fail-fast
 
@@ -12,6 +15,5 @@ extension-test:
 
 reload: build
 	./target/release/wormhole server start
-	$(MAKE) -C gui clean dist
 
 .PHONY: test serve serve-tmux build reload integration-test extension-test

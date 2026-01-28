@@ -190,35 +190,39 @@ function toggleMaximize(maximizeBtn) {
 
     maximizeBtn.textContent = newText;
     if (toolbarBtn) toolbarBtn.textContent = newText;
+
+    // Sync floating control button
+    const controlBtn = document.querySelector('.wormhole-control-maximize');
+    if (controlBtn) controlBtn.textContent = newText;
 }
 
 function createVSCodeContainer() {
     const container = document.createElement('div');
     container.className = 'wormhole-vscode-container';
     container.innerHTML = `
-        <div class="wormhole-vscode-toolbar">
-            <button class="wormhole-toolbar-btn wormhole-toolbar-maximize">Maximize</button>
-            <button class="wormhole-toolbar-btn wormhole-toolbar-close">Close</button>
-        </div>
         <iframe></iframe>
+        <div class="wormhole-vscode-controls">
+            <button class="wormhole-control-btn wormhole-control-maximize">Maximize</button>
+            <button class="wormhole-control-btn wormhole-control-close">Close</button>
+        </div>
     `;
     document.body.appendChild(container);
 
-    const toolbarMaximize = container.querySelector('.wormhole-toolbar-maximize');
-    const toolbarClose = container.querySelector('.wormhole-toolbar-close');
+    const controlMaximize = container.querySelector('.wormhole-control-maximize');
+    const controlClose = container.querySelector('.wormhole-control-close');
 
-    toolbarMaximize.addEventListener('click', () => {
-        toggleMaximizeToolbar(toolbarMaximize);
+    controlMaximize.addEventListener('click', () => {
+        toggleMaximizeToolbar(controlMaximize);
     });
 
-    toolbarClose.addEventListener('click', () => {
+    controlClose.addEventListener('click', () => {
         closeVSCode();
     });
 
     // ESC to restore from maximized
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && vscodeMaximized) {
-            toggleMaximizeToolbar(container.querySelector('.wormhole-toolbar-maximize'));
+            toggleMaximizeToolbar(container.querySelector('.wormhole-control-maximize'));
         }
     });
 
@@ -372,34 +376,35 @@ function injectStyles() {
             box-shadow: 0 -4px 20px rgba(0,0,0,0.2);
         }
         .wormhole-vscode-container.expanded {
-            display: flex;
-            flex-direction: column;
-        }
-        .wormhole-vscode-toolbar {
-            display: flex;
-            gap: 0.5rem;
-            padding: 0.25rem 0.5rem;
-            background: #1e1e1e;
-            justify-content: flex-end;
-            flex-shrink: 0;
-        }
-        .wormhole-toolbar-btn {
-            font-family: "SF Mono", "Menlo", "Monaco", monospace;
-            font-size: 0.7rem;
-            padding: 0.2rem 0.6rem;
-            border: 1px solid #555;
-            background: #333;
-            color: #ccc;
-            cursor: pointer;
-        }
-        .wormhole-toolbar-btn:hover {
-            background: #555;
-            color: #fff;
+            display: block;
         }
         .wormhole-vscode-container iframe {
             width: 100%;
-            flex: 1;
+            height: 100%;
             border: none;
+        }
+        .wormhole-vscode-controls {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            display: flex;
+            gap: 0.5rem;
+            z-index: 10;
+        }
+        .wormhole-control-btn {
+            font-family: "SF Mono", "Menlo", "Monaco", monospace;
+            font-size: 0.7rem;
+            padding: 0.3rem 0.7rem;
+            border: 1px solid rgba(255,255,255,0.3);
+            background: rgba(30, 30, 30, 0.85);
+            color: #fff;
+            cursor: pointer;
+            backdrop-filter: blur(4px);
+            border-radius: 3px;
+        }
+        .wormhole-control-btn:hover {
+            background: rgba(60, 60, 60, 0.95);
+            border-color: rgba(255,255,255,0.5);
         }
         .wormhole-vscode-container.maximized {
             top: 0;

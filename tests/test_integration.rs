@@ -124,6 +124,122 @@ fn test_close_project() {
 }
 
 #[test]
+fn test_project_list_sorted() {
+    let test = harness::WormholeTest::new(8944);
+
+    let proj_b = format!("{}sort-beta", TEST_PREFIX);
+    let proj_a = format!("{}sort-alpha", TEST_PREFIX);
+    let dir_b = format!("/tmp/{}", proj_b);
+    let dir_a = format!("/tmp/{}", proj_a);
+    let task_b1 = format!("{}SORT-B1", TEST_PREFIX);
+    let task_a1 = format!("{}SORT-A1", TEST_PREFIX);
+
+    // Create projects in reverse order
+    let _ = std::fs::remove_dir_all(&dir_b);
+    let _ = std::fs::remove_dir_all(&dir_a);
+
+    for (dir, proj) in [(&dir_b, &proj_b), (&dir_a, &proj_a)] {
+        std::fs::create_dir_all(dir).unwrap();
+        Command::new("git")
+            .args(["init"])
+            .current_dir(dir)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "--allow-empty", "-m", "initial"])
+            .current_dir(dir)
+            .output()
+            .unwrap();
+        test.create_project(dir, proj);
+    }
+
+    // Create tasks
+    test.create_task(&task_b1, &proj_b);
+    test.create_task(&task_a1, &proj_a);
+
+    // Open all in reverse alphabetical order
+    test.hs_get(&format!("/project/switch/{}", task_b1)).unwrap();
+    test.hs_get(&format!("/project/switch/{}", proj_b)).unwrap();
+    test.hs_get(&format!("/project/switch/{}", task_a1)).unwrap();
+    test.hs_get(&format!("/project/switch/{}", proj_a)).unwrap();
+
+    // Get project list
+    let list_json = test.hs_get("/project/list").unwrap();
+    let list: Value = serde_json::from_str(&list_json).unwrap();
+    let current = list["current"].as_array().unwrap();
+
+    let names: Vec<&str> = current
+        .iter()
+        .filter_map(|e| e["name"].as_str())
+        .filter(|n| n.starts_with(TEST_PREFIX))
+        .collect();
+
+    // Projects without home_project first (alphabetically), then tasks (by home, then name)
+    assert_eq!(
+        names,
+        vec![&proj_a, &proj_b, &task_a1, &task_b1],
+        "Expected sorted order: projects first alphabetically, then tasks by (home, name)"
+    );
+}
+
+#[test]
+fn test_close_task_removes_from_list() {
+    let test = harness::WormholeTest::new(8943);
+
+    let home_proj = format!("{}close-home", TEST_PREFIX);
+    let home_dir = format!("/tmp/{}", home_proj);
+    let task_id = format!("{}CLOSE-TASK", TEST_PREFIX);
+
+    let _ = std::fs::remove_dir_all(&home_dir);
+    std::fs::create_dir_all(&home_dir).unwrap();
+    Command::new("git")
+        .args(["init"])
+        .current_dir(&home_dir)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["commit", "--allow-empty", "-m", "initial"])
+        .current_dir(&home_dir)
+        .output()
+        .unwrap();
+
+    test.create_project(&home_dir, &home_proj);
+    test.create_task(&task_id, &home_proj);
+
+    // Switch to task so it appears in project list
+    test.hs_get(&format!("/project/switch/{}", task_id)).unwrap();
+    test.assert_focus(Editor(&task_id));
+
+    // Verify task is in project list
+    let list_json = test.hs_get("/project/list").unwrap();
+    let list: Value = serde_json::from_str(&list_json).unwrap();
+    let current = list["current"].as_array().unwrap();
+    assert!(
+        current.iter().any(|e| e["name"].as_str() == Some(&task_id)),
+        "Task should be in list before close"
+    );
+
+    // Close the task
+    test.hs_post(&format!("/project/close/{}", task_id)).unwrap();
+
+    // Wait for window to close
+    assert!(
+        test.wait_until(|| !test.window_exists(&task_id), 5),
+        "Task window should be closed"
+    );
+
+    // Verify task is NOT in project list
+    let list_json = test.hs_get("/project/list").unwrap();
+    let list: Value = serde_json::from_str(&list_json).unwrap();
+    let current = list["current"].as_array().unwrap();
+    assert!(
+        !current.iter().any(|e| e["name"].as_str() == Some(&task_id)),
+        "Task should NOT be in list after close, got: {:?}",
+        current.iter().map(|e| e["name"].as_str()).collect::<Vec<_>>()
+    );
+}
+
+#[test]
 fn test_open_github_url() {
     let test = harness::WormholeTest::new(8934);
 

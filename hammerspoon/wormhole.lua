@@ -188,6 +188,64 @@ function M.bindProjectHotkeys(keymap)
     end
 end
 
+-- Neighbor overlay (shows prev/next when ctrl+cmd held)
+local neighborAlertId = nil
+local neighborTap = nil
+
+local function showNeighborOverlay()
+    if neighborAlertId then return end
+    hs.http.asyncGet(M.host .. "/project/neighbors", nil, function(status, body)
+        if status ~= 200 or neighborAlertId then return end
+        local ok, data = pcall(hs.json.decode, body)
+        if not ok then return end
+
+        local prev = data.previous or "—"
+        local curr = data.current or "—"
+        local next = data.next or "—"
+
+        local styledText = hs.styledtext.new(prev .. " ←", {
+            font = { size = 14 },
+            color = { white = 0.6, alpha = 1 }
+        }) .. hs.styledtext.new("       " .. curr .. "       ", {
+            font = { size = 16, name = "Menlo-Bold" },
+            color = { white = 1, alpha = 1 }
+        }) .. hs.styledtext.new("→ " .. next, {
+            font = { size = 14 },
+            color = { white = 0.6, alpha = 1 }
+        })
+
+        neighborAlertId = hs.alert.show(styledText, {
+            fillColor = { white = 0.1, alpha = 0.9 },
+            strokeColor = { white = 0.3, alpha = 1 },
+            strokeWidth = 2,
+            radius = 10,
+            fadeInDuration = 0.1,
+            fadeOutDuration = 0.1,
+            atScreenEdge = 0
+        }, "♾️")
+    end)
+end
+
+local function hideNeighborOverlay()
+    if neighborAlertId then
+        hs.alert.closeSpecific(neighborAlertId)
+        neighborAlertId = nil
+    end
+end
+
+function M.bindNeighborOverlay()
+    neighborTap = hs.eventtap.new({ hs.eventtap.event.types.flagsChanged }, function(event)
+        local flags = event:getFlags()
+        if flags.ctrl and flags.cmd and not flags.alt and not flags.shift then
+            showNeighborOverlay()
+        else
+            hideNeighborOverlay()
+        end
+        return false
+    end)
+    neighborTap:start()
+end
+
 function M.bindKeys(keymap)
     M.bindSelect({ "cmd" }, "f13")
     hs.hotkey.bind({ "cmd", "control" }, "left", M.previous)
@@ -195,6 +253,7 @@ function M.bindKeys(keymap)
     hs.hotkey.bind({ "cmd", "control" }, ".", M.pin)
     hs.hotkey.bind({ "cmd", "alt" }, "k", M.createHotkeyOverlay(keymap))
     M.bindProjectHotkeys(keymap)
+    M.bindNeighborOverlay()
 end
 
 return M

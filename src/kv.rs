@@ -2,61 +2,61 @@ use hyper::{Body, Response, StatusCode};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use crate::project::Project;
+use crate::project::{Project, StoreKey};
 use crate::projects;
 
-pub fn get_value(project_name: &str, key: &str) -> Response<Body> {
+pub fn get_value(key: &StoreKey, kv_key: &str) -> Response<Body> {
     let projects = projects::lock();
-    let Some(project) = projects.resolve(project_name) else {
+    let Some(project) = projects.by_key(key) else {
         return Response::builder()
             .status(StatusCode::NOT_FOUND)
-            .body(Body::from(format!("Project '{}' not found", project_name)))
+            .body(Body::from(format!("Project '{}' not found", key)))
             .unwrap();
     };
-    match project.kv.get(key) {
+    match project.kv.get(kv_key) {
         Some(value) => Response::new(Body::from(value.clone())),
         None => Response::builder()
             .status(StatusCode::NOT_FOUND)
             .body(Body::from(format!(
                 "Key '{}' not found in project '{}'",
-                key, project_name
+                kv_key, key
             )))
             .unwrap(),
     }
 }
 
-pub async fn set_value(project_name: &str, key: &str, body: Body) -> Response<Body> {
+pub async fn set_value(key: &StoreKey, kv_key: &str, body: Body) -> Response<Body> {
     let bytes = hyper::body::to_bytes(body).await.unwrap_or_default();
     let value = String::from_utf8_lossy(&bytes).to_string();
 
     let mut projects = projects::lock();
 
-    if let Some(project) = projects.get_mut(project_name) {
-        project.kv.insert(key.to_string(), value);
+    if let Some(project) = projects.get_mut(key) {
+        project.kv.insert(kv_key.to_string(), value);
         save_project_kv(project);
         Response::new(Body::empty())
     } else {
         Response::builder()
             .status(StatusCode::NOT_FOUND)
-            .body(Body::from(format!("Project '{}' not found", project_name)))
+            .body(Body::from(format!("Project '{}' not found", key)))
             .unwrap()
     }
 }
 
-pub fn set_value_sync(project_name: &str, key: &str, value: &str) {
+pub fn set_value_sync(key: &StoreKey, kv_key: &str, value: &str) {
     let mut projects = projects::lock();
 
-    if let Some(project) = projects.get_mut(project_name) {
-        project.kv.insert(key.to_string(), value.to_string());
+    if let Some(project) = projects.get_mut(key) {
+        project.kv.insert(kv_key.to_string(), value.to_string());
         save_project_kv(project);
     }
 }
 
-pub fn delete_value(project_name: &str, key: &str) -> Response<Body> {
+pub fn delete_value(key: &StoreKey, kv_key: &str) -> Response<Body> {
     let mut projects = projects::lock();
 
-    if let Some(project) = projects.get_mut(project_name) {
-        if project.kv.remove(key).is_some() {
+    if let Some(project) = projects.get_mut(key) {
+        if project.kv.remove(kv_key).is_some() {
             save_project_kv(project);
             Response::new(Body::empty())
         } else {
@@ -64,28 +64,28 @@ pub fn delete_value(project_name: &str, key: &str) -> Response<Body> {
                 .status(StatusCode::NOT_FOUND)
                 .body(Body::from(format!(
                     "Key '{}' not found in project '{}'",
-                    key, project_name
+                    kv_key, key
                 )))
                 .unwrap()
         }
     } else {
         Response::builder()
             .status(StatusCode::NOT_FOUND)
-            .body(Body::from(format!("Project '{}' not found", project_name)))
+            .body(Body::from(format!("Project '{}' not found", key)))
             .unwrap()
     }
 }
 
-pub fn get_project_kv(project_name: &str) -> Response<Body> {
+pub fn get_project_kv(key: &StoreKey) -> Response<Body> {
     let projects = projects::lock();
-    match projects.resolve(project_name) {
+    match projects.by_key(key) {
         Some(project) => {
             let json = serde_json::to_string_pretty(&project.kv).unwrap();
             Response::new(Body::from(json))
         }
         None => Response::builder()
             .status(StatusCode::NOT_FOUND)
-            .body(Body::from(format!("Project '{}' not found", project_name)))
+            .body(Body::from(format!("Project '{}' not found", key)))
             .unwrap(),
     }
 }

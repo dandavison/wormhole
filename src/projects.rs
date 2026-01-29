@@ -1,4 +1,4 @@
-use crate::project::Project;
+use crate::project::{Project, StoreKey};
 use crate::util::execute_command;
 use crate::wormhole::Application;
 use crate::{config, git, ps};
@@ -13,7 +13,7 @@ use std::time::Duration;
 /*
     - Projects are held in a ring for navigation (previous/current/next).
     - All known projects (including tasks) are stored in a HashMap.
-    - The ring contains names that reference the HashMap.
+    - The ring contains keys that reference the HashMap.
 
     - The currently active project is at ring index 0.
     - When adding a new project, we insert it to the right of current (index 1).
@@ -23,8 +23,8 @@ use std::time::Duration;
 */
 
 struct Store {
-    all: HashMap<String, Project>,
-    ring: VecDeque<String>,
+    all: HashMap<StoreKey, Project>,
+    ring: VecDeque<StoreKey>,
 }
 
 lazy_static! {
@@ -53,7 +53,7 @@ impl<'a> Projects<'a> {
         self.0
             .ring
             .iter()
-            .filter_map(|n| self.0.all.get(n))
+            .filter_map(|k| self.0.all.get(k))
             .collect()
     }
 
@@ -61,27 +61,27 @@ impl<'a> Projects<'a> {
         self.0.all.values_mut()
     }
 
-    pub fn names(&self) -> Vec<String> {
+    pub fn keys(&self) -> Vec<StoreKey> {
         self.0.ring.iter().cloned().collect()
     }
 
     pub fn previous(&self) -> Option<Project> {
-        self.0.ring.get(1).and_then(|n| self.0.all.get(n)).cloned()
+        self.0.ring.get(1).and_then(|k| self.0.all.get(k)).cloned()
     }
 
     pub fn current(&self) -> Option<Project> {
-        self.0.ring.front().and_then(|n| self.0.all.get(n)).cloned()
+        self.0.ring.front().and_then(|k| self.0.all.get(k)).cloned()
     }
 
     pub fn next(&self) -> Option<Project> {
-        self.0.ring.back().and_then(|n| self.0.all.get(n)).cloned()
+        self.0.ring.back().and_then(|k| self.0.all.get(k)).cloned()
     }
 
-    pub fn apply(&mut self, mutation: Mutation, name: &str) {
+    pub fn apply(&mut self, mutation: Mutation, key: &StoreKey) {
         match mutation {
             Mutation::None => {}
             Mutation::Insert => {
-                self.move_to_back(name);
+                self.move_to_back(key);
                 self.0.ring.rotate_right(1);
             }
             Mutation::RotateLeft => self.0.ring.rotate_left(1),
@@ -94,7 +94,7 @@ impl<'a> Projects<'a> {
         self.0
             .ring
             .iter()
-            .filter_map(|n| self.0.all.get(n))
+            .filter_map(|k| self.0.all.get(k))
             .filter(|p| terminal_windows.contains(&p.repo_name) || p.is_task())
             .cloned()
             .collect()
@@ -111,12 +111,13 @@ impl<'a> Projects<'a> {
         } else {
             path.file_name().unwrap().to_str().unwrap().to_string()
         };
-        if !self.0.all.contains_key(&name) {
+        let key = StoreKey::project(&name);
+        if !self.0.all.contains_key(&key) {
             ps!("projects::add");
             self.0.all.insert(
-                name.clone(),
+                key.clone(),
                 Project {
-                    repo_name: name.clone(),
+                    repo_name: name,
                     repo_path: path,
                     aliases: names,
                     kv: HashMap::new(),
@@ -126,7 +127,7 @@ impl<'a> Projects<'a> {
                     github_repo: None,
                 },
             );
-            self.0.ring.push_front(name);
+            self.0.ring.push_front(key);
         }
     }
 
@@ -144,9 +145,9 @@ impl<'a> Projects<'a> {
         }
     }
 
-    pub fn remove(&mut self, name: &str) -> bool {
-        if self.0.all.remove(name).is_some() {
-            if let Some(i) = self.ring_index(name) {
+    pub fn remove(&mut self, key: &StoreKey) -> bool {
+        if self.0.all.remove(key).is_some() {
+            if let Some(i) = self.ring_index(key) {
                 self.0.ring.remove(i);
             }
             true
@@ -155,22 +156,22 @@ impl<'a> Projects<'a> {
         }
     }
 
-    pub fn remove_from_ring(&mut self, name: &str) {
-        if let Some(i) = self.ring_index(name) {
+    pub fn remove_from_ring(&mut self, key: &StoreKey) {
+        if let Some(i) = self.ring_index(key) {
             self.0.ring.remove(i);
         }
     }
 
-    pub fn move_to_back(&mut self, name: &str) {
-        if let Some(i) = self.ring_index(name) {
-            if let Some(n) = self.0.ring.remove(i) {
-                self.0.ring.push_back(n);
+    pub fn move_to_back(&mut self, key: &StoreKey) {
+        if let Some(i) = self.ring_index(key) {
+            if let Some(k) = self.0.ring.remove(i) {
+                self.0.ring.push_back(k);
             }
         }
     }
 
-    pub fn set_last_application(&mut self, name: &str, application: Application) {
-        if let Some(p) = self.0.all.get_mut(name) {
+    pub fn set_last_application(&mut self, key: &StoreKey, application: Application) {
+        if let Some(p) = self.0.all.get_mut(key) {
             p.last_application = Some(application);
         }
     }
@@ -191,20 +192,16 @@ impl<'a> Projects<'a> {
         self.0.all.values().find(|p| p.repo_path == path).cloned()
     }
 
-    pub fn by_name(&self, name: &str) -> Option<Project> {
-        self.0.all.get(name).cloned()
+    pub fn by_key(&self, key: &StoreKey) -> Option<Project> {
+        self.0.all.get(key).cloned()
     }
 
-    pub fn resolve(&self, name: &str) -> Option<Project> {
-        self.by_name(name)
+    pub fn get_mut(&mut self, key: &StoreKey) -> Option<&mut Project> {
+        self.0.all.get_mut(key)
     }
 
-    pub fn get_mut(&mut self, name: &str) -> Option<&mut Project> {
-        self.0.all.get_mut(name)
-    }
-
-    fn ring_index(&self, name: &str) -> Option<usize> {
-        self.0.ring.iter().position(|n| n == name)
+    fn ring_index(&self, key: &StoreKey) -> Option<usize> {
+        self.0.ring.iter().position(|k| k == key)
     }
 
     pub fn print(&self) {
@@ -230,11 +227,11 @@ pub fn load() {
 
     // First, discover all tasks (worktrees) from known project paths
     let tasks = discover_tasks(HashMap::new());
-    for (name, project) in tasks {
-        projects.0.all.insert(name.clone(), project);
-        if !projects.0.ring.contains(&name) {
-            projects.0.ring.push_back(name);
+    for (key, project) in tasks {
+        if !projects.0.ring.contains(&key) {
+            projects.0.ring.push_back(key.clone());
         }
+        projects.0.all.insert(key, project);
     }
 
     // Build a reverse map from canonical path to disambiguated name
@@ -264,12 +261,14 @@ pub fn load() {
                 .to_string()
         });
 
+        let key = StoreKey::project(&name);
+
         // Add to all if not already present
-        if !projects.0.all.contains_key(&name) {
+        if !projects.0.all.contains_key(&key) {
             projects.0.all.insert(
-                name.clone(),
+                key.clone(),
                 Project {
-                    repo_name: name.clone(),
+                    repo_name: name,
                     repo_path: canonical,
                     aliases: vec![],
                     kv: HashMap::new(),
@@ -282,8 +281,8 @@ pub fn load() {
         }
 
         // Add to ring if not already present
-        if !projects.0.ring.contains(&name) {
-            projects.0.ring.push_back(name);
+        if !projects.0.ring.contains(&key) {
+            projects.0.ring.push_back(key);
         }
     }
 
@@ -293,7 +292,7 @@ pub fn load() {
     }
 }
 
-fn discover_tasks(additional_paths: HashMap<String, PathBuf>) -> HashMap<String, Project> {
+fn discover_tasks(additional_paths: HashMap<String, PathBuf>) -> HashMap<StoreKey, Project> {
     let mut project_paths: HashMap<String, PathBuf> =
         config::available_projects().into_iter().collect();
 
@@ -337,19 +336,19 @@ pub fn refresh_tasks() {
             .all
             .iter()
             .filter(|(_, p)| !p.is_task())
-            .map(|(name, project)| (name.clone(), project.repo_path.clone()))
+            .map(|(key, project)| (key.repo.clone(), project.repo_path.clone()))
             .collect()
     };
 
     let tasks = discover_tasks(additional_paths);
 
     let mut projects = lock();
-    for (name, project) in tasks {
-        projects.0.all.entry(name).or_insert(project);
+    for (key, project) in tasks {
+        projects.0.all.entry(key).or_insert(project);
     }
 }
 
-pub fn tasks() -> HashMap<String, Project> {
+pub fn tasks() -> HashMap<StoreKey, Project> {
     let projects = lock();
     projects
         .0

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::github::{self, PrStatus};
 use crate::jira::{self, IssueStatus};
-use crate::project::Project;
+use crate::project::{Project, StoreKey};
 use crate::projects;
 
 #[derive(Clone, Debug, Serialize)]
@@ -89,7 +89,8 @@ pub fn get_status(project: &Project) -> TaskStatus {
 
 pub fn get_status_by_name(name: &str) -> Option<TaskStatus> {
     let projects = projects::lock();
-    let project = projects.resolve(name).or_else(|| {
+    let key = StoreKey::parse(name);
+    let project = projects.by_key(&key).or_else(|| {
         let path = std::path::Path::new(name);
         crate::task::task_by_path(path).or_else(|| projects.by_path(path))
     })?;
@@ -110,9 +111,15 @@ pub fn get_sprint_status() -> Vec<SprintShowItem> {
     let projects = projects::lock();
     issues
         .into_iter()
-        .map(|issue| match projects.resolve(&issue.key) {
-            Some(project) => SprintShowItem::Task(get_status(&project)),
-            None => SprintShowItem::Issue(issue),
+        .map(|issue| {
+            let task = projects
+                .all()
+                .into_iter()
+                .find(|p| p.kv.get("jira_key").is_some_and(|k| k == &issue.key));
+            match task {
+                Some(project) => SprintShowItem::Task(get_status(project)),
+                None => SprintShowItem::Issue(issue),
+            }
         })
         .collect()
 }

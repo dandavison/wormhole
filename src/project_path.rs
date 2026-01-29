@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::thread;
 
+use crate::project::StoreKey;
 use crate::projects::{self, Mutation, Projects};
 use crate::util::warn;
 use crate::wormhole::Application;
@@ -19,7 +20,7 @@ impl ProjectPath {
         let mut projects = projects::lock();
         let current_app = projects.current().map(|current| {
             let app = hammerspoon::current_application();
-            projects.set_last_application(&current.repo_name, app.clone());
+            projects.set_last_application(&current.store_key(), app.clone());
             app
         });
         let project = self.project.clone();
@@ -39,7 +40,7 @@ impl ProjectPath {
                 }
             }),
         });
-        projects.apply(mutation, &self.project.repo_name);
+        projects.apply(mutation, &self.project.store_key());
         if util::debug() {
             projects.print();
         }
@@ -99,10 +100,11 @@ impl ProjectPath {
                 relative_path: Some((path, line)),
             })
         } else {
+            let keys: Vec<_> = projects.keys().iter().map(|k| k.to_string()).collect();
             warn(&format!(
                 "Path {} doesn't correspond to a project.\n Projects are {}",
                 path.to_string_lossy(),
-                projects.names().join(", ")
+                keys.join(", ")
             ));
             None
         }
@@ -121,7 +123,7 @@ impl ProjectPath {
                 line,
                 repo
             );
-            if let Some(project) = projects.resolve(repo) {
+            if let Some(project) = projects.by_key(&StoreKey::project(repo)) {
                 Some(ProjectPath {
                     project,
                     relative_path: Some((path, line)),

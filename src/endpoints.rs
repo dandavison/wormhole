@@ -1,5 +1,6 @@
 use hyper::{Body, Response, StatusCode};
 
+use crate::project::StoreKey;
 use crate::{config, hammerspoon, projects, util::debug};
 
 /// Return JSON with current and available projects (including tasks)
@@ -74,11 +75,12 @@ pub fn debug_projects() -> Response<Body> {
 }
 
 pub fn remove_project(name: &str) -> Response<Body> {
+    let key = StoreKey::parse(name);
     let mut projects = projects::lock();
-    if let Some(p) = projects.by_name(name) {
+    if let Some(p) = projects.by_key(&key) {
         config::TERMINAL.close(&p);
     }
-    if projects.remove(name) {
+    if projects.remove(&key) {
         projects.print();
         Response::new(Body::from(format!("removed project: {}", name)))
     } else {
@@ -90,8 +92,9 @@ pub fn remove_project(name: &str) -> Response<Body> {
 }
 
 pub fn close_project(name: &str) {
+    let key = StoreKey::parse(name);
     let mut projects = projects::lock();
-    if let Some(p) = projects.resolve(name) {
+    if let Some(p) = projects.by_key(&key) {
         config::TERMINAL.close(&p);
         config::editor().close(&p);
         // Remove tasks from ring so they don't appear in project list
@@ -106,11 +109,12 @@ pub fn pin_current() {
     let projects = projects::lock();
     if let Some(current) = projects.current() {
         let app = hammerspoon::current_application();
+        let key = current.store_key();
         drop(projects); // Release lock before modifying KV
-        crate::kv::set_value_sync(&current.repo_name, "land-in", app.as_str());
+        crate::kv::set_value_sync(&key, "land-in", app.as_str());
         hammerspoon::alert("📌");
         if debug() {
-            crate::ps!("Pinned {}: land-in={}", current.repo_name, app.as_str());
+            crate::ps!("Pinned {}: land-in={}", key, app.as_str());
         }
     }
 }

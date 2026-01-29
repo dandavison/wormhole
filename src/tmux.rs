@@ -52,11 +52,11 @@ pub fn window_names() -> Vec<String> {
 }
 
 pub fn exists(project: &Project) -> bool {
-    get_window(&project.store_key()).is_some()
+    get_window(&project.store_key().to_string()).is_some()
 }
 
 pub fn open(project: &Project) -> Result<(), String> {
-    let window_name = project.store_key();
+    let window_name = project.store_key().to_string();
     if let Some(window) = get_window(&window_name) {
         tmux(["select-window", "-t", &window.id]);
     } else {
@@ -83,7 +83,7 @@ pub fn open(project: &Project) -> Result<(), String> {
 }
 
 pub fn close(project: &Project) {
-    if let Some(window) = get_window(&project.store_key()) {
+    if let Some(window) = get_window(&project.store_key().to_string()) {
         tmux(["kill-window", "-t", &window.id]);
     }
 }

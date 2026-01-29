@@ -4,7 +4,46 @@ use crate::git;
 use crate::project_path::ProjectPath;
 use crate::wormhole::Application;
 use std::collections::HashMap;
+use std::fmt;
 use std::path::PathBuf;
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct StoreKey {
+    pub repo: String,
+    pub branch: Option<String>,
+}
+
+impl StoreKey {
+    pub fn project(repo: impl Into<String>) -> Self {
+        Self {
+            repo: repo.into(),
+            branch: None,
+        }
+    }
+
+    pub fn task(repo: impl Into<String>, branch: impl Into<String>) -> Self {
+        Self {
+            repo: repo.into(),
+            branch: Some(branch.into()),
+        }
+    }
+
+    pub fn parse(s: &str) -> Self {
+        match s.split_once(':') {
+            Some((repo, branch)) => Self::task(repo, branch),
+            None => Self::project(s),
+        }
+    }
+}
+
+impl fmt::Display for StoreKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.branch {
+            Some(branch) => write!(f, "{}:{}", self.repo, branch),
+            None => write!(f, "{}", self.repo),
+        }
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct Project {
@@ -24,10 +63,10 @@ impl Project {
         self.branch.is_some()
     }
 
-    pub fn store_key(&self) -> String {
+    pub fn store_key(&self) -> StoreKey {
         match &self.branch {
-            Some(branch) => format!("{}:{}", self.repo_name, branch),
-            None => self.repo_name.clone(),
+            Some(branch) => StoreKey::task(&self.repo_name, branch),
+            None => StoreKey::project(&self.repo_name),
         }
     }
 

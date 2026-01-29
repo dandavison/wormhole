@@ -5,6 +5,7 @@ use std::sync::mpsc;
 use std::thread;
 
 use crate::github;
+use crate::project::StoreKey;
 use crate::projects;
 
 #[derive(Debug, Deserialize)]
@@ -102,24 +103,16 @@ fn describe_github(gh: &GitHubUrl) -> DescribeResponse {
     let pr_branch = rx.recv().ok().flatten();
 
     match task_match {
-        Some((task_name, home)) => {
-            let jira_url = jira_url_for_key(&task_name);
-            let jira_key = if jira_url.is_some() {
-                Some(task_name.clone())
-            } else {
-                None
-            };
-            DescribeResponse {
-                name: Some(task_name),
-                kind: Some("task".to_string()),
-                home_project: Some(home),
-                pr_branch,
-                jira_url,
-                jira_key,
-                github_url: None,
-                github_label: None,
-            }
-        }
+        Some((store_key, home)) => DescribeResponse {
+            name: Some(store_key.to_string()),
+            kind: Some("task".to_string()),
+            home_project: Some(home),
+            pr_branch,
+            jira_url: None,
+            jira_key: None,
+            github_url: None,
+            github_label: None,
+        },
         None => DescribeResponse {
             name: Some(gh.repo.clone()),
             kind: Some("project".to_string()),
@@ -151,10 +144,13 @@ fn parse_jira_url(url: &str) -> Option<String> {
 }
 
 fn describe_jira(jira_key: &str) -> DescribeResponse {
-    // Find task by JIRA key (task name = JIRA key)
+    // Find task by JIRA key stored in kv
     let tasks = projects::tasks();
+    let project = tasks
+        .values()
+        .find(|p| p.kv.get("jira_key").is_some_and(|k| k == jira_key));
 
-    if let Some(project) = tasks.get(jira_key) {
+    if let Some(project) = project {
         let pr_number = github::get_open_pr_number(project);
         let repo_name = github::get_repo_name(project);
 
@@ -210,11 +206,11 @@ fn jira_url_for_key(key: &str) -> Option<String> {
     Some(format!("https://{}.atlassian.net/browse/{}", instance, key))
 }
 
-fn find_task_by_pr(owner: &str, repo: &str, pr_number: u64) -> Option<(String, String)> {
+fn find_task_by_pr(owner: &str, repo: &str, pr_number: u64) -> Option<(StoreKey, String)> {
     let expected_repo = format!("{}/{}", owner, repo);
-    let tasks: Vec<(String, crate::project::Project)> = projects::tasks().into_iter().collect();
+    let tasks: Vec<(StoreKey, crate::project::Project)> = projects::tasks().into_iter().collect();
 
-    tasks.par_iter().find_map_any(|(name, project)| {
+    tasks.par_iter().find_map_any(|(key, project)| {
         let task_pr = github::get_open_pr_number(project)?;
         if task_pr != pr_number {
             return None;
@@ -223,7 +219,7 @@ fn find_task_by_pr(owner: &str, repo: &str, pr_number: u64) -> Option<(String, S
         if task_repo != expected_repo {
             return None;
         }
-        Some((name.clone(), project.repo_name.clone()))
+        Some((key.clone(), project.repo_name.clone()))
     })
 }
 

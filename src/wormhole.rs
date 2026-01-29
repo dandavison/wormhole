@@ -3,6 +3,7 @@ use std::thread;
 
 use crate::config;
 use crate::endpoints;
+use crate::project::StoreKey;
 use crate::project_path::ProjectPath;
 use crate::projects;
 use crate::projects::Mutation;
@@ -97,7 +98,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
             let mut projects = projects::lock();
             let pp = projects.previous().map(|p| p.as_project_path());
             if let Some(ref pp) = pp {
-                projects.apply(Mutation::RotateLeft, &pp.project.repo_name);
+                projects.apply(Mutation::RotateLeft, &pp.project.store_key());
             }
             pp
         };
@@ -111,7 +112,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
             let mut projects = projects::lock();
             let pp = projects.next().map(|p| p.as_project_path());
             if let Some(ref pp) = pp {
-                projects.apply(Mutation::RotateRight, &pp.project.repo_name);
+                projects.apply(Mutation::RotateRight, &pp.project.store_key());
             }
             pp
         };
@@ -232,9 +233,9 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
                 .body(Body::from("Use POST"))
                 .unwrap());
         }
-        let name = name.trim();
+        let key = StoreKey::parse(name.trim());
         let mut projects = projects::lock();
-        if let Some(project) = projects.get_mut(name) {
+        if let Some(project) = projects.get_mut(&key) {
             crate::github::refresh_github_info(project);
             let json = serde_json::json!({
                 "name": project.repo_name,
@@ -248,7 +249,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         } else {
             Ok(Response::builder()
                 .status(StatusCode::NOT_FOUND)
-                .body(Body::from(format!("Project '{}' not found", name)))
+                .body(Body::from(format!("Project '{}' not found", key)))
                 .unwrap())
         }
     } else if let Some(branch) = path.strip_prefix("/project/create/") {
@@ -333,20 +334,20 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
             ))
         }
     } else if let Some(name) = path.strip_prefix("/project/vscode/") {
-        let name = name.trim().to_string();
+        let key = StoreKey::parse(name.trim());
         let result = {
             let projects = projects::lock();
             projects
-                .by_name(&name)
+                .by_key(&key)
                 .map(|p| (p.repo_name.clone(), p.repo_path.clone()))
         };
 
         match result {
-            Some((task_name, task_path)) => {
-                match crate::serve_web::manager().get_or_start(&task_name, &task_path) {
+            Some((project_name, project_path)) => {
+                match crate::serve_web::manager().get_or_start(&project_name, &project_path) {
                     Ok(port) => {
                         let folder_encoded =
-                            crate::endpoints::url_encode(&task_path.to_string_lossy());
+                            crate::endpoints::url_encode(&project_path.to_string_lossy());
                         let url = format!("http://localhost:{}/?folder={}", port, folder_encoded);
                         Ok(cors_response(
                             Response::builder()
@@ -366,7 +367,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
             None => Ok(cors_response(
                 Response::builder()
                     .status(StatusCode::NOT_FOUND)
-                    .body(Body::from(format!("Project '{}' not found", name)))
+                    .body(Body::from(format!("Project '{}' not found", key)))
                     .unwrap(),
             )),
         }
@@ -407,7 +408,8 @@ fn resolve_project(
     name_or_path: &str,
     names: Vec<String>,
 ) -> Option<ProjectPath> {
-    if let Some(project) = projects.by_name(name_or_path) {
+    let key = StoreKey::parse(name_or_path);
+    if let Some(project) = projects.by_key(&key) {
         Some(project.as_project_path())
     } else if name_or_path.starts_with('/') {
         let path = std::path::PathBuf::from(name_or_path);
@@ -469,7 +471,8 @@ async fn handle_kv_request(
         [project] => {
             // /kv/<project> - get all KV for project
             if method == Method::GET {
-                Ok(crate::kv::get_project_kv(project))
+                let key = StoreKey::parse(project);
+                Ok(crate::kv::get_project_kv(&key))
             } else {
                 Ok(Response::builder()
                     .status(StatusCode::METHOD_NOT_ALLOWED)
@@ -477,15 +480,16 @@ async fn handle_kv_request(
                     .unwrap())
             }
         }
-        [project, key] => {
+        [project, kv_key] => {
             // /kv/<project>/<key>
+            let key = StoreKey::parse(project);
             match *method {
-                Method::GET => Ok(crate::kv::get_value(project, key)),
+                Method::GET => Ok(crate::kv::get_value(&key, kv_key)),
                 Method::PUT => {
                     let (_, body) = req.into_parts();
-                    Ok(crate::kv::set_value(project, key, body).await)
+                    Ok(crate::kv::set_value(&key, kv_key, body).await)
                 }
-                Method::DELETE => Ok(crate::kv::delete_value(project, key)),
+                Method::DELETE => Ok(crate::kv::delete_value(&key, kv_key)),
                 _ => Ok(Response::builder()
                     .status(StatusCode::METHOD_NOT_ALLOWED)
                     .body(Body::from("Method not allowed. Use GET, PUT, or DELETE"))

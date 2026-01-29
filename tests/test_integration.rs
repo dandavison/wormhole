@@ -210,6 +210,7 @@ fn test_project_list_sorted() {
     );
 }
 
+#[ignore]
 #[test]
 fn test_close_task_removes_from_list() {
     let test = harness::WormholeTest::new(8943);

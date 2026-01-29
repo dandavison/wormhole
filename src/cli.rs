@@ -487,13 +487,13 @@ pub fn run(command: Command) -> Result<(), String> {
                             .iter()
                             .filter_map(|item| {
                                 let name = item.get("name")?.as_str()?;
-                                let row = if let Some(home) =
-                                    item.get("home_project").and_then(|h| h.as_str())
+                                let row = if let Some(branch) =
+                                    item.get("branch").and_then(|b| b.as_str())
                                 {
-                                    let branch =
-                                        item.get("branch").and_then(|b| b.as_str()).unwrap_or(name);
-                                    vec![home.to_string(), name.to_string(), branch.to_string()]
+                                    // Task: show repo:branch
+                                    vec![format!("{}:{}", name, branch)]
                                 } else {
+                                    // Project: just name
                                     vec![name.to_string()]
                                 };
                                 Some(row)

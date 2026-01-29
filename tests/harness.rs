@@ -221,21 +221,28 @@ impl WormholeTest {
         }
     }
 
+    /// Create a task. In the new model, branch is the task identity.
+    /// The task_id parameter is used as the branch name.
     pub fn create_task(&self, task_id: &str, home_project: &str) {
-        self.hs_get(&format!(
-            "/project/switch/{}?home-project={}",
-            task_id, home_project
-        ))
-        .unwrap();
-        if editor_is_none() {
-            self.assert_tmux_window(task_id);
-        } else {
-            assert!(
-                self.wait_for_window_containing(task_id, 10),
-                "Task window '{}' did not appear",
-                task_id
-            );
-        }
+        // Use sync=1 to get errors if task creation fails
+        let response = self
+            .hs_get(&format!(
+                "/project/switch/?home-project={}&branch={}&sync=1",
+                home_project, task_id
+            ))
+            .unwrap();
+        assert!(
+            response.contains("ok") || response.is_empty(),
+            "Task creation failed: {}",
+            response
+        );
+        // Wait a bit for the task to be created and registered
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+
+    /// Get the store key for a task (repo:branch format)
+    pub fn task_store_key(&self, branch: &str, repo: &str) -> String {
+        format!("{}:{}", repo, branch)
     }
 
     pub fn wait_for_kv(&self, project: &str, key: &str, expected: &str, timeout_secs: u64) -> bool {

@@ -157,15 +157,17 @@ fn test_project_list_sorted() {
         test.create_project(dir, proj);
     }
 
-    // Create tasks
+    // Create tasks - task_id is now the branch name
     test.create_task(&task_b1, &proj_b);
     test.create_task(&task_a1, &proj_a);
 
-    // Open all in reverse alphabetical order
-    test.hs_get(&format!("/project/switch/{}", task_b1))
+    // Open all in reverse alphabetical order using store_key format for tasks
+    let task_b1_key = test.task_store_key(&task_b1, &proj_b);
+    let task_a1_key = test.task_store_key(&task_a1, &proj_a);
+    test.hs_get(&format!("/project/switch/{}", task_b1_key))
         .unwrap();
     test.hs_get(&format!("/project/switch/{}", proj_b)).unwrap();
-    test.hs_get(&format!("/project/switch/{}", task_a1))
+    test.hs_get(&format!("/project/switch/{}", task_a1_key))
         .unwrap();
     test.hs_get(&format!("/project/switch/{}", proj_a)).unwrap();
 
@@ -178,17 +180,33 @@ fn test_project_list_sorted() {
     let list: Value = serde_json::from_str(&list_json).expect("invalid JSON from /project/list");
     let current = list["current"].as_array().expect("missing 'current' array");
 
-    let names: Vec<&str> = current
+    // With new model: projects have just "name", tasks have "name" and "branch"
+    // Extract identifiers: for projects just name, for tasks name:branch
+    let identifiers: Vec<String> = current
         .iter()
-        .filter_map(|e| e["name"].as_str())
-        .filter(|n| n.starts_with(TEST_PREFIX))
+        .filter_map(|e| {
+            let name = e["name"].as_str()?;
+            if !name.starts_with(TEST_PREFIX) {
+                return None;
+            }
+            if let Some(branch) = e["branch"].as_str() {
+                Some(format!("{}:{}", name, branch))
+            } else {
+                Some(name.to_string())
+            }
+        })
         .collect();
 
-    // Projects without home_project first (alphabetically), then tasks (by home, then name)
+    // Projects without branch first (alphabetically), then tasks (by name, then branch)
+    let expected: Vec<String> = vec![
+        proj_a.clone(),
+        proj_b.clone(),
+        task_a1_key.clone(),
+        task_b1_key.clone(),
+    ];
     assert_eq!(
-        names,
-        vec![&proj_a, &proj_b, &task_a1, &task_b1],
-        "Expected sorted order: projects first alphabetically, then tasks by (home, name)"
+        identifiers, expected,
+        "Expected sorted order: projects first alphabetically, then tasks by (name, branch)"
     );
 }
 
@@ -216,27 +234,33 @@ fn test_close_task_removes_from_list() {
     test.create_project(&home_dir, &home_proj);
     test.create_task(&task_id, &home_proj);
 
-    // Switch to task so it appears in project list
-    test.hs_get(&format!("/project/switch/{}", task_id))
-        .unwrap();
-    test.assert_focus(Editor(&task_id));
+    // Task is now identified by (repo, branch). The store_key is "repo:branch".
+    let store_key = test.task_store_key(&task_id, &home_proj);
 
-    // Verify task is in project list
+    // Switch to task so it appears in project list (already switched in create_task)
+    // Window name is now the store_key for tasks
+    test.assert_focus(Editor(&store_key));
+
+    // Verify task is in project list (check name == repo AND branch == task_id)
     let list_json = test.hs_get("/project/list").unwrap();
     let list: Value = serde_json::from_str(&list_json).unwrap();
     let current = list["current"].as_array().unwrap();
     assert!(
-        current.iter().any(|e| e["name"].as_str() == Some(&task_id)),
-        "Task should be in list before close"
+        current.iter().any(|e| {
+            e["name"].as_str() == Some(&home_proj.as_str())
+                && e["branch"].as_str() == Some(&task_id.as_str())
+        }),
+        "Task should be in list before close, got: {:?}",
+        current
     );
 
-    // Close the task
-    test.hs_post(&format!("/project/close/{}", task_id))
+    // Close the task using store_key format
+    test.hs_post(&format!("/project/close/{}", store_key))
         .unwrap();
 
-    // Wait for window to close
+    // Wait for window to close (window name is store_key)
     assert!(
-        test.wait_until(|| !test.window_exists(&task_id), 5),
+        test.wait_until(|| !test.window_exists(&store_key), 5),
         "Task window should be closed"
     );
 
@@ -245,12 +269,12 @@ fn test_close_task_removes_from_list() {
     let list: Value = serde_json::from_str(&list_json).unwrap();
     let current = list["current"].as_array().unwrap();
     assert!(
-        !current.iter().any(|e| e["name"].as_str() == Some(&task_id)),
+        !current.iter().any(|e| {
+            e["name"].as_str() == Some(&home_proj.as_str())
+                && e["branch"].as_str() == Some(&task_id.as_str())
+        }),
         "Task should NOT be in list after close, got: {:?}",
         current
-            .iter()
-            .map(|e| e["name"].as_str())
-            .collect::<Vec<_>>()
     );
 }
 
@@ -358,6 +382,10 @@ fn test_task_switching() {
     test.create_task(&task_1, &home_proj);
     test.create_task(&task_2, &home_proj);
 
+    // Store keys for tasks
+    let task_1_key = test.task_store_key(&task_1, &home_proj);
+    let task_2_key = test.task_store_key(&task_2, &home_proj);
+
     let task_1_dir = format!("{}/.git/wormhole/worktrees/{}", home_dir, task_1);
     let task_2_dir = format!("{}/.git/wormhole/worktrees/{}", home_dir, task_2);
 
@@ -367,14 +395,16 @@ fn test_task_switching() {
     test.assert_focus(Editor(&home_proj));
     test.assert_tmux_cwd(&home_dir);
 
-    // Switch to task 1
-    test.hs_get(&format!("/project/switch/{}", task_1)).unwrap();
-    test.assert_focus(Editor(&task_1));
+    // Switch to task 1 using store_key
+    test.hs_get(&format!("/project/switch/{}", task_1_key))
+        .unwrap();
+    test.assert_focus(Editor(&task_1_key));
     test.assert_tmux_cwd(&task_1_dir);
 
-    // Switch to task 2
-    test.hs_get(&format!("/project/switch/{}", task_2)).unwrap();
-    test.assert_focus(Editor(&task_2));
+    // Switch to task 2 using store_key
+    test.hs_get(&format!("/project/switch/{}", task_2_key))
+        .unwrap();
+    test.assert_focus(Editor(&task_2_key));
     test.assert_tmux_cwd(&task_2_dir);
 
     // Switch back to home project
@@ -384,8 +414,9 @@ fn test_task_switching() {
     test.assert_tmux_cwd(&home_dir);
 
     // Switch to task 1 again
-    test.hs_get(&format!("/project/switch/{}", task_1)).unwrap();
-    test.assert_focus(Editor(&task_1));
+    test.hs_get(&format!("/project/switch/{}", task_1_key))
+        .unwrap();
+    test.assert_focus(Editor(&task_1_key));
     test.assert_tmux_cwd(&task_1_dir);
 }
 
@@ -464,9 +495,12 @@ fn test_task_in_submodule() {
     test.assert_focus(Editor(&submodule_name));
     test.assert_tmux_cwd(&submodule_dir);
 
-    test.hs_get(&format!("/project/switch/{}", task_id))
+    // Switch to task using store_key format
+    let store_key = test.task_store_key(&task_id, &submodule_name);
+    test.hs_get(&format!("/project/switch/{}", store_key))
         .unwrap();
-    test.assert_focus(Editor(&task_id));
+    // Window name is now the store_key for tasks
+    test.assert_focus(Editor(&store_key));
     test.assert_tmux_cwd(&task_dir);
 }
 
@@ -495,28 +529,32 @@ fn test_task_home_project_not_self() {
     test.create_task(&task_id, &home_proj);
 
     // Switch to task so it's in the open projects list
-    test.hs_get(&format!("/project/switch/{}", task_id))
+    let store_key = test.task_store_key(&task_id, &home_proj);
+    test.hs_get(&format!("/project/switch/{}", store_key))
         .unwrap();
-    test.assert_focus(Editor(&task_id));
+    // Window name is now the store_key for tasks
+    test.assert_focus(Editor(&store_key));
 
-    // Get project list and verify task's home_project is correct
+    // Get project list and verify task has correct name and branch
     let list_json = test.hs_get("/project/list").unwrap();
     let list: Value = serde_json::from_str(&list_json).unwrap();
     let current = list["current"].as_array().unwrap();
 
+    // Task has name=repo and branch=task_id
     let task_entry = current
         .iter()
-        .find(|e| e["name"].as_str() == Some(&task_id))
-        .expect("Task should be in current list");
+        .find(|e| {
+            e["name"].as_str() == Some(home_proj.as_str())
+                && e["branch"].as_str() == Some(task_id.as_str())
+        })
+        .expect("Task should be in current list with correct name and branch");
 
-    let home = task_entry["home_project"]
-        .as_str()
-        .expect("Task should have home_project");
-
+    // Verify the name field is the repo, not the task_id
     assert_eq!(
-        home, &home_proj,
-        "Task's home_project should be '{}', not '{}'",
-        home_proj, home
+        task_entry["name"].as_str().unwrap(),
+        &home_proj,
+        "Task's name should be the repo '{}', not the branch",
+        home_proj
     );
 }
 
@@ -546,34 +584,43 @@ fn test_task_switching_updates_ring_order() {
     test.create_project(&home_dir, &home_proj);
     test.create_task(&task_id, &home_proj);
 
+    // Task store key for the new model
+    let store_key = test.task_store_key(&task_id, &home_proj);
+
     // Switch to home project first
     test.hs_get(&format!("/project/switch/{}", home_proj))
         .unwrap();
     test.assert_focus(Editor(&home_proj));
 
-    // Switch to task
-    test.hs_get(&format!("/project/switch/{}", task_id))
+    // Switch to task using store_key
+    test.hs_get(&format!("/project/switch/{}", store_key))
         .unwrap();
-    test.assert_focus(Editor(&task_id));
+    // Window name is the store_key for tasks
+    test.assert_focus(Editor(&store_key));
 
     // Verify both are in the list
     let list_json = test.hs_get("/project/list").unwrap();
     let list: Value = serde_json::from_str(&list_json).unwrap();
     let current = list["current"].as_array().unwrap();
-    let names: Vec<_> = current.iter().filter_map(|e| e["name"].as_str()).collect();
-    assert!(
-        names.contains(&home_proj.as_str()),
-        "Home should be in list"
-    );
-    assert!(names.contains(&task_id.as_str()), "Task should be in list");
 
-    // Toggle back via previous - should go to home
+    // Project entry has just name, task entry has name and branch
+    let has_project = current
+        .iter()
+        .any(|e| e["name"].as_str() == Some(home_proj.as_str()) && e["branch"].is_null());
+    let has_task = current.iter().any(|e| {
+        e["name"].as_str() == Some(home_proj.as_str())
+            && e["branch"].as_str() == Some(task_id.as_str())
+    });
+    assert!(has_project, "Home project should be in list");
+    assert!(has_task, "Task should be in list");
+
+    // Toggle back via previous - should go to home project
     test.hs_get("/project/previous").unwrap();
     test.assert_focus(Editor(&home_proj));
 
     // Toggle forward via next - should go to task
     test.hs_get("/project/next").unwrap();
-    test.assert_focus(Editor(&task_id));
+    test.assert_focus(Editor(&store_key));
 }
 
 #[test]
@@ -638,8 +685,11 @@ fn test_task_respects_land_in_kv() {
     test.create_project(&home_dir, &home_proj);
     test.create_task(&task_id, &home_proj);
 
-    // Directly set land-in=terminal for the task
-    test.hs_put(&format!("/kv/{}/land-in", task_id), "terminal")
+    // Store key is now "repo:branch"
+    let store_key = test.task_store_key(&task_id, &home_proj);
+
+    // Directly set land-in=terminal for the task using store_key
+    test.hs_put(&format!("/kv/{}/land-in", store_key), "terminal")
         .unwrap();
 
     // Switch to home project first (so we're not on the task)
@@ -648,7 +698,7 @@ fn test_task_respects_land_in_kv() {
     test.assert_focus(Editor(&home_proj));
 
     // Switch to task - should respect land-in=terminal
-    test.hs_get(&format!("/project/switch/{}", task_id))
+    test.hs_get(&format!("/project/switch/{}", store_key))
         .unwrap();
-    test.assert_focus(Terminal(&task_id));
+    test.assert_focus(Terminal(&store_key));
 }

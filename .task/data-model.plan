@@ -1,0 +1,62 @@
+# Task Data Model Redesign
+
+## Completed
+
+The task data model has been redesigned. A task is now fundamentally identified by `(repo, branch)` rather than a JIRA key.
+
+### Core Changes
+
+**StoreKey type** (`src/project.rs`):
+```rust
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct StoreKey {
+    pub repo: String,
+    pub branch: Option<String>,  // None = project, Some = task
+}
+```
+
+Constructors: `StoreKey::project(repo)`, `StoreKey::task(repo, branch)`
+Parsing: `StoreKey::parse("repo")` or `StoreKey::parse("repo:branch")`
+Display: produces `"repo"` or `"repo:branch"`
+
+**Project struct** (`src/project.rs`):
+```rust
+pub struct Project {
+    pub repo_name: String,
+    pub repo_path: PathBuf,      // Repository root
+    pub branch: Option<String>,  // Some = task
+    pub kv: HashMap<String, String>,
+    // ... other fields
+}
+```
+
+- `is_task()` returns `self.branch.is_some()`
+- `store_key()` returns the type-safe `StoreKey`
+- `worktree_path()` computes the worktree location from `(repo_path, branch)`
+- `working_dir()` returns worktree path for tasks, repo path for projects
+
+**Store** (`src/projects.rs`):
+- Uses `HashMap<StoreKey, Project>` instead of `HashMap<String, Project>`
+- Ring uses `VecDeque<StoreKey>`
+- All lookup methods take `&StoreKey`
+
+### JIRA Integration
+
+JIRA keys are now metadata stored in `kv["jira_key"]`, not the task identity.
+
+Lookups by JIRA key (e.g., in `describe.rs`, `status.rs`) search through tasks:
+```rust
+tasks.values().find(|p| p.kv.get("jira_key").is_some_and(|k| k == jira_key))
+```
+
+### Worktree Naming
+
+Worktrees are named by branch, not JIRA key:
+- Path: `.git/wormhole/worktrees/{branch}/`
+- Tmux windows use `store_key.to_string()` (e.g., `"temporal:my-feature"`)
+
+## Remaining Work
+
+- [ ] `jira sprint create` should store JIRA key in `kv["jira_key"]` when creating tasks
+- [ ] Dashboard should display branch name prominently, JIRA key as secondary info
+- [ ] Hammerspoon switcher could show `repo(branch)` format

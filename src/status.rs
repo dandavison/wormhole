@@ -31,7 +31,7 @@ impl SprintShowItem {
 pub struct TaskStatus {
     pub name: String,
     pub path: std::path::PathBuf,
-    pub home_project: Option<String>,
+    pub branch: Option<String>,
     pub jira: Option<IssueStatus>,
     pub pr: Option<PrStatus>,
     pub plan_exists: bool,
@@ -41,15 +41,19 @@ pub struct TaskStatus {
 
 pub fn get_status(project: &Project) -> TaskStatus {
     let name = project.name.clone();
-    let home_project = project.home_project.clone();
-    let path = project.path.clone();
+    let branch = project.branch.clone();
+    let path = project
+        .worktree_path()
+        .unwrap_or_else(|| project.path.clone());
     let kv = project.kv.clone();
 
-    let is_task = home_project.is_some();
+    let is_task = project.is_task();
 
     let jira_handle = if is_task {
-        let key = name.clone();
-        Some(thread::spawn(move || jira::get_issue(&key).ok().flatten()))
+        // JIRA key is stored in kv if available
+        kv.get("jira_key")
+            .cloned()
+            .map(|key| thread::spawn(move || jira::get_issue(&key).ok().flatten()))
     } else {
         None
     };
@@ -73,7 +77,7 @@ pub fn get_status(project: &Project) -> TaskStatus {
     TaskStatus {
         name,
         path,
-        home_project,
+        branch,
         jira,
         pr,
         plan_exists,
@@ -136,8 +140,8 @@ impl TaskStatus {
 
         let mut lines = vec![title, "─".repeat(title_len)];
 
-        if let Some(ref home) = self.home_project {
-            lines.push(format!("Home:      {}", home));
+        if let Some(ref branch) = self.branch {
+            lines.push(format!("Branch:    {}", branch));
         }
 
         if let Some(ref jira) = self.jira {
@@ -146,7 +150,7 @@ impl TaskStatus {
                 jira.status_emoji(),
                 jira.status
             ));
-        } else if self.home_project.is_some() {
+        } else if self.branch.is_some() {
             lines.push("JIRA:      ✗".to_string());
         }
 

@@ -1,41 +1,37 @@
 use hyper::{Body, Response, StatusCode};
 
-use crate::{config, git, hammerspoon, projects, util::debug};
+use crate::{config, hammerspoon, projects, util::debug};
 
 /// Return JSON with current and available projects (including tasks)
 pub fn list_projects() -> Response<Body> {
-    let tasks = projects::tasks();
-
-    // Get currently open projects, using task info where available
+    // Get currently open projects
     let mut current: Vec<_> = projects::lock()
         .open()
         .into_iter()
-        .map(|p| {
-            let project = tasks.get(&p.name).unwrap_or(&p);
+        .map(|project| {
             let mut obj = serde_json::json!({ "name": project.name });
-            if let Some(home) = &project.home_project {
-                obj["home_project"] = serde_json::json!(home);
-                obj["path"] = serde_json::json!(project.path);
-                if let Some(branch) = git::current_branch(&project.path) {
-                    obj["branch"] = serde_json::json!(branch);
+            if let Some(branch) = &project.branch {
+                obj["branch"] = serde_json::json!(branch);
+                if let Some(worktree_path) = project.worktree_path() {
+                    obj["path"] = serde_json::json!(worktree_path);
                 }
             }
             obj
         })
         .collect();
 
-    // Sort: projects without home_project first (alphabetically), then tasks (by home, name)
+    // Sort: projects without branch first (alphabetically), then tasks (by name, branch)
     current.sort_by(|a, b| {
-        let a_home = a.get("home_project").and_then(|h| h.as_str());
-        let b_home = b.get("home_project").and_then(|h| h.as_str());
+        let a_branch = a.get("branch").and_then(|h| h.as_str());
+        let b_branch = b.get("branch").and_then(|h| h.as_str());
         let a_name = a.get("name").and_then(|n| n.as_str()).unwrap_or("");
         let b_name = b.get("name").and_then(|n| n.as_str()).unwrap_or("");
 
-        match (a_home, b_home) {
+        match (a_branch, b_branch) {
             (None, Some(_)) => std::cmp::Ordering::Less,
             (Some(_), None) => std::cmp::Ordering::Greater,
             (None, None) => a_name.cmp(b_name),
-            (Some(ah), Some(bh)) => (ah, a_name).cmp(&(bh, b_name)),
+            (Some(ab), Some(bb)) => (a_name, ab).cmp(&(b_name, bb)),
         }
     });
 
@@ -66,7 +62,7 @@ pub fn debug_projects() -> Response<Body> {
                 "name": project.name,
                 "path": project.path.display().to_string(),
                 "aliases": project.aliases,
-                "home_project": project.home_project,
+                "branch": project.branch,
             })
         })
         .collect();
@@ -99,8 +95,8 @@ pub fn close_project(name: &str) {
         config::TERMINAL.close(&p);
         config::editor().close(&p);
         // Remove tasks from ring so they don't appear in project list
-        if p.home_project.is_some() {
-            projects.remove_from_ring(&p.name);
+        if p.is_task() {
+            projects.remove_from_ring(&p.store_key());
         }
     }
     projects.print();

@@ -5,9 +5,16 @@ use std::thread;
 use crate::wormhole::Application;
 use crate::{config, editor, git, project::Project, projects, util::warn};
 
-pub fn get_task(id: &str) -> Option<Project> {
+/// Get a task by store_key (format: "repo:branch")
+pub fn get_task(store_key: &str) -> Option<Project> {
     let projects = projects::lock();
-    projects.by_name(id).filter(|p| p.home_project.is_some())
+    projects.by_name(store_key).filter(|p| p.is_task())
+}
+
+/// Get a task by repo and branch
+pub fn get_task_by_branch(repo: &str, branch: &str) -> Option<Project> {
+    let store_key = format!("{}:{}", repo, branch);
+    get_task(&store_key)
 }
 
 pub fn task_by_path(path: &Path) -> Option<Project> {
@@ -16,65 +23,68 @@ pub fn task_by_path(path: &Path) -> Option<Project> {
     projects
         .all()
         .into_iter()
-        .filter(|p| p.home_project.is_some())
-        .find(|p| path.starts_with(&p.path))
+        .filter(|p| p.is_task())
+        .find(|p| {
+            p.worktree_path()
+                .map(|wt| path.starts_with(&wt))
+                .unwrap_or(false)
+        })
         .cloned()
 }
 
-pub fn create_task(task_id: &str, home: &str, branch: Option<&str>) -> Result<Project, String> {
-    if let Some(task) = get_task(task_id) {
+/// Create a task. The branch name is the task identity.
+pub fn create_task(repo: &str, branch: &str) -> Result<Project, String> {
+    if let Some(task) = get_task_by_branch(repo, branch) {
         return Ok(task);
     }
 
-    let home_path = resolve_project_path(home)?;
+    let repo_path = resolve_project_path(repo)?;
 
-    if !git::is_git_repo(&home_path) {
-        return Err(format!("'{}' is not a git repository", home));
+    if !git::is_git_repo(&repo_path) {
+        return Err(format!("'{}' is not a git repository", repo));
     }
 
-    let worktree_path = git::worktree_base_path(&home_path).join(task_id);
-    let branch_name = branch.unwrap_or(task_id);
+    // Worktree directory is named by branch
+    let worktree_path = git::worktree_base_path(&repo_path).join(branch);
 
     if !worktree_path.exists() {
-        git::create_worktree(&home_path, &worktree_path, branch_name)?;
+        git::create_worktree(&repo_path, &worktree_path, branch)?;
         setup_task_directory(&worktree_path)?;
     }
 
     // Refresh to pick up the new task
     projects::refresh_tasks();
 
-    let task = get_task(task_id).ok_or_else(|| format!("Failed to create task '{}'", task_id))?;
+    let task = get_task_by_branch(repo, branch)
+        .ok_or_else(|| format!("Failed to create task '{}:{}'", repo, branch))?;
 
     // Add to ring so it appears in project list
     {
         let mut projects = projects::lock();
         projects.add_project(task.clone());
-        projects.apply(projects::Mutation::Insert, &task.name);
+        projects.apply(projects::Mutation::Insert, &task.store_key());
     }
 
     Ok(task)
 }
 
 pub fn open_task(
-    task_id: &str,
-    home: Option<&str>,
-    branch: Option<&str>,
+    repo: &str,
+    branch: &str,
     land_in: Option<Application>,
     skip_editor: bool,
     focus_terminal: bool,
 ) -> Result<(), String> {
-    let project = if let Some(task) = get_task(task_id) {
+    let project = if let Some(task) = get_task_by_branch(repo, branch) {
         task
     } else {
-        let home = home
-            .ok_or_else(|| format!("Task '{}' not found. Specify --home to create it.", task_id))?;
-        create_task(task_id, home, branch)?
+        create_task(repo, branch)?
     };
 
     {
         let mut projects = projects::lock();
         projects.add_project(project.clone());
-        projects.apply(projects::Mutation::Insert, &project.name);
+        projects.apply(projects::Mutation::Insert, &project.store_key());
     }
 
     let open_terminal = {
@@ -127,21 +137,21 @@ pub fn open_task(
     Ok(())
 }
 
-pub fn remove_task(task_id: &str) -> Result<(), String> {
-    let task = get_task(task_id).ok_or_else(|| format!("Task '{}' not found", task_id))?;
-    let home = task
-        .home_project
-        .as_ref()
-        .ok_or_else(|| format!("'{}' is not a task", task_id))?;
-    let home_path = resolve_project_path(home)?;
+pub fn remove_task(repo: &str, branch: &str) -> Result<(), String> {
+    let task = get_task_by_branch(repo, branch)
+        .ok_or_else(|| format!("Task '{}:{}' not found", repo, branch))?;
 
-    crate::serve_web::manager().stop(task_id);
-    git::remove_worktree(&home_path, &task.path)?;
+    let worktree_path = task
+        .worktree_path()
+        .ok_or_else(|| format!("'{}:{}' is not a task", repo, branch))?;
+
+    crate::serve_web::manager().stop(&task.store_key());
+    git::remove_worktree(&task.path, &worktree_path)?;
 
     // Remove from unified store
     {
         let mut projects = projects::lock();
-        projects.remove(task_id);
+        projects.remove(&task.store_key());
     }
 
     Ok(())

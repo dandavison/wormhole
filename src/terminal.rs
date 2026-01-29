@@ -87,7 +87,7 @@ pub fn shell_env_vars(project: &Project) -> ShellEnvVars {
     };
     ShellEnvVars {
         project_name: project.name.clone(),
-        project_dir: project.path.to_string_lossy().to_string(),
+        project_dir: project.working_dir().to_string_lossy().to_string(),
         jira_url,
         github_repo,
         github_pr_url,

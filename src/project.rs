@@ -1,5 +1,6 @@
 use crate::config;
 use crate::editor::Editor;
+use crate::git;
 use crate::project_path::ProjectPath;
 use crate::wormhole::Application;
 use std::collections::HashMap;
@@ -13,12 +14,33 @@ pub struct Project {
     pub aliases: Vec<String>,
     pub kv: HashMap<String, String>,
     pub last_application: Option<Application>,
-    pub home_project: Option<String>,
+    pub branch: Option<String>,
     pub github_pr: Option<u64>,
     pub github_repo: Option<String>,
 }
 
 impl Project {
+    pub fn is_task(&self) -> bool {
+        self.branch.is_some()
+    }
+
+    pub fn store_key(&self) -> String {
+        match &self.branch {
+            Some(branch) => format!("{}:{}", self.name, branch),
+            None => self.name.clone(),
+        }
+    }
+
+    pub fn worktree_path(&self) -> Option<PathBuf> {
+        self.branch
+            .as_ref()
+            .map(|branch| git::worktree_base_path(&self.path).join(branch))
+    }
+
+    pub fn working_dir(&self) -> PathBuf {
+        self.worktree_path().unwrap_or_else(|| self.path.clone())
+    }
+
     pub fn is_open(&self) -> bool {
         config::TERMINAL.exists(self)
     }

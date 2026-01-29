@@ -33,16 +33,6 @@ pub fn is_git_repo(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-pub fn current_branch(path: &Path) -> Option<String> {
-    Command::new("git")
-        .args(["rev-parse", "--abbrev-ref", "HEAD"])
-        .current_dir(path)
-        .output()
-        .ok()
-        .filter(|o| o.status.success())
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-}
-
 pub fn github_repo_from_remote(path: &Path) -> Option<String> {
     let output = Command::new("git")
         .args(["remote", "get-url", "origin"])

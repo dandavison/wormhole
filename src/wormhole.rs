@@ -3,7 +3,6 @@ use std::thread;
 
 use crate::config;
 use crate::endpoints;
-use crate::git;
 use crate::project_path::ProjectPath;
 use crate::projects;
 use crate::projects::Mutation;
@@ -66,11 +65,8 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
             .iter()
             .map(|p| {
                 let mut obj = serde_json::json!({ "name": p.name });
-                if let Some(home) = &p.home_project {
-                    obj["home"] = serde_json::json!(home);
-                    if let Some(branch) = git::current_branch(&p.path) {
-                        obj["branch"] = serde_json::json!(branch);
-                    }
+                if let Some(branch) = &p.branch {
+                    obj["branch"] = serde_json::json!(branch);
                 }
                 obj
             })
@@ -134,17 +130,20 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
                 .unwrap());
         }
         let name = name.trim();
-        if let Some(task) = crate::task::get_task(name) {
-            if task.home_project.is_some() {
-                match crate::task::remove_task(name) {
-                    Ok(()) => {
-                        return Ok(Response::new(Body::from(format!("Removed task: {}", name))))
-                    }
-                    Err(e) => {
-                        return Ok(Response::builder()
-                            .status(StatusCode::BAD_REQUEST)
-                            .body(Body::from(e))
-                            .unwrap())
+        // Check if it's a task (store_key format "repo:branch")
+        if let Some((repo, branch)) = name.split_once(':') {
+            if let Some(task) = crate::task::get_task_by_branch(repo, branch) {
+                if task.is_task() {
+                    match crate::task::remove_task(repo, branch) {
+                        Ok(()) => {
+                            return Ok(Response::new(Body::from(format!("Removed task: {}", name))))
+                        }
+                        Err(e) => {
+                            return Ok(Response::builder()
+                                .status(StatusCode::BAD_REQUEST)
+                                .body(Body::from(e))
+                                .unwrap())
+                        }
                     }
                 }
             }
@@ -252,10 +251,10 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
                 .body(Body::from(format!("Project '{}' not found", name)))
                 .unwrap())
         }
-    } else if let Some(task_id) = path.strip_prefix("/project/create/") {
-        let task_id = task_id.trim();
-        let home = match params.home_project.as_deref() {
-            Some(h) => h,
+    } else if let Some(branch) = path.strip_prefix("/project/create/") {
+        let branch = branch.trim();
+        let repo = match params.home_project.as_deref() {
+            Some(r) => r,
             None => {
                 return Ok(Response::builder()
                     .status(StatusCode::BAD_REQUEST)
@@ -263,10 +262,10 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
                     .unwrap())
             }
         };
-        match crate::task::create_task(task_id, home, params.branch.as_deref()) {
-            Ok(_) => Ok(Response::new(Body::from(format!(
+        match crate::task::create_task(repo, branch) {
+            Ok(task) => Ok(Response::new(Body::from(format!(
                 "Created task: {}",
-                task_id
+                task.store_key()
             )))),
             Err(e) => Ok(Response::builder()
                 .status(StatusCode::BAD_REQUEST)
@@ -275,32 +274,38 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         }
     } else if let Some(name_or_path) = path.strip_prefix("/project/switch/") {
         let name_or_path = name_or_path.trim().to_string();
-        let home_project = params.home_project.clone();
+        let repo = params.home_project.clone();
         let branch = params.branch.clone();
         let land_in = params.land_in.clone();
         let names = params.names.clone();
         let skip_editor = params.skip_editor;
         let focus_terminal = params.focus_terminal;
         let do_switch = move || -> Result<(), String> {
-            if home_project.is_some() || crate::task::get_task(&name_or_path).is_some() {
-                crate::task::open_task(
-                    &name_or_path,
-                    home_project.as_deref(),
-                    branch.as_deref(),
-                    land_in,
-                    skip_editor,
-                    focus_terminal,
-                )
-            } else {
-                let project_path = {
-                    let mut projects = projects::lock();
-                    resolve_project(&mut projects, &name_or_path, names)
-                };
-                if let Some(pp) = project_path {
-                    pp.open(Mutation::Insert, land_in);
-                }
-                Ok(())
+            // If both repo and branch provided, open as task
+            if let (Some(repo), Some(branch)) = (repo.as_ref(), branch.as_ref()) {
+                return crate::task::open_task(repo, branch, land_in, skip_editor, focus_terminal);
             }
+            // Check if name_or_path is a store_key format "repo:branch"
+            if let Some((repo, branch)) = name_or_path.split_once(':') {
+                if crate::task::get_task_by_branch(repo, branch).is_some() {
+                    return crate::task::open_task(
+                        repo,
+                        branch,
+                        land_in,
+                        skip_editor,
+                        focus_terminal,
+                    );
+                }
+            }
+            // Otherwise, treat as regular project
+            let project_path = {
+                let mut projects = projects::lock();
+                resolve_project(&mut projects, &name_or_path, names)
+            };
+            if let Some(pp) = project_path {
+                pp.open(Mutation::Insert, land_in);
+            }
+            Ok(())
         };
         if params.sync {
             match do_switch() {

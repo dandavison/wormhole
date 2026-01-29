@@ -95,7 +95,7 @@ impl<'a> Projects<'a> {
             .ring
             .iter()
             .filter_map(|n| self.0.all.get(n))
-            .filter(|p| terminal_windows.contains(&p.name) || p.home_project.is_some())
+            .filter(|p| terminal_windows.contains(&p.name) || p.is_task())
             .cloned()
             .collect()
     }
@@ -121,7 +121,7 @@ impl<'a> Projects<'a> {
                     aliases: names,
                     kv: HashMap::new(),
                     last_application: None,
-                    home_project: None,
+                    branch: None,
                     github_pr: None,
                     github_repo: None,
                 },
@@ -134,13 +134,13 @@ impl<'a> Projects<'a> {
         if Some(project.path.as_path()) == dirs::home_dir().as_deref() {
             return;
         }
-        let name = project.name.clone();
-        if !self.0.all.contains_key(&name) {
+        let key = project.store_key();
+        if !self.0.all.contains_key(&key) {
             ps!("projects::add_project");
-            self.0.all.insert(name.clone(), project);
+            self.0.all.insert(key.clone(), project);
         }
-        if !self.0.ring.contains(&name) {
-            self.0.ring.push_front(name);
+        if !self.0.ring.contains(&key) {
+            self.0.ring.push_front(key);
         }
     }
 
@@ -271,7 +271,7 @@ pub fn load() {
                     aliases: vec![],
                     kv: HashMap::new(),
                     last_application: None,
-                    home_project: None,
+                    branch: None,
                     github_pr: None,
                     github_repo: None,
                 },
@@ -309,23 +309,18 @@ fn discover_tasks(additional_paths: HashMap<String, PathBuf>) -> HashMap<String,
                 .into_iter()
                 .filter(|wt| wt.path.starts_with(&worktrees_dir))
                 .filter_map(|wt| {
-                    let task_id = wt.path.file_name()?.to_str()?;
-                    if task_id == project_name {
-                        return None;
-                    }
-                    Some((
-                        task_id.to_string(),
-                        Project {
-                            name: task_id.to_string(),
-                            path: wt.path,
-                            aliases: vec![],
-                            kv: HashMap::new(),
-                            last_application: None,
-                            home_project: Some(project_name.clone()),
-                            github_pr: None,
-                            github_repo: None,
-                        },
-                    ))
+                    let branch = wt.branch.as_ref()?;
+                    let task = Project {
+                        name: project_name.clone(),
+                        path: project_path.clone(),
+                        aliases: vec![],
+                        kv: HashMap::new(),
+                        last_application: None,
+                        branch: Some(branch.clone()),
+                        github_pr: None,
+                        github_repo: None,
+                    };
+                    Some((task.store_key(), task))
                 })
                 .collect::<Vec<_>>()
         })
@@ -338,7 +333,7 @@ pub fn refresh_tasks() {
         store
             .all
             .iter()
-            .filter(|(_, p)| p.home_project.is_none())
+            .filter(|(_, p)| !p.is_task())
             .map(|(name, project)| (name.clone(), project.path.clone()))
             .collect()
     };
@@ -359,7 +354,7 @@ pub fn tasks() -> HashMap<String, Project> {
         .0
         .all
         .iter()
-        .filter(|(_, p)| p.home_project.is_some())
+        .filter(|(_, p)| p.is_task())
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect()
 }

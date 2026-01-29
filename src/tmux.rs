@@ -52,20 +52,21 @@ pub fn window_names() -> Vec<String> {
 }
 
 pub fn exists(project: &Project) -> bool {
-    get_window(&project.name).is_some()
+    get_window(&project.store_key()).is_some()
 }
 
 pub fn open(project: &Project) -> Result<(), String> {
-    if let Some(window) = get_window(&project.name) {
+    let window_name = project.store_key();
+    if let Some(window) = get_window(&window_name) {
         tmux(["select-window", "-t", &window.id]);
     } else {
         let vars = shell_env_vars(project);
         tmux_vec(vec![
             "new-window".to_string(),
             "-n".to_string(),
-            project.name.clone(),
+            window_name,
             "-c".to_string(),
-            project.path.to_string_lossy().to_string(),
+            project.working_dir().to_string_lossy().to_string(),
             "-e".to_string(),
             format!("WORMHOLE_PROJECT_NAME={}", vars.project_name),
             "-e".to_string(),
@@ -82,7 +83,7 @@ pub fn open(project: &Project) -> Result<(), String> {
 }
 
 pub fn close(project: &Project) {
-    if let Some(window) = get_window(&project.name) {
+    if let Some(window) = get_window(&project.store_key()) {
         tmux(["kill-window", "-t", &window.id]);
     }
 }

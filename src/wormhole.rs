@@ -526,10 +526,7 @@ impl QueryParams {
                 } else if key_lower == "line" {
                     params.line = val.parse::<usize>().ok();
                 } else if key_lower == "name" {
-                    params.names = val
-                        .split(',')
-                        .map(|s| s.trim().to_string())
-                        .collect();
+                    params.names = val.split(',').map(|s| s.trim().to_string()).collect();
                 } else if key_lower == "home-project" {
                     params.home_project = Some(val.to_string());
                 } else if key_lower == "branch" {

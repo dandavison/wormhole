@@ -116,7 +116,8 @@ fn tmux_vec(args: Vec<String>) -> String {
     let socket_path = std::env::var("WORMHOLE_TMUX")
         .or_else(|_| std::env::var("TMUX"))
         .unwrap_or_else(|_| panic("TMUX env var is not set"))
-        .split(",").next()
+        .split(",")
+        .next()
         .unwrap()
         .to_string();
 

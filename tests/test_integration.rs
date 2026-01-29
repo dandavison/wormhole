@@ -795,3 +795,99 @@ fn test_task_list_reflects_tmux_window_state() {
         "Task 2 should still be in list (window still open)"
     );
 }
+
+#[test]
+fn test_neighbors_returns_branch_for_tasks() {
+    // Regression test: The /project/neighbors endpoint must return `branch` for tasks
+    // so that clients (like Hammerspoon) can distinguish tasks from projects and
+    // correctly identify the current item in the ring.
+    // Bug: Hammerspoon checked `item.home` to detect tasks, but the new data model
+    // uses `item.branch`. Also, `isCurrent` checked just `item.name` which couldn't
+    // distinguish between tasks from the same repo.
+    // Fix: Hammerspoon now checks `item.branch` and uses `name:branch` as unique key.
+    let test = harness::WormholeTest::new(8946);
+
+    let home_proj = format!("{}neighbors-home", TEST_PREFIX);
+    let home_dir = format!("/tmp/{}", home_proj);
+    let task_1 = format!("{}NBR-T1", TEST_PREFIX);
+    let task_2 = format!("{}NBR-T2", TEST_PREFIX);
+
+    let _ = std::fs::remove_dir_all(&home_dir);
+    std::fs::create_dir_all(&home_dir).unwrap();
+    Command::new("git")
+        .args(["init"])
+        .current_dir(&home_dir)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["commit", "--allow-empty", "-m", "initial"])
+        .current_dir(&home_dir)
+        .output()
+        .unwrap();
+
+    // Create home project and two tasks from the same repo
+    test.create_project(&home_dir, &home_proj);
+    test.create_task(&task_1, &home_proj);
+    test.create_task(&task_2, &home_proj);
+
+    let task_1_key = test.task_store_key(&task_1, &home_proj);
+    let task_2_key = test.task_store_key(&task_2, &home_proj);
+
+    // Switch to both tasks to add them to the ring
+    test.hs_get(&format!("/project/switch/{}", task_1_key))
+        .unwrap();
+    test.hs_get(&format!("/project/switch/{}", task_2_key))
+        .unwrap();
+
+    // Get neighbors endpoint
+    let neighbors_json = test.hs_get("/project/neighbors").unwrap();
+    let neighbors: Value = serde_json::from_str(&neighbors_json).unwrap();
+    let ring = neighbors["ring"]
+        .as_array()
+        .expect("ring should be an array");
+
+    // Find the two tasks in the ring
+    let task_1_entry = ring.iter().find(|e| {
+        e["name"].as_str() == Some(home_proj.as_str())
+            && e["branch"].as_str() == Some(task_1.as_str())
+    });
+    let task_2_entry = ring.iter().find(|e| {
+        e["name"].as_str() == Some(home_proj.as_str())
+            && e["branch"].as_str() == Some(task_2.as_str())
+    });
+
+    // Verify tasks have `branch` field (not `home`)
+    assert!(
+        task_1_entry.is_some(),
+        "Task 1 should be in ring with name={} and branch={}, got: {:?}",
+        home_proj,
+        task_1,
+        ring
+    );
+    assert!(
+        task_2_entry.is_some(),
+        "Task 2 should be in ring with name={} and branch={}, got: {:?}",
+        home_proj,
+        task_2,
+        ring
+    );
+
+    // Verify that tasks do NOT have `home` field (old model)
+    assert!(
+        task_1_entry.unwrap().get("home").is_none(),
+        "Tasks should not have 'home' field in new model"
+    );
+    assert!(
+        task_2_entry.unwrap().get("home").is_none(),
+        "Tasks should not have 'home' field in new model"
+    );
+
+    // Verify that regular project doesn't have branch
+    let project_entry = ring
+        .iter()
+        .find(|e| e["name"].as_str() == Some(home_proj.as_str()) && e["branch"].is_null());
+    assert!(
+        project_entry.is_some(),
+        "Regular project should be in ring without branch field"
+    );
+}

@@ -199,6 +199,15 @@ function M.bindProjectHotkeys(keymap)
     end
 end
 
+-- Helper to get unique identifier for a project/task
+local function itemKey(item)
+    if item.branch then
+        return item.name .. ":" .. item.branch
+    else
+        return item.name
+    end
+end
+
 -- Neighbor overlay (shows prev/next when ctrl+cmd held)
 local function renderNeighborOverlay()
     hs.http.asyncGet(M.host .. "/project/neighbors", nil, function(status, body)
@@ -210,7 +219,7 @@ local function renderNeighborOverlay()
         local n = #ring
         if n == 0 then return end
 
-        local currentName = ring[1] and ring[1].name
+        local currentKey = ring[1] and itemKey(ring[1])
 
         -- Lock display order on first show, keep it fixed while overlay is visible
         if not neighborDisplayOrder then
@@ -229,22 +238,21 @@ local function renderNeighborOverlay()
                     styledText = styledText .. hs.styledtext.new("    ", { font = { size = 14 } })
                 end
 
-                local isCurrent = (item.name == currentName)
+                local isCurrent = (itemKey(item) == currentKey)
                 local dimColor = { white = 0.5, alpha = 0.8 }
                 local brightColor = { white = 1, alpha = 1 }
 
-                if item.home then
-                    -- Task: home(branch) format, horizontal
-                    local homeColor = isCurrent and { white = 0.7, alpha = 1 } or { white = 0.4, alpha = 0.7 }
+                if item.branch then
+                    -- Task: name(branch) format, horizontal
+                    local nameColor = isCurrent and { white = 0.7, alpha = 1 } or { white = 0.4, alpha = 0.7 }
                     local branchColor = isCurrent and brightColor or dimColor
-                    local homeFont = { size = 12 }
+                    local nameFont = { size = 12 }
                     local branchFont = isCurrent and { size = 14, name = "Menlo-Bold" } or { size = 12 }
 
-                    local branch = item.branch or item.name
-                    styledText = styledText .. hs.styledtext.new(item.home, { font = homeFont, color = homeColor })
-                    styledText = styledText .. hs.styledtext.new("(", { font = homeFont, color = homeColor })
-                    styledText = styledText .. hs.styledtext.new(branch, { font = branchFont, color = branchColor })
-                    styledText = styledText .. hs.styledtext.new(")", { font = homeFont, color = homeColor })
+                    styledText = styledText .. hs.styledtext.new(item.name, { font = nameFont, color = nameColor })
+                    styledText = styledText .. hs.styledtext.new("(", { font = nameFont, color = nameColor })
+                    styledText = styledText .. hs.styledtext.new(item.branch, { font = branchFont, color = branchColor })
+                    styledText = styledText .. hs.styledtext.new(")", { font = nameFont, color = nameColor })
                 else
                     -- Single name for regular projects
                     local color = isCurrent and brightColor or dimColor

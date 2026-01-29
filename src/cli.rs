@@ -892,11 +892,12 @@ fn sprint_create(client: &Client, overrides: Vec<String>, output: &str) -> Resul
     };
 
     for (key, home, branch) in to_create {
-        let path = format!(
-            "/project/create/{}?home-project={}&branch={}",
-            key, home, branch
-        );
-        client.get(&path)?;
+        let url = format!("/project/create/{}?home-project={}", branch, home);
+        client.get(&url)?;
+        // Store JIRA key in task's KV
+        let store_key = format!("{}:{}", home, branch);
+        let kv_url = format!("/kv/{}/jira_key", store_key);
+        let _ = client.put(&kv_url, &key);
         result.created.push(CreatedTask {
             home,
             key,

@@ -244,6 +244,9 @@ pub enum Command {
 
     /// Kill tmux session and clean up
     Kill,
+
+    /// Report on persisted wormhole state (worktrees, KV)
+    Doctor,
 }
 
 #[derive(Subcommand)]
@@ -671,7 +674,104 @@ pub fn run(command: Command) -> Result<(), String> {
                 .map_err(|e| format!("Failed to kill tmux session: {}", e))?;
             Ok(())
         }
+
+        Command::Doctor => doctor(),
     }
+}
+
+fn doctor() -> Result<(), String> {
+    use rayon::prelude::*;
+    use std::collections::HashMap;
+    use std::fs;
+    use std::path::PathBuf;
+
+    let repos = ["temporal", "saas-cicd", "documentation", "cli"];
+
+    // Resolve repo paths
+    let repo_paths: Vec<(&str, Option<PathBuf>)> = repos
+        .iter()
+        .map(|name| (*name, config::resolve_project_name(name)))
+        .collect();
+
+    // Query each repo in parallel
+    let results: Vec<_> = repo_paths
+        .par_iter()
+        .map(|(name, path_opt)| {
+            let Some(path) = path_opt else {
+                return (*name, None, vec![], HashMap::new());
+            };
+
+            // Get worktrees
+            let worktrees = crate::git::list_worktrees(path);
+            let worktree_base = crate::git::worktree_base_path(path);
+            let wormhole_worktrees: Vec<_> = worktrees
+                .into_iter()
+                .filter(|wt| wt.path.starts_with(&worktree_base))
+                .collect();
+
+            // Read KV files
+            let kv_dir = crate::git::git_common_dir(path).join("wormhole/kv");
+            let mut all_kv: HashMap<String, HashMap<String, String>> = HashMap::new();
+            if let Ok(entries) = fs::read_dir(&kv_dir) {
+                for entry in entries.flatten() {
+                    let file_path = entry.path();
+                    if file_path.extension().map(|e| e == "json").unwrap_or(false) {
+                        if let Ok(contents) = fs::read_to_string(&file_path) {
+                            if let Ok(kv) =
+                                serde_json::from_str::<HashMap<String, String>>(&contents)
+                            {
+                                let stem = file_path
+                                    .file_stem()
+                                    .and_then(|s| s.to_str())
+                                    .unwrap_or("unknown")
+                                    .to_string();
+                                all_kv.insert(stem, kv);
+                            }
+                        }
+                    }
+                }
+            }
+
+            (*name, Some(path.clone()), wormhole_worktrees, all_kv)
+        })
+        .collect();
+
+    // Print results
+    for (name, path_opt, worktrees, kv) in results {
+        println!("{}:", name);
+        match path_opt {
+            None => println!("  (not found)"),
+            Some(path) => {
+                println!("  path: {}", path.display());
+
+                if worktrees.is_empty() {
+                    println!("  worktrees: (none)");
+                } else {
+                    println!("  worktrees:");
+                    for wt in &worktrees {
+                        let branch = wt.branch.as_deref().unwrap_or("(detached)");
+                        let dir_name = wt.path.file_name().and_then(|s| s.to_str()).unwrap_or("?");
+                        println!("    {} -> {}", dir_name, branch);
+                    }
+                }
+
+                if kv.is_empty() {
+                    println!("  kv: (none)");
+                } else {
+                    println!("  kv:");
+                    for (file, pairs) in &kv {
+                        println!("    {}:", file);
+                        for (k, v) in pairs {
+                            println!("      {}: {}", k, v);
+                        }
+                    }
+                }
+            }
+        }
+        println!();
+    }
+
+    Ok(())
 }
 
 fn sprint_create(client: &Client, overrides: Vec<String>, output: &str) -> Result<(), String> {

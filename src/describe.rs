@@ -160,7 +160,7 @@ fn describe_jira(jira_key: &str) -> DescribeResponse {
 
         let (github_url, github_label) = match (pr_number, repo_name) {
             (Some(pr), Some(repo)) => {
-                let short_repo = repo.split('/').last().unwrap_or(&repo);
+                let short_repo = repo.split('/').next_back().unwrap_or(&repo);
                 (
                     Some(format!("https://github.com/{}/pull/{}", repo, pr)),
                     Some(format!("{}#{}", short_repo, pr)),

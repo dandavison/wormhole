@@ -9,6 +9,7 @@ use crate::projects;
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(tag = "type")]
+#[allow(clippy::large_enum_variant)]
 pub enum SprintShowItem {
     #[serde(rename = "task")]
     Task(TaskStatus),

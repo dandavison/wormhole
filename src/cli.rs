@@ -1054,7 +1054,7 @@ fn sprint_show(output: &str) -> Result<(), String> {
     // Build SprintShowItem list
     let items: Vec<SprintShowItem> = issues
         .into_iter()
-        .zip(statuses.into_iter())
+        .zip(statuses)
         .map(|(issue, status)| match status {
             Some(task) => SprintShowItem::Task(task),
             None => SprintShowItem::Issue(issue),

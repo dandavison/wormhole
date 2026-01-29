@@ -25,12 +25,12 @@ macro_rules! todo {
 #[macro_export]
 macro_rules! print_hyperlinked {
     ($fmt:expr, $($arg:tt)*) => {{
-        let url = crate::format_vscode_hyperlink(file!(), line!());
-        println!("{}", crate::format_osc8_hyperlink(&url, &format!($fmt, $($arg)*)));
+        let url = $crate::format_vscode_hyperlink(file!(), line!());
+        println!("{}", $crate::format_osc8_hyperlink(&url, &format!($fmt, $($arg)*)));
     }};
     ($msg:expr) => {{
-        let url = crate::format_vscode_hyperlink(file!(), line!());
-        println!("{}", crate::format_osc8_hyperlink(&url, &format!($msg)));
+        let url = $crate::format_vscode_hyperlink(file!(), line!());
+        println!("{}", $crate::format_osc8_hyperlink(&url, &format!($msg)));
     }};
 }
 

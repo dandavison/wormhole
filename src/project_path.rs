@@ -31,7 +31,7 @@ impl ProjectPath {
             Mutation::None | Mutation::RotateLeft | Mutation::RotateRight => {
                 self.project.last_application.clone()
             }
-            _ => parse_application(self.project.kv.get("land-in")).or_else(|| {
+            _ => parse_application(self.project.kv.get("land-in")).or({
                 if is_already_open {
                     current_app
                 } else {
@@ -141,7 +141,7 @@ impl ProjectPath {
             self.relative_path
                 .as_ref()
                 .and_then(|(p, _)| p.to_str())
-                .unwrap_or("".into()),
+                .unwrap_or(""),
         )
     }
 }

@@ -121,7 +121,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         }
         Ok(Response::new(Body::from("")))
     } else if let Some(name) = path.strip_prefix("/project/remove/") {
-        if method != &Method::POST {
+        if method != Method::POST {
             return Ok(Response::builder()
                 .status(StatusCode::METHOD_NOT_ALLOWED)
                 .body(Body::from(
@@ -150,7 +150,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         }
         Ok(endpoints::remove_project(name))
     } else if let Some(name) = path.strip_prefix("/project/close/") {
-        if method != &Method::POST {
+        if method != Method::POST {
             return Ok(Response::builder()
                 .status(StatusCode::METHOD_NOT_ALLOWED)
                 .body(Body::from(
@@ -162,13 +162,13 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         thread::spawn(move || endpoints::close_project(&name));
         Ok(Response::new(Body::from("")))
     } else if path == "/project/pin" {
-        if method != &Method::POST {
+        if method != Method::POST {
             return Ok(Response::builder()
                 .status(StatusCode::METHOD_NOT_ALLOWED)
                 .body(Body::from("Method not allowed. Use POST for /project/pin"))
                 .unwrap());
         }
-        thread::spawn(move || endpoints::pin_current());
+        thread::spawn(endpoints::pin_current);
         Ok(Response::new(Body::from("Pinning current state...")))
     } else if path == "/project/show" || path.starts_with("/project/show/") {
         let name = path.strip_prefix("/project/show/").map(|s| s.trim());
@@ -196,7 +196,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
                 .unwrap()),
         }
     } else if path == "/project/describe" {
-        if method != &Method::POST {
+        if method != Method::POST {
             return Ok(cors_response(
                 Response::builder()
                     .status(StatusCode::METHOD_NOT_ALLOWED)
@@ -226,7 +226,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
             )),
         }
     } else if let Some(name) = path.strip_prefix("/project/refresh/") {
-        if method != &Method::POST {
+        if method != Method::POST {
             return Ok(Response::builder()
                 .status(StatusCode::METHOD_NOT_ALLOWED)
                 .body(Body::from("Use POST"))
@@ -397,7 +397,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
                 .header(header::LOCATION, redirect_to)
                 .body(Body::empty())
                 .unwrap();
-            return Ok(response);
+            Ok(response)
         }
     }
 }
@@ -439,7 +439,7 @@ fn determine_requested_operation(
     if let Some(absolute_path) = url_path.strip_prefix("/file/") {
         let p = ProjectPath::from_absolute_path(absolute_path, &projects);
         Some((p, Mutation::Insert, land_in))
-    } else if let Some(project_path) = ProjectPath::from_github_url(&url_path, line, &projects) {
+    } else if let Some(project_path) = ProjectPath::from_github_url(url_path, line, &projects) {
         if url_path.ends_with(".md") {
             None
         } else {
@@ -462,7 +462,7 @@ async fn handle_kv_request(
     let parts: Vec<&str> = kv_path.split('/').collect();
 
     match parts.as_slice() {
-        [project] if project.is_empty() => {
+        [""] => {
             // /kv/ - same as /kv
             Ok(crate::kv::get_all_kv())
         }
@@ -527,8 +527,7 @@ impl QueryParams {
                     params.line = val.parse::<usize>().ok();
                 } else if key_lower == "name" {
                     params.names = val
-                        .to_string()
-                        .split(",")
+                        .split(',')
                         .map(|s| s.trim().to_string())
                         .collect();
                 } else if key_lower == "home-project" {

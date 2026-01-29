@@ -39,7 +39,7 @@ struct Pane {
 
 pub fn open(project: &Project) -> Result<(), String> {
     let pane = Pane::get_first_by_tab_title(&project.name)
-        .unwrap_or_else(|| new_tab(&project.name, &project.path.to_str().unwrap()));
+        .unwrap_or_else(|| new_tab(&project.name, project.path.to_str().unwrap()));
     execute_command(
         "wezterm",
         ["cli", "activate-tab", "--tab-id", &pane.tab_id.to_string()],
@@ -87,20 +87,10 @@ fn list_panes() -> Vec<Pane> {
 
 impl Pane {
     fn get_by_id(pane_id: u32) -> Option<Pane> {
-        for p in list_panes() {
-            if p.pane_id == pane_id {
-                return Some(p);
-            }
-        }
-        None
+        list_panes().into_iter().find(|p| p.pane_id == pane_id)
     }
 
     fn get_first_by_tab_title(title: &str) -> Option<Pane> {
-        for p in list_panes() {
-            if p.tab_title == title {
-                return Some(p);
-            }
-        }
-        None
+        list_panes().into_iter().find(|p| p.tab_title == title)
     }
 }

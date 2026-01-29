@@ -70,7 +70,7 @@ impl<'a> Projects<'a> {
     }
 
     pub fn current(&self) -> Option<Project> {
-        self.0.ring.get(0).and_then(|n| self.0.all.get(n)).cloned()
+        self.0.ring.front().and_then(|n| self.0.all.get(n)).cloned()
     }
 
     pub fn next(&self) -> Option<Project> {
@@ -216,7 +216,7 @@ impl<'a> Projects<'a> {
         thread::spawn(move || {
             thread::sleep(Duration::from_secs(2));
             println!("{}", execute_command("vscode-summary", [], "/tmp"));
-            println!("");
+            println!();
             ps!("..., {}, {}*, {}, ... ({})", previous, current, next, len,);
         });
     }
@@ -342,9 +342,7 @@ pub fn refresh_tasks() {
 
     let mut projects = lock();
     for (name, project) in tasks {
-        if !projects.0.all.contains_key(&name) {
-            projects.0.all.insert(name, project);
-        }
+        projects.0.all.entry(name).or_insert(project);
     }
 }
 

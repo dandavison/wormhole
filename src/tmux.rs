@@ -89,12 +89,7 @@ pub fn close(project: &Project) {
 }
 
 fn get_window(name: &str) -> Option<Window> {
-    for w in list_windows() {
-        if w.name == name {
-            return Some(w);
-        }
-    }
-    None
+    list_windows().into_iter().find(|w| w.name == name)
 }
 
 fn list_windows() -> Vec<Window> {
@@ -121,8 +116,7 @@ fn tmux_vec(args: Vec<String>) -> String {
     let socket_path = std::env::var("WORMHOLE_TMUX")
         .or_else(|_| std::env::var("TMUX"))
         .unwrap_or_else(|_| panic("TMUX env var is not set"))
-        .split(",")
-        .nth(0)
+        .split(",").next()
         .unwrap()
         .to_string();
 

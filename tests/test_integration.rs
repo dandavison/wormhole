@@ -173,7 +173,7 @@ fn test_project_list_sorted() {
 
     // Get project list via curl (Hammerspoon can timeout with many rapid calls)
     let output = Command::new("curl")
-        .args(["-s", &format!("http://127.0.0.1:8944/project/list")])
+        .args(["-s", "http://127.0.0.1:8944/project/list"])
         .output()
         .expect("curl failed");
     let list_json = String::from_utf8_lossy(&output.stdout);
@@ -210,7 +210,6 @@ fn test_project_list_sorted() {
     );
 }
 
-#[ignore]
 #[test]
 fn test_close_task_removes_from_list() {
     let test = harness::WormholeTest::new(8943);
@@ -248,8 +247,8 @@ fn test_close_task_removes_from_list() {
     let current = list["current"].as_array().unwrap();
     assert!(
         current.iter().any(|e| {
-            e["name"].as_str() == Some(&home_proj.as_str())
-                && e["branch"].as_str() == Some(&task_id.as_str())
+            e["name"].as_str() == Some(home_proj.as_str())
+                && e["branch"].as_str() == Some(task_id.as_str())
         }),
         "Task should be in list before close, got: {:?}",
         current
@@ -271,8 +270,8 @@ fn test_close_task_removes_from_list() {
     let current = list["current"].as_array().unwrap();
     assert!(
         !current.iter().any(|e| {
-            e["name"].as_str() == Some(&home_proj.as_str())
-                && e["branch"].as_str() == Some(&task_id.as_str())
+            e["name"].as_str() == Some(home_proj.as_str())
+                && e["branch"].as_str() == Some(task_id.as_str())
         }),
         "Task should NOT be in list after close, got: {:?}",
         current
@@ -702,4 +701,97 @@ fn test_task_respects_land_in_kv() {
     test.hs_get(&format!("/project/switch/{}", store_key))
         .unwrap();
     test.assert_focus(Terminal(&store_key));
+}
+
+#[test]
+fn test_task_list_reflects_tmux_window_state() {
+    // Regression test: The project list should only include tasks whose tmux windows exist.
+    // Bug: The filter was `terminal_windows.contains(&p.repo_name) || p.is_task()` which
+    // incorrectly included ALL tasks regardless of whether their tmux window was open.
+    // Fix: Changed to `terminal_windows.contains(&p.store_key().to_string())` to properly
+    // check for window existence using the full store key (repo:branch).
+    let test = harness::WormholeTest::new(8945);
+
+    let home_proj = format!("{}list-home", TEST_PREFIX);
+    let home_dir = format!("/tmp/{}", home_proj);
+    let task_1 = format!("{}LIST-T1", TEST_PREFIX);
+    let task_2 = format!("{}LIST-T2", TEST_PREFIX);
+
+    let _ = std::fs::remove_dir_all(&home_dir);
+    std::fs::create_dir_all(&home_dir).unwrap();
+    Command::new("git")
+        .args(["init"])
+        .current_dir(&home_dir)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["commit", "--allow-empty", "-m", "initial"])
+        .current_dir(&home_dir)
+        .output()
+        .unwrap();
+
+    // Create home project and two tasks
+    test.create_project(&home_dir, &home_proj);
+    test.create_task(&task_1, &home_proj);
+    test.create_task(&task_2, &home_proj);
+
+    let task_1_key = test.task_store_key(&task_1, &home_proj);
+    let task_2_key = test.task_store_key(&task_2, &home_proj);
+
+    // Switch to both tasks to ensure they're in the ring and have tmux windows
+    test.hs_get(&format!("/project/switch/{}", task_1_key))
+        .unwrap();
+    test.hs_get(&format!("/project/switch/{}", task_2_key))
+        .unwrap();
+
+    // Verify both tasks are in the project list
+    let list_json = test.hs_get("/project/list").unwrap();
+    let list: Value = serde_json::from_str(&list_json).unwrap();
+    let current = list["current"].as_array().unwrap();
+
+    let has_task_1 = current.iter().any(|e| {
+        e["name"].as_str() == Some(home_proj.as_str())
+            && e["branch"].as_str() == Some(task_1.as_str())
+    });
+    let has_task_2 = current.iter().any(|e| {
+        e["name"].as_str() == Some(home_proj.as_str())
+            && e["branch"].as_str() == Some(task_2.as_str())
+    });
+    assert!(has_task_1, "Task 1 should be in list initially");
+    assert!(has_task_2, "Task 2 should be in list initially");
+
+    // Kill task 1's tmux window directly (bypassing wormhole's close_project)
+    // This leaves task 1 in the ring but without a tmux window
+    test.kill_tmux_window(&task_1_key);
+
+    // Wait for window to be gone
+    assert!(
+        test.wait_until(|| !test.tmux_window_exists(&task_1_key), 5),
+        "Task 1 tmux window should be closed"
+    );
+
+    // Verify task 1 is NOT in the project list (window closed)
+    // but task 2 IS still in the list (window still open)
+    let list_json = test.hs_get("/project/list").unwrap();
+    let list: Value = serde_json::from_str(&list_json).unwrap();
+    let current = list["current"].as_array().unwrap();
+
+    let has_task_1_after = current.iter().any(|e| {
+        e["name"].as_str() == Some(home_proj.as_str())
+            && e["branch"].as_str() == Some(task_1.as_str())
+    });
+    let has_task_2_after = current.iter().any(|e| {
+        e["name"].as_str() == Some(home_proj.as_str())
+            && e["branch"].as_str() == Some(task_2.as_str())
+    });
+
+    assert!(
+        !has_task_1_after,
+        "Task 1 should NOT be in list after tmux window closed, got: {:?}",
+        current
+    );
+    assert!(
+        has_task_2_after,
+        "Task 2 should still be in list (window still open)"
+    );
 }

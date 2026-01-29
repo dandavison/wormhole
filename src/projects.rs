@@ -95,7 +95,7 @@ impl<'a> Projects<'a> {
             .ring
             .iter()
             .filter_map(|k| self.0.all.get(k))
-            .filter(|p| terminal_windows.contains(&p.repo_name) || p.is_task())
+            .filter(|p| terminal_windows.contains(&p.store_key().to_string()))
             .cloned()
             .collect()
     }

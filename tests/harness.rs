@@ -269,6 +269,47 @@ impl WormholeTest {
         String::from_utf8_lossy(&output.stdout).trim().to_string()
     }
 
+    /// Kill a tmux window by name directly (bypassing wormhole)
+    pub fn kill_tmux_window(&self, name: &str) {
+        // Get window index by name (avoids : being parsed as session:window separator)
+        let output = Command::new("tmux")
+            .args([
+                "-L",
+                &self.tmux.socket,
+                "list-windows",
+                "-F",
+                "#{window_index}\t#{window_name}",
+            ])
+            .output()
+            .unwrap();
+        let list = String::from_utf8_lossy(&output.stdout);
+        for line in list.lines() {
+            if let Some((idx, window_name)) = line.split_once('\t') {
+                if window_name == name {
+                    let _ = Command::new("tmux")
+                        .args(["-L", &self.tmux.socket, "kill-window", "-t", idx])
+                        .output();
+                    return;
+                }
+            }
+        }
+    }
+
+    /// Check if a tmux window with the given name exists
+    pub fn tmux_window_exists(&self, name: &str) -> bool {
+        self.list_tmux_windows().iter().any(|w| w == name)
+    }
+
+    /// List all tmux window names
+    pub fn list_tmux_windows(&self) -> Vec<String> {
+        let output = Command::new("tmux")
+            .args(["-L", &self.tmux.socket, "list-windows", "-F", "#W"])
+            .output()
+            .unwrap();
+        let windows = String::from_utf8_lossy(&output.stdout);
+        windows.lines().map(|s| s.to_string()).collect()
+    }
+
     pub fn get_tmux_pane_cwd(&self) -> String {
         let output = Command::new("tmux")
             .args([

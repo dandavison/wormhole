@@ -10,6 +10,35 @@ Some projects are 'tasks'. A task is a project for which the CWD is a git worktr
 A task should evolve through a state machine to reach a terminal state. Wormhole reports on what stage the task is at (`wormhole project show`) by reading relevant state from JIRA, GitHub, and local files (e.g. does a plan.md exist? Is there a JIRA ticket and what state is it in? Is there a PR and is it draft or open for review?).
 
 
+## Task modeling
+
+I'm wondering about changing to the following scheme:
+
+Fundamentally, the important thing is that there may be, on my laptop, branches with valuable in-progress work in them. Those branches may be checked out in a worktree.
+
+I think that a "task" is really a (repo, branch). When we work on a task, we'll always do that in a worktree. But the worktree location is not fundamental to the task's identity: the branch is.
+
+I'm not sure we need to worry about "migration". wormhole has no database; it acquires its state from reading the state on disk; that state on disk is our point of truth.
+
+What do you think the right data model is? Perhaps
+
+struct Project {
+  path: PathBuf
+  branch: Option<String> // it's a task iff this is set
+  ...
+}
+
+If a task's worktree is always at a location that can be computed from (repo_root, task_name) then why does the task struct need a path distict from the repo root path?
+
+If a shell prompt shows MY_TASK_NAME(my-branch) then how do I even know what repo I'm in?
+
+My usual shell prompt (before we introduced "tasks") was my-repo(my-branch). Maybe a task should just be my-repo(my-branch*) ?
+
+Why do I even want to see task names such as ACT-108 at all? I don't remember jira numbers.
+
+So maybe a task worktree should be stored at .git/wormhole/worktrees/my-branch? Giving worktrees names independent of their branch is based on the idea of the worktree being a long-lived "work area" in which one may work on many branches, I think. But that's not our model: in wormhole the lifetime of a worktree is the lifetime of the task. And the branch of the task is an immutable slug that, when interpreted in combination with the repo, describes what the task is.
+
+That does raise questions about whether we might want tasks that comprise multiple branches in multiple repos. But, I wonder whether we should cross that bridge when we come to it.
 
 
 ## Switching projects

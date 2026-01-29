@@ -179,8 +179,18 @@ impl<'a> Projects<'a> {
         self.0
             .all
             .values()
-            .filter(|p| query_path.starts_with(&p.repo_path))
-            .max_by_key(|p| p.repo_path.as_os_str().len())
+            .filter(|p| {
+                query_path.starts_with(&p.repo_path)
+                    || p.worktree_path()
+                        .map(|wt| query_path.starts_with(&wt))
+                        .unwrap_or(false)
+            })
+            .max_by_key(|p| {
+                p.worktree_path()
+                    .unwrap_or_else(|| p.repo_path.clone())
+                    .as_os_str()
+                    .len()
+            })
             .cloned()
     }
 

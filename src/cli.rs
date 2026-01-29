@@ -684,7 +684,11 @@ pub fn run(command: Command) -> Result<(), String> {
 }
 
 fn sprint_create(client: &Client, overrides: Vec<String>, output: &str) -> Result<(), String> {
-    use rustyline::DefaultEditor;
+    use rustyline::completion::{Completer, Pair};
+    use rustyline::highlight::Highlighter;
+    use rustyline::hint::Hinter;
+    use rustyline::validate::Validator;
+    use rustyline::{Config, Context, Editor, Helper};
     use std::collections::HashMap;
     use std::env;
     use std::path::PathBuf;
@@ -703,26 +707,78 @@ fn sprint_create(client: &Client, overrides: Vec<String>, output: &str) -> Resul
 
     // Get existing tasks from daemon (includes path and branch)
     let response = client.get("/project/list")?;
-    let existing_tasks: HashMap<String, (PathBuf, String)> =
-        serde_json::from_str::<serde_json::Value>(&response)
-            .ok()
-            .and_then(|v| v.get("current")?.as_array().cloned())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|v| {
-                        let name = v.get("name")?.as_str()?;
-                        let path = v.get("path")?.as_str()?;
-                        let branch = v.get("branch")?.as_str().unwrap_or(name);
-                        Some((name.to_string(), (PathBuf::from(path), branch.to_string())))
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
+    let parsed: serde_json::Value = serde_json::from_str(&response).map_err(|e| e.to_string())?;
+    let current = parsed
+        .get("current")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    let existing_tasks: HashMap<String, (PathBuf, String)> = current
+        .iter()
+        .filter_map(|v| {
+            let name = v.get("name")?.as_str()?;
+            let path = v.get("path")?.as_str()?;
+            let branch = v.get("branch")?.as_str().unwrap_or(name);
+            Some((name.to_string(), (PathBuf::from(path), branch.to_string())))
+        })
+        .collect();
+
+    // Get available projects for completion
+    let available_projects: Vec<String> = parsed
+        .get("available")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
 
     // Get sprint issues
     let issues = jira::get_sprint_issues()?;
 
-    let mut rl = DefaultEditor::new().map_err(|e| format!("Failed to init editor: {}", e))?;
+    struct ProjectHelper {
+        projects: Vec<String>,
+    }
+    impl Helper for ProjectHelper {}
+    impl Validator for ProjectHelper {}
+    impl Hinter for ProjectHelper {
+        type Hint = String;
+    }
+    impl Highlighter for ProjectHelper {}
+    impl Completer for ProjectHelper {
+        type Candidate = Pair;
+        fn complete(
+            &self,
+            line: &str,
+            pos: usize,
+            _ctx: &Context,
+        ) -> rustyline::Result<(usize, Vec<Pair>)> {
+            let prefix = &line[..pos];
+            let candidates: Vec<Pair> = self
+                .projects
+                .iter()
+                .filter(|p| p.starts_with(prefix))
+                .map(|p| Pair {
+                    display: p.clone(),
+                    replacement: p.clone(),
+                })
+                .collect();
+            Ok((0, candidates))
+        }
+    }
+
+    let config = Config::builder()
+        .auto_add_history(false)
+        .completion_type(rustyline::CompletionType::List)
+        .build();
+    let helper = ProjectHelper {
+        projects: available_projects,
+    };
+    let mut rl =
+        Editor::with_config(config).map_err(|e| format!("Failed to init editor: {}", e))?;
+    rl.set_helper(Some(helper));
 
     let mut result = SprintCreateResult {
         created: Vec::new(),
@@ -730,70 +786,145 @@ fn sprint_create(client: &Client, overrides: Vec<String>, output: &str) -> Resul
         no_home: Vec::new(),
     };
 
-    for issue in &issues {
-        let home = match home_overrides.get(&issue.key).or(default_home.as_ref()) {
-            Some(h) => h,
-            None => {
-                result.no_home.push(issue.key.clone());
-                continue;
+    // Filter issues that will be skipped
+    let actionable: Vec<_> = issues
+        .iter()
+        .filter(|issue| {
+            let existing = existing_tasks.get(&issue.key);
+            let has_pr = existing
+                .map(|(path, _)| crate::github::get_pr_status(path).is_some())
+                .unwrap_or(false);
+            if should_skip_issue(&issue.status, has_pr).is_some() {
+                result.skipped.push(issue.key.clone());
+                false
+            } else {
+                true
             }
-        };
+        })
+        .collect();
 
-        // Check if task exists and has a PR
-        let existing = existing_tasks.get(&issue.key);
-        let has_pr = existing
-            .map(|(path, _)| crate::github::get_pr_status(path).is_some())
-            .unwrap_or(false);
+    if actionable.is_empty() {
+        print_sprint_result(&result, output);
+        return Ok(());
+    }
 
-        if let Some(_reason) = should_skip_issue(&issue.status, has_pr) {
-            result.skipped.push(issue.key.clone());
-            continue;
+    // Collect home repo and branch for each issue, with confirmation loop
+    let to_create = loop {
+        let mut entries: Vec<(String, String, String)> = Vec::new(); // (key, home, branch)
+        let mut aborted = false;
+        let mut last_home = default_home.clone();
+
+        for issue in &actionable {
+            println!("\n{} {}", issue.key, issue.summary);
+
+            // Prompt for home repo
+            let default_h = home_overrides
+                .get(&issue.key)
+                .cloned()
+                .or(last_home.clone())
+                .unwrap_or_default();
+            let issue_home = match rl.readline_with_initial("  home: ", (&default_h, "")) {
+                Ok(line) => {
+                    let trimmed = line.trim();
+                    if trimmed.is_empty() {
+                        if default_h.is_empty() {
+                            eprintln!("Home repo is required.");
+                            aborted = true;
+                            break;
+                        }
+                        default_h
+                    } else {
+                        trimmed.to_string()
+                    }
+                }
+                Err(rustyline::error::ReadlineError::Interrupted)
+                | Err(rustyline::error::ReadlineError::Eof) => {
+                    aborted = true;
+                    break;
+                }
+                Err(e) => return Err(format!("Input error: {}", e)),
+            };
+            last_home = Some(issue_home.clone());
+
+            // Prompt for branch
+            let existing = existing_tasks.get(&issue.key);
+            let default_branch = existing
+                .map(|(_, branch)| branch.clone())
+                .unwrap_or_else(|| to_kebab_case(&issue.summary));
+
+            let branch = match rl.readline_with_initial("  branch: ", (&default_branch, "")) {
+                Ok(line) => {
+                    let trimmed = line.trim();
+                    if trimmed.is_empty() {
+                        default_branch
+                    } else {
+                        trimmed.to_string()
+                    }
+                }
+                Err(rustyline::error::ReadlineError::Interrupted)
+                | Err(rustyline::error::ReadlineError::Eof) => {
+                    aborted = true;
+                    break;
+                }
+                Err(e) => return Err(format!("Input error: {}", e)),
+            };
+
+            entries.push((issue.key.clone(), issue_home, branch));
         }
 
-        // Determine default branch name
-        let default_branch = existing
-            .map(|(_, branch)| branch.clone())
-            .unwrap_or_else(|| to_kebab_case(&issue.summary));
+        if aborted {
+            eprintln!("Aborted.");
+            return Ok(());
+        }
 
-        // Prompt for branch name
-        let prompt = format!("{} [{}]: ", issue.key, issue.summary);
-        let branch = match rl.readline_with_initial(&prompt, (&default_branch, "")) {
-            Ok(line) => {
-                let trimmed = line.trim();
-                if trimmed.is_empty() {
-                    default_branch
-                } else {
-                    trimmed.to_string()
-                }
+        // Show confirmation
+        println!("\nWill create:");
+        for (key, h, branch) in &entries {
+            println!("  {:18} {:18} {}", h, key, branch);
+        }
+
+        let confirm = rl.readline("\n[c]reate, [r]edo, [a]bort? ");
+        match confirm {
+            Ok(s) if s.trim().eq_ignore_ascii_case("c") => break entries,
+            Ok(s) if s.trim().eq_ignore_ascii_case("a") => {
+                eprintln!("Aborted.");
+                return Ok(());
             }
+            Ok(s) if s.trim().eq_ignore_ascii_case("r") => continue,
             Err(rustyline::error::ReadlineError::Interrupted)
             | Err(rustyline::error::ReadlineError::Eof) => {
-                break;
+                eprintln!("Aborted.");
+                return Ok(());
             }
-            Err(e) => return Err(format!("Input error: {}", e)),
-        };
+            _ => continue,
+        }
+    };
 
+    for (key, home, branch) in to_create {
         let path = format!(
             "/project/create/{}?home-project={}&branch={}",
-            issue.key, home, branch
+            key, home, branch
         );
         client.get(&path)?;
         result.created.push(CreatedTask {
-            home: home.clone(),
-            key: issue.key.clone(),
+            home,
+            key,
             summary: branch,
         });
     }
 
+    print_sprint_result(&result, output);
+    Ok(())
+}
+
+fn print_sprint_result(result: &SprintCreateResult, output: &str) {
     if output == "json" {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&result).map_err(|e| e.to_string())?
-        );
+        if let Ok(json) = serde_json::to_string_pretty(result) {
+            println!("{}", json);
+        }
     } else {
         println!("{}", result.render_terminal());
     }
-    Ok(())
 }
 
 fn sprint_list(client: &Client, output: &str) -> Result<(), String> {
@@ -1011,5 +1142,15 @@ mod tests {
         assert_eq!(should_skip_issue("In Progress", false), None);
         assert_eq!(should_skip_issue("In Review", false), None);
         assert_eq!(should_skip_issue("To Do", false), None);
+        assert_eq!(should_skip_issue("Open", false), None);
+        assert_eq!(should_skip_issue("Backlog", false), None);
+        assert_eq!(should_skip_issue("Selected for Development", false), None);
+    }
+
+    #[test]
+    fn test_done_takes_priority_over_has_pr() {
+        // If issue is done, skip reason should be "done" even if it has a PR
+        assert_eq!(should_skip_issue("Done", true), Some("done"));
+        assert_eq!(should_skip_issue("Closed", true), Some("done"));
     }
 }

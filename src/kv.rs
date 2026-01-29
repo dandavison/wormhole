@@ -109,9 +109,12 @@ fn wormhole_dir(project: &Project) -> PathBuf {
 }
 
 fn kv_file(project: &Project) -> PathBuf {
+    // Use store_key for filename to differentiate tasks from same repo
+    // Replace : with _ in filename since : is not valid in filenames on some systems
+    let filename = project.store_key().to_string().replace(':', "_");
     wormhole_dir(project)
         .join("kv")
-        .join(format!("{}.json", project.repo_name))
+        .join(format!("{}.json", filename))
 }
 
 fn save_project_kv(project: &Project) {

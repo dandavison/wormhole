@@ -139,7 +139,11 @@ impl ProjectPath {
     }
 
     pub fn absolute_path(&self) -> PathBuf {
-        self.project.repo_path.join(
+        let base = self
+            .project
+            .worktree_path()
+            .unwrap_or_else(|| self.project.repo_path.clone());
+        base.join(
             self.relative_path
                 .as_ref()
                 .and_then(|(p, _)| p.to_str())

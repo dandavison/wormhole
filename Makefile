@@ -19,4 +19,4 @@ extension-test:
 reload: build
 	./target/release/wormhole server start
 
-.PHONY: test serve serve-tmux build reload integration-test integration-test-headless extension-test
+.PHONY: gui test serve serve-tmux build reload integration-test integration-test-headless extension-test

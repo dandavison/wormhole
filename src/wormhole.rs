@@ -30,7 +30,6 @@ impl Application {
 pub struct QueryParams {
     pub land_in: Option<Application>,
     pub line: Option<usize>,
-    pub names: Vec<String>,
     pub home_project: Option<String>,
     pub branch: Option<String>,
     pub format: Option<String>,
@@ -278,7 +277,6 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         let repo = params.home_project.clone();
         let branch = params.branch.clone();
         let land_in = params.land_in.clone();
-        let names = params.names.clone();
         let skip_editor = params.skip_editor;
         let focus_terminal = params.focus_terminal;
         let do_switch = move || -> Result<(), String> {
@@ -301,7 +299,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
             // Otherwise, treat as regular project
             let project_path = {
                 let mut projects = projects::lock();
-                resolve_project(&mut projects, &name_or_path, names)
+                resolve_project(&mut projects, &name_or_path)
             };
             if let Some(pp) = project_path {
                 pp.open(Mutation::Insert, land_in);
@@ -403,11 +401,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
     }
 }
 
-fn resolve_project(
-    projects: &mut projects::Projects,
-    name_or_path: &str,
-    names: Vec<String>,
-) -> Option<ProjectPath> {
+fn resolve_project(projects: &mut projects::Projects, name_or_path: &str) -> Option<ProjectPath> {
     let key = StoreKey::parse(name_or_path);
     if let Some(project) = projects.by_key(&key) {
         Some(project.as_project_path())
@@ -416,16 +410,12 @@ fn resolve_project(
         if let Some(project) = projects.by_exact_path(&path) {
             Some(project.as_project_path())
         } else {
-            projects.add(name_or_path, names);
+            projects.add(name_or_path, None);
             projects.by_exact_path(&path).map(|p| p.as_project_path())
         }
     } else if let Some(path) = config::resolve_project_name(name_or_path) {
         let path_str = path.to_string_lossy().to_string();
-        let mut project_names = names;
-        if project_names.is_empty() {
-            project_names = vec![name_or_path.to_string()];
-        }
-        projects.add(&path_str, project_names);
+        projects.add(&path_str, Some(name_or_path));
         projects.by_exact_path(&path).map(|p| p.as_project_path())
     } else {
         None
@@ -508,7 +498,6 @@ impl QueryParams {
         let mut params = QueryParams {
             land_in: None,
             line: None,
-            names: vec![],
             home_project: None,
             branch: None,
             format: None,
@@ -529,8 +518,6 @@ impl QueryParams {
                     }
                 } else if key_lower == "line" {
                     params.line = val.parse::<usize>().ok();
-                } else if key_lower == "name" {
-                    params.names = val.split(',').map(|s| s.trim().to_string()).collect();
                 } else if key_lower == "home-project" {
                     params.home_project = Some(val.to_string());
                 } else if key_lower == "branch" {

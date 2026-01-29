@@ -100,17 +100,15 @@ impl<'a> Projects<'a> {
             .collect()
     }
 
-    pub fn add(&mut self, path: &str, names: Vec<String>) {
+    pub fn add(&mut self, path: &str, name: Option<&str>) {
         let path = PathBuf::from(path.to_string());
         let path = std::fs::canonicalize(&path).unwrap_or(path);
         if Some(path.as_path()) == dirs::home_dir().as_deref() {
             return;
         }
-        let name = if !names.is_empty() {
-            names[0].clone()
-        } else {
-            path.file_name().unwrap().to_str().unwrap().to_string()
-        };
+        let name = name
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| path.file_name().unwrap().to_str().unwrap().to_string());
         let key = StoreKey::project(&name);
         if !self.0.all.contains_key(&key) {
             ps!("projects::add");
@@ -119,7 +117,6 @@ impl<'a> Projects<'a> {
                 Project {
                     repo_name: name,
                     repo_path: path,
-                    aliases: names,
                     kv: HashMap::new(),
                     last_application: None,
                     branch: None,
@@ -270,7 +267,6 @@ pub fn load() {
                 Project {
                     repo_name: name,
                     repo_path: canonical,
-                    aliases: vec![],
                     kv: HashMap::new(),
                     last_application: None,
                     branch: None,
@@ -315,7 +311,6 @@ fn discover_tasks(additional_paths: HashMap<String, PathBuf>) -> HashMap<StoreKe
                     let task = Project {
                         repo_name: project_name.clone(),
                         repo_path: project_path.clone(),
-                        aliases: vec![],
                         kv: HashMap::new(),
                         last_application: None,
                         branch: Some(branch.clone()),

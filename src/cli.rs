@@ -47,21 +47,12 @@ struct ProjectDebug {
     index: usize,
     name: String,
     path: String,
-    aliases: Vec<String>,
     home_project: Option<String>,
 }
 
 impl ProjectDebug {
     fn render_terminal(&self) -> String {
-        let aliases = if self.aliases.is_empty() {
-            "none".to_string()
-        } else {
-            self.aliases.join(", ")
-        };
-        format!(
-            "[{}] name: {}, path: {}, aliases: [{}]",
-            self.index, self.name, self.path, aliases
-        )
+        format!("[{}] name: {}, path: {}", self.index, self.name, self.path)
     }
 }
 

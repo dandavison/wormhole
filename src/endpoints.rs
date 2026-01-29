@@ -62,7 +62,6 @@ pub fn debug_projects() -> Response<Body> {
                 "index": i,
                 "name": project.repo_name,
                 "path": project.repo_path.display().to_string(),
-                "aliases": project.aliases,
                 "branch": project.branch,
             })
         })

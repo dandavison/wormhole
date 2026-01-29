@@ -49,8 +49,6 @@ impl fmt::Display for StoreKey {
 pub struct Project {
     pub repo_name: String,
     pub repo_path: PathBuf,
-    #[allow(unused)]
-    pub aliases: Vec<String>,
     pub kv: HashMap<String, String>,
     pub last_application: Option<Application>,
     pub branch: Option<String>,

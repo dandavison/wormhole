@@ -8,8 +8,8 @@ use std::path::PathBuf;
 
 #[derive(Clone, Debug)]
 pub struct Project {
-    pub name: String,
-    pub path: PathBuf,
+    pub repo_name: String,
+    pub repo_path: PathBuf,
     #[allow(unused)]
     pub aliases: Vec<String>,
     pub kv: HashMap<String, String>,
@@ -26,19 +26,20 @@ impl Project {
 
     pub fn store_key(&self) -> String {
         match &self.branch {
-            Some(branch) => format!("{}:{}", self.name, branch),
-            None => self.name.clone(),
+            Some(branch) => format!("{}:{}", self.repo_name, branch),
+            None => self.repo_name.clone(),
         }
     }
 
     pub fn worktree_path(&self) -> Option<PathBuf> {
         self.branch
             .as_ref()
-            .map(|branch| git::worktree_base_path(&self.path).join(branch))
+            .map(|branch| git::worktree_base_path(&self.repo_path).join(branch))
     }
 
     pub fn working_dir(&self) -> PathBuf {
-        self.worktree_path().unwrap_or_else(|| self.path.clone())
+        self.worktree_path()
+            .unwrap_or_else(|| self.repo_path.clone())
     }
 
     pub fn is_open(&self) -> bool {
@@ -60,7 +61,7 @@ impl Project {
     }
 
     pub fn editor(&self) -> &'static Editor {
-        if self.name == "mathematics" {
+        if self.repo_name == "mathematics" {
             &Editor::Emacs
         } else {
             config::editor()

@@ -9,7 +9,7 @@ pub fn list_projects() -> Response<Body> {
         .open()
         .into_iter()
         .map(|project| {
-            let mut obj = serde_json::json!({ "name": project.name });
+            let mut obj = serde_json::json!({ "name": project.repo_name });
             if let Some(branch) = &project.branch {
                 obj["branch"] = serde_json::json!(branch);
                 if let Some(worktree_path) = project.worktree_path() {
@@ -59,8 +59,8 @@ pub fn debug_projects() -> Response<Body> {
         .map(|(i, project)| {
             serde_json::json!({
                 "index": i,
-                "name": project.name,
-                "path": project.path.display().to_string(),
+                "name": project.repo_name,
+                "path": project.repo_path.display().to_string(),
                 "aliases": project.aliases,
                 "branch": project.branch,
             })
@@ -107,10 +107,10 @@ pub fn pin_current() {
     if let Some(current) = projects.current() {
         let app = hammerspoon::current_application();
         drop(projects); // Release lock before modifying KV
-        crate::kv::set_value_sync(&current.name, "land-in", app.as_str());
+        crate::kv::set_value_sync(&current.repo_name, "land-in", app.as_str());
         hammerspoon::alert("📌");
         if debug() {
-            crate::ps!("Pinned {}: land-in={}", current.name, app.as_str());
+            crate::ps!("Pinned {}: land-in={}", current.repo_name, app.as_str());
         }
     }
 }

@@ -103,7 +103,7 @@ impl Editor {
         if self.is_none() {
             return;
         }
-        hammerspoon::close_window(self.application_name(), &project.name);
+        hammerspoon::close_window(self.application_name(), &project.repo_name);
     }
 
     pub fn focus(&self) {

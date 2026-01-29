@@ -41,11 +41,11 @@ pub struct TaskStatus {
 }
 
 pub fn get_status(project: &Project) -> TaskStatus {
-    let name = project.name.clone();
+    let name = project.repo_name.clone();
     let branch = project.branch.clone();
     let path = project
         .worktree_path()
-        .unwrap_or_else(|| project.path.clone());
+        .unwrap_or_else(|| project.repo_path.clone());
     let kv = project.kv.clone();
 
     let is_task = project.is_task();

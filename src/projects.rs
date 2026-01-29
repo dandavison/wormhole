@@ -95,7 +95,7 @@ impl<'a> Projects<'a> {
             .ring
             .iter()
             .filter_map(|n| self.0.all.get(n))
-            .filter(|p| terminal_windows.contains(&p.name) || p.is_task())
+            .filter(|p| terminal_windows.contains(&p.repo_name) || p.is_task())
             .cloned()
             .collect()
     }
@@ -116,8 +116,8 @@ impl<'a> Projects<'a> {
             self.0.all.insert(
                 name.clone(),
                 Project {
-                    name: name.clone(),
-                    path,
+                    repo_name: name.clone(),
+                    repo_path: path,
                     aliases: names,
                     kv: HashMap::new(),
                     last_application: None,
@@ -131,7 +131,7 @@ impl<'a> Projects<'a> {
     }
 
     pub fn add_project(&mut self, project: Project) {
-        if Some(project.path.as_path()) == dirs::home_dir().as_deref() {
+        if Some(project.repo_path.as_path()) == dirs::home_dir().as_deref() {
             return;
         }
         let key = project.store_key();
@@ -181,14 +181,14 @@ impl<'a> Projects<'a> {
         self.0
             .all
             .values()
-            .filter(|p| query_path.starts_with(&p.path))
-            .max_by_key(|p| p.path.as_os_str().len())
+            .filter(|p| query_path.starts_with(&p.repo_path))
+            .max_by_key(|p| p.repo_path.as_os_str().len())
             .cloned()
     }
 
     pub fn by_exact_path(&self, path: &Path) -> Option<Project> {
         let path = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-        self.0.all.values().find(|p| p.path == path).cloned()
+        self.0.all.values().find(|p| p.repo_path == path).cloned()
     }
 
     pub fn by_name(&self, name: &str) -> Option<Project> {
@@ -208,9 +208,12 @@ impl<'a> Projects<'a> {
     }
 
     pub fn print(&self) {
-        let previous = self.previous().map(|p| p.name).unwrap_or("none".into());
-        let current = self.current().map(|p| p.name).unwrap_or("none".into());
-        let next = self.next().map(|p| p.name).unwrap_or("none".into());
+        let previous = self
+            .previous()
+            .map(|p| p.repo_name)
+            .unwrap_or("none".into());
+        let current = self.current().map(|p| p.repo_name).unwrap_or("none".into());
+        let next = self.next().map(|p| p.repo_name).unwrap_or("none".into());
         let len = self.0.ring.len();
 
         thread::spawn(move || {
@@ -266,8 +269,8 @@ pub fn load() {
             projects.0.all.insert(
                 name.clone(),
                 Project {
-                    name: name.clone(),
-                    path: canonical,
+                    repo_name: name.clone(),
+                    repo_path: canonical,
                     aliases: vec![],
                     kv: HashMap::new(),
                     last_application: None,
@@ -311,8 +314,8 @@ fn discover_tasks(additional_paths: HashMap<String, PathBuf>) -> HashMap<String,
                 .filter_map(|wt| {
                     let branch = wt.branch.as_ref()?;
                     let task = Project {
-                        name: project_name.clone(),
-                        path: project_path.clone(),
+                        repo_name: project_name.clone(),
+                        repo_path: project_path.clone(),
                         aliases: vec![],
                         kv: HashMap::new(),
                         last_application: None,
@@ -334,7 +337,7 @@ pub fn refresh_tasks() {
             .all
             .iter()
             .filter(|(_, p)| !p.is_task())
-            .map(|(name, project)| (name.clone(), project.path.clone()))
+            .map(|(name, project)| (name.clone(), project.repo_path.clone()))
             .collect()
     };
 

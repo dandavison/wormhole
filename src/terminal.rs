@@ -70,11 +70,11 @@ pub struct ShellEnvVars {
 }
 
 pub fn shell_env_vars(project: &Project) -> ShellEnvVars {
-    let jira_url = jira_url_for_name(&project.name).unwrap_or_default();
+    let jira_url = jira_url_for_name(&project.repo_name).unwrap_or_default();
     let github_repo = project
         .github_repo
         .clone()
-        .or_else(|| git::github_repo_from_remote(&project.path))
+        .or_else(|| git::github_repo_from_remote(&project.repo_path))
         .unwrap_or_default();
     let github_pr_url = if !github_repo.is_empty() {
         project
@@ -86,7 +86,7 @@ pub fn shell_env_vars(project: &Project) -> ShellEnvVars {
         String::new()
     };
     ShellEnvVars {
-        project_name: project.name.clone(),
+        project_name: project.repo_name.clone(),
         project_dir: project.working_dir().to_string_lossy().to_string(),
         jira_url,
         github_repo,

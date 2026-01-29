@@ -93,7 +93,7 @@ pub fn open_task(
             config::TERMINAL.open(&project).unwrap_or_else(|err| {
                 warn(&format!(
                     "Error opening {} in terminal: {}",
-                    &project.name, err
+                    &project.repo_name, err
                 ))
             })
         }
@@ -146,7 +146,7 @@ pub fn remove_task(repo: &str, branch: &str) -> Result<(), String> {
         .ok_or_else(|| format!("'{}:{}' is not a task", repo, branch))?;
 
     crate::serve_web::manager().stop(&task.store_key());
-    git::remove_worktree(&task.path, &worktree_path)?;
+    git::remove_worktree(&task.repo_path, &worktree_path)?;
 
     // Remove from unified store
     {
@@ -162,7 +162,7 @@ fn resolve_project_path(project_name: &str) -> Result<PathBuf, String> {
         .or_else(|| {
             projects::lock()
                 .by_name(project_name)
-                .map(|p| p.path.clone())
+                .map(|p| p.repo_path.clone())
         })
         .ok_or_else(|| format!("Project '{}' not found", project_name))
 }

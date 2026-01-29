@@ -19,7 +19,7 @@ impl ProjectPath {
         let mut projects = projects::lock();
         let current_app = projects.current().map(|current| {
             let app = hammerspoon::current_application();
-            projects.set_last_application(&current.name, app.clone());
+            projects.set_last_application(&current.repo_name, app.clone());
             app
         });
         let project = self.project.clone();
@@ -39,7 +39,7 @@ impl ProjectPath {
                 }
             }),
         });
-        projects.apply(mutation, &self.project.name);
+        projects.apply(mutation, &self.project.repo_name);
         if util::debug() {
             projects.print();
         }
@@ -48,7 +48,7 @@ impl ProjectPath {
             config::TERMINAL.open(&project).unwrap_or_else(|err| {
                 warn(&format!(
                     "Error opening {} in terminal: {}",
-                    &project.name, err
+                    &project.repo_name, err
                 ))
             })
         };
@@ -137,7 +137,7 @@ impl ProjectPath {
     }
 
     pub fn absolute_path(&self) -> PathBuf {
-        self.project.path.join(
+        self.project.repo_path.join(
             self.relative_path
                 .as_ref()
                 .and_then(|(p, _)| p.to_str())

@@ -96,7 +96,7 @@ pub fn get_all_kv() -> Response<Body> {
 
     for project in projects.all() {
         if !project.kv.is_empty() {
-            all_kv.insert(&project.name, &project.kv);
+            all_kv.insert(&project.repo_name, &project.kv);
         }
     }
 
@@ -105,13 +105,13 @@ pub fn get_all_kv() -> Response<Body> {
 }
 
 fn wormhole_dir(project: &Project) -> PathBuf {
-    crate::git::git_common_dir(&project.path).join("wormhole")
+    crate::git::git_common_dir(&project.repo_path).join("wormhole")
 }
 
 fn kv_file(project: &Project) -> PathBuf {
     wormhole_dir(project)
         .join("kv")
-        .join(format!("{}.json", project.name))
+        .join(format!("{}.json", project.repo_name))
 }
 
 fn save_project_kv(project: &Project) {
@@ -130,7 +130,7 @@ fn save_project_kv(project: &Project) {
 
     let json = serde_json::to_string_pretty(&project.kv).unwrap();
     fs::write(&path, json).unwrap_or_else(|e| {
-        eprintln!("Failed to save KV data for {}: {}", project.name, e);
+        eprintln!("Failed to save KV data for {}: {}", project.repo_name, e);
     });
 }
 

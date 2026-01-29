@@ -144,7 +144,7 @@ pub fn get_open_pr_number(project: &Project) -> Option<u64> {
     if let Some(pr) = project.github_pr {
         return Some(pr);
     }
-    fetch_pr_number(&project.path)
+    fetch_pr_number(&project.repo_path)
 }
 
 /// Get the repo name for a project, checking cached value first
@@ -152,13 +152,13 @@ pub fn get_repo_name(project: &Project) -> Option<String> {
     if let Some(ref repo) = project.github_repo {
         return Some(repo.clone());
     }
-    fetch_repo_name(&project.path)
+    fetch_repo_name(&project.repo_path)
 }
 
 /// Refresh GitHub info by fetching from gh CLI
 pub fn refresh_github_info(project: &mut Project) {
-    project.github_pr = fetch_pr_number(&project.path);
-    project.github_repo = fetch_repo_name(&project.path);
+    project.github_pr = fetch_pr_number(&project.repo_path);
+    project.github_repo = fetch_repo_name(&project.repo_path);
 }
 
 fn fetch_pr_number(project_path: &Path) -> Option<u64> {

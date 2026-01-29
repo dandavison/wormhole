@@ -64,7 +64,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
             .all()
             .iter()
             .map(|p| {
-                let mut obj = serde_json::json!({ "name": p.name });
+                let mut obj = serde_json::json!({ "name": p.repo_name });
                 if let Some(branch) = &p.branch {
                     obj["branch"] = serde_json::json!(branch);
                 }
@@ -97,7 +97,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
             let mut projects = projects::lock();
             let pp = projects.previous().map(|p| p.as_project_path());
             if let Some(ref pp) = pp {
-                projects.apply(Mutation::RotateLeft, &pp.project.name);
+                projects.apply(Mutation::RotateLeft, &pp.project.repo_name);
             }
             pp
         };
@@ -111,7 +111,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
             let mut projects = projects::lock();
             let pp = projects.next().map(|p| p.as_project_path());
             if let Some(ref pp) = pp {
-                projects.apply(Mutation::RotateRight, &pp.project.name);
+                projects.apply(Mutation::RotateRight, &pp.project.repo_name);
             }
             pp
         };
@@ -237,7 +237,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         if let Some(project) = projects.get_mut(name) {
             crate::github::refresh_github_info(project);
             let json = serde_json::json!({
-                "name": project.name,
+                "name": project.repo_name,
                 "github_pr": project.github_pr,
                 "github_repo": project.github_repo,
             });
@@ -338,7 +338,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
             let projects = projects::lock();
             projects
                 .by_name(&name)
-                .map(|p| (p.name.clone(), p.path.clone()))
+                .map(|p| (p.repo_name.clone(), p.repo_path.clone()))
         };
 
         match result {

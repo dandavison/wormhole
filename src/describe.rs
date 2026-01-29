@@ -175,7 +175,7 @@ fn describe_jira(jira_key: &str) -> DescribeResponse {
             name: Some(jira_key.to_string()),
             kind: Some("task".to_string()),
             home_project: if project.is_task() {
-                Some(project.name.clone())
+                Some(project.repo_name.clone())
             } else {
                 None
             },
@@ -223,7 +223,7 @@ fn find_task_by_pr(owner: &str, repo: &str, pr_number: u64) -> Option<(String, S
         if task_repo != expected_repo {
             return None;
         }
-        Some((name.clone(), project.name.clone()))
+        Some((name.clone(), project.repo_name.clone()))
     })
 }
 

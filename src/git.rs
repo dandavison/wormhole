@@ -173,7 +173,12 @@ pub fn worktree_base_path(repo_path: &Path) -> PathBuf {
 
 pub fn remove_worktree(repo_path: &Path, worktree_path: &Path) -> Result<(), String> {
     let output = Command::new("git")
-        .args(["worktree", "remove", worktree_path.to_str().unwrap()])
+        .args([
+            "worktree",
+            "remove",
+            "--force",
+            worktree_path.to_str().unwrap(),
+        ])
         .current_dir(repo_path)
         .output()
         .map_err(|e| format!("Failed to run git worktree remove: {}", e))?;

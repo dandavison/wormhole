@@ -17,6 +17,9 @@ pub fn list_projects() -> Response<Body> {
                     obj["path"] = serde_json::json!(worktree_path);
                 }
             }
+            if !project.kv.is_empty() {
+                obj["kv"] = serde_json::json!(project.kv);
+            }
             obj
         })
         .collect();
@@ -150,17 +153,17 @@ fn render_card(item: &crate::status::SprintShowItem, jira_instance: Option<&str>
 
     match item {
         SprintShowItem::Task(task) => {
-            let jira_url = jira_instance
-                .map(|i| format!("https://{}.atlassian.net/browse/{}", i, task.name))
+            // Primary identifier: repo branch
+            let branch_html = task
+                .branch
+                .as_ref()
+                .map(|b| format!(" {}", html_escape(b)))
                 .unwrap_or_default();
-            let key_html = if jira_url.is_empty() {
-                format!(r#"<span class="card-key">{}</span>"#, task.name)
-            } else {
-                format!(
-                    r#"<a class="card-key" href="{}" target="_blank">{}</a>"#,
-                    jira_url, task.name
-                )
-            };
+            let repo_branch = format!(
+                r#"<span class="card-key">{}{}</span>"#,
+                html_escape(&task.name),
+                branch_html
+            );
 
             let summary = task
                 .jira
@@ -228,15 +231,22 @@ fn render_card(item: &crate::status::SprintShowItem, jira_instance: Option<&str>
                 .map(|j| status_data_attr(&j.status))
                 .unwrap_or_default();
 
+            // Task identifier for switching: repo:branch
+            let task_id = task
+                .branch
+                .as_ref()
+                .map(|b| format!("{}:{}", task.name, b))
+                .unwrap_or_else(|| task.name.clone());
+
             format!(
                 r#"<div class="card" data-task="{}"{}>
 <div class="card-header">{}<span class="card-summary">{}</span>{}</div>
 <div class="card-meta">{}{}</div>
 {}
 </div>"#,
-                html_escape(&task.name),
+                html_escape(&task_id),
                 status_attr,
-                key_html,
+                repo_branch,
                 summary,
                 status_html,
                 pr_html,

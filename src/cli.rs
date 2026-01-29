@@ -1019,6 +1019,12 @@ fn print_sprint_result(result: &SprintCreateResult, output: &str) {
     }
 }
 
+struct TaskInfo {
+    repo: String,
+    branch: String,
+    path: std::path::PathBuf,
+}
+
 fn sprint_list(client: &Client, output: &str) -> Result<(), String> {
     use crate::github::{self, PrStatus};
     use std::collections::HashMap;
@@ -1028,27 +1034,34 @@ fn sprint_list(client: &Client, output: &str) -> Result<(), String> {
 
     let issues = jira::get_sprint_issues()?;
 
-    // Get task paths from daemon
+    // Get tasks from daemon, indexed by jira_key
     let response = client.get("/project/list")?;
-    let task_paths: HashMap<String, PathBuf> = serde_json::from_str::<serde_json::Value>(&response)
-        .ok()
-        .and_then(|v| v.get("current")?.as_array().cloned())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|v| {
-                    let name = v.get("name")?.as_str()?;
-                    let path = v.get("path")?.as_str()?;
-                    Some((name.to_string(), PathBuf::from(path)))
-                })
-                .collect()
-        })
-        .unwrap_or_default();
+    let tasks_by_jira_key: HashMap<String, TaskInfo> =
+        serde_json::from_str::<serde_json::Value>(&response)
+            .ok()
+            .and_then(|v| v.get("current")?.as_array().cloned())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| {
+                        let repo = v.get("name")?.as_str()?.to_string();
+                        let branch = v.get("branch")?.as_str()?.to_string();
+                        let path = PathBuf::from(v.get("path")?.as_str()?);
+                        let jira_key = v
+                            .get("kv")
+                            .and_then(|kv| kv.get("jira_key"))
+                            .and_then(|k| k.as_str())?
+                            .to_string();
+                        Some((jira_key, TaskInfo { repo, branch, path }))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
 
     if output == "json" {
         let pr_handles: Vec<_> = issues
             .iter()
             .map(|issue| {
-                let path = task_paths.get(&issue.key).cloned();
+                let path = tasks_by_jira_key.get(&issue.key).map(|t| t.path.clone());
                 thread::spawn(move || path.and_then(|p| github::get_pr_status(&p)))
             })
             .collect();
@@ -1080,7 +1093,7 @@ fn sprint_list(client: &Client, output: &str) -> Result<(), String> {
         let pr_handles: Vec<_> = issues
             .iter()
             .map(|issue| {
-                let path = task_paths.get(&issue.key).cloned();
+                let path = tasks_by_jira_key.get(&issue.key).map(|t| t.path.clone());
                 thread::spawn(move || path.and_then(|p| github::get_pr_status(&p)))
             })
             .collect();
@@ -1106,8 +1119,15 @@ fn sprint_list(client: &Client, output: &str) -> Result<(), String> {
                 })
                 .unwrap_or_default();
 
+            // Show repo:branch prefix if task exists
+            let prefix = tasks_by_jira_key
+                .get(&issue.key)
+                .map(|t| format!("{}: {}  ", t.repo, t.branch))
+                .unwrap_or_default();
+
             println!(
-                "{} {}: {}{}",
+                "{}{} {}: {}{}",
+                prefix,
                 issue.status_emoji(),
                 key_display,
                 issue.summary,

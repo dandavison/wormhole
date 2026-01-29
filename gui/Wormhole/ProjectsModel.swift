@@ -3,10 +3,12 @@ import Combine
 
 struct ProjectInfo: Codable {
     let name: String
-    let home_project: String?
     let branch: String?
 
-    var isTask: Bool { home_project != nil }
+    var isTask: Bool { branch != nil }
+
+    // For display: repo name
+    var repo: String { name }
 }
 
 struct ProjectsResponse: Codable {
@@ -55,8 +57,7 @@ final class ProjectsModel: ObservableObject {
         case .current:
             let filtered = text.isEmpty ? currentProjects : currentProjects.filter {
                 $0.name.lowercased().contains(text) ||
-                ($0.branch?.lowercased().contains(text) ?? false) ||
-                ($0.home_project?.lowercased().contains(text) ?? false)
+                ($0.branch?.lowercased().contains(text) ?? false)
             }
             self.projects = formatAligned(filtered, allProjects: currentProjects)
         case .available:
@@ -69,14 +70,15 @@ final class ProjectsModel: ObservableObject {
 
     private func formatAligned(_ projects: [ProjectInfo], allProjects: [ProjectInfo]) -> [Project<String>] {
         let allTasks = allProjects.filter { $0.isTask }
-        let homeWidth = min(allTasks.map { $0.home_project?.count ?? 0 }.max() ?? 0, 16)
+        let repoWidth = min(allTasks.map { $0.repo.count }.max() ?? 0, 16)
         let branchWidth = 60
 
         return projects.map { p in
-            if let home = p.home_project, let branch = p.branch {
-                let col1 = truncateOrPad(home, width: homeWidth)
+            if let branch = p.branch {
+                let col1 = truncateOrPad(p.repo, width: repoWidth)
                 let col2 = truncate(branch, width: branchWidth)
-                return Project(text: "\(col1)  \(col2)", value: p.name)
+                // Value is store_key format: repo:branch
+                return Project(text: "\(col1)  \(col2)", value: "\(p.repo):\(branch)")
             }
             return Project(text: p.name, value: p.name)
         }

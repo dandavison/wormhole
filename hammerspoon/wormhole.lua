@@ -21,10 +21,10 @@ local lastMoveTime = 0
 local neighborAlertId = nil
 local neighborTap = nil
 local neighborOverlayActive = false
-local neighborDisplayOrder = nil -- locked display order while overlay is shown
-local neighborCurrentIdx = nil   -- current position in neighborDisplayOrder
+local neighborDisplayOrder = nil  -- locked display order while overlay is shown
+local neighborCurrentIdx = nil    -- current position in neighborDisplayOrder
 local neighborEditorWindows = nil -- cached set of projects with editor windows
-local refreshNeighborOverlay     -- forward declaration
+local refreshNeighborOverlay      -- forward declaration
 
 -- Get set of project names that have editor windows open (Cursor/Code)
 local function getEditorWindows()

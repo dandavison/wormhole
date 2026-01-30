@@ -1,37 +1,16 @@
 use hyper::{Body, Response, StatusCode};
-use std::collections::HashSet;
 
 use crate::project::ProjectKey;
-use crate::{config, github, hammerspoon, jira, projects, util::debug};
+use crate::{config, hammerspoon, projects, util::debug};
 
 /// Return JSON with current and available projects (including tasks)
-/// If sprint_only is true, filter to tasks in the current sprint and include JIRA/PR info
-pub fn list_projects(sprint_only: bool) -> Response<Body> {
-    // Get sprint issue keys if filtering
-    let sprint_keys: HashSet<String> = if sprint_only {
-        jira::get_sprint_issues()
-            .map(|issues| issues.into_iter().map(|i| i.key).collect())
-            .unwrap_or_default()
-    } else {
-        HashSet::new()
-    };
-
-    // Get currently open projects
+/// Includes cached JIRA/PR status for tasks
+pub fn list_projects() -> Response<Body> {
     let open_projects = projects::lock().open();
 
     let mut current: Vec<_> = open_projects
         .into_iter()
-        .filter_map(|project| {
-            let jira_key = project.kv.get("jira_key").cloned();
-
-            // If sprint_only, filter to tasks with jira_key in sprint
-            if sprint_only {
-                let key = jira_key.as_ref()?;
-                if !sprint_keys.contains(key) {
-                    return None;
-                }
-            }
-
+        .map(|project| {
             let mut obj = serde_json::json!({ "name": project.repo_name });
             if let Some(branch) = &project.branch {
                 obj["branch"] = serde_json::json!(branch);
@@ -44,27 +23,13 @@ pub fn list_projects(sprint_only: bool) -> Response<Body> {
             if !project.kv.is_empty() {
                 obj["kv"] = serde_json::json!(project.kv);
             }
-
-            // For sprint view, add JIRA status and PR info
-            if sprint_only {
-                if let Some(ref key) = jira_key {
-                    if let Ok(Some(issue)) = jira::get_issue(key) {
-                        obj["jira"] = serde_json::json!({
-                            "key": issue.key,
-                            "status": issue.status,
-                            "summary": issue.summary,
-                        });
-                    }
-                }
-                let path = project
-                    .worktree_path()
-                    .unwrap_or_else(|| project.repo_path.clone());
-                if let Some(pr) = github::get_pr_status(&path) {
-                    obj["pr"] = serde_json::json!(pr);
-                }
+            if let Some(ref jira) = project.cached_jira {
+                obj["jira"] = serde_json::json!(jira);
             }
-
-            Some(obj)
+            if let Some(ref pr) = project.cached_pr {
+                obj["pr"] = serde_json::json!(pr);
+            }
+            obj
         })
         .collect();
 
@@ -83,13 +48,13 @@ pub fn list_projects(sprint_only: bool) -> Response<Body> {
         }
     });
 
-    let mut json = serde_json::json!({ "current": current });
+    let available = config::available_projects();
+    let available: Vec<&str> = available.keys().map(|s| s.as_str()).collect();
 
-    if !sprint_only {
-        let available = config::available_projects();
-        let available: Vec<&str> = available.keys().map(|s| s.as_str()).collect();
-        json["available"] = serde_json::json!(available);
-    }
+    let json = serde_json::json!({
+        "current": current,
+        "available": available,
+    });
 
     Response::builder()
         .header("Content-Type", "application/json")
@@ -153,8 +118,6 @@ pub fn close_project(name: &str) {
 
 /// Refresh all in-memory data from external sources (fs, github)
 pub fn refresh_all() {
-    use rayon::prelude::*;
-
     // Refresh tasks from filesystem
     projects::refresh_tasks();
 
@@ -164,18 +127,8 @@ pub fn refresh_all() {
         crate::kv::load_kv_data(&mut projects);
     }
 
-    // Refresh GitHub info for all projects concurrently
-    let keys: Vec<_> = {
-        let projects = projects::lock();
-        projects.all().iter().map(|p| p.store_key()).collect()
-    };
-
-    keys.par_iter().for_each(|key| {
-        let mut projects = projects::lock();
-        if let Some(project) = projects.get_mut(key) {
-            crate::github::refresh_github_info(project);
-        }
-    });
+    // Refresh cached JIRA/PR status for all tasks (parallel via rayon)
+    projects::refresh_cache();
 
     if debug() {
         let projects = projects::lock();
@@ -197,22 +150,18 @@ pub fn pin_current() {
     }
 }
 
-pub fn sprint() -> Response<Body> {
-    let items = crate::status::get_sprint_status();
-    let json = serde_json::to_string_pretty(&items).unwrap_or_default();
-    Response::builder()
-        .header("Content-Type", "application/json")
-        .body(Body::from(json))
-        .unwrap()
-}
-
 pub fn dashboard() -> Response<Body> {
-    let items = crate::status::get_sprint_status();
+    use crate::project::Project;
+
+    let tasks: Vec<Project> = {
+        let projects = projects::lock();
+        projects.all().into_iter().filter(|p| p.is_task()).cloned().collect()
+    };
     let jira_instance = std::env::var("JIRA_INSTANCE").ok();
 
-    let cards_html: String = items
+    let cards_html: String = tasks
         .iter()
-        .map(|item| render_card(item, jira_instance.as_deref()))
+        .map(|task| render_task_card(task, jira_instance.as_deref()))
         .collect();
 
     let template = include_str!("dashboard.html");
@@ -224,160 +173,123 @@ pub fn dashboard() -> Response<Body> {
         .unwrap()
 }
 
-fn render_card(item: &crate::status::SprintShowItem, jira_instance: Option<&str>) -> String {
-    use crate::status::SprintShowItem;
+fn render_task_card(task: &crate::project::Project, jira_instance: Option<&str>) -> String {
+    let branch_html = task
+        .branch
+        .as_ref()
+        .map(|b| format!(" {}", html_escape(b)))
+        .unwrap_or_default();
+    let repo_branch = format!(
+        r#"<span class="card-key">{}{}</span>"#,
+        html_escape(&task.repo_name),
+        branch_html
+    );
 
-    match item {
-        SprintShowItem::Task(task) => {
-            // Primary identifier: repo branch
-            let branch_html = task
-                .branch
-                .as_ref()
-                .map(|b| format!(" {}", html_escape(b)))
-                .unwrap_or_default();
-            let repo_branch = format!(
-                r#"<span class="card-key">{}{}</span>"#,
-                html_escape(&task.name),
-                branch_html
-            );
+    let summary = task
+        .cached_jira
+        .as_ref()
+        .map(|j| html_escape(&j.summary))
+        .unwrap_or_default();
 
-            let summary = task
-                .jira
-                .as_ref()
-                .map(|j| html_escape(&j.summary))
-                .unwrap_or_default();
-
-            let status_html = task
-                .jira
-                .as_ref()
-                .map(|j| {
-                    format!(
-                        r#"<span class="card-status">{} {}</span>"#,
-                        j.status_emoji(),
-                        html_escape(&j.status)
-                    )
-                })
-                .unwrap_or_default();
-
-            let pr_html = if let Some(ref pr) = task.pr {
-                let comments = pr
-                    .comments_display()
-                    .map(|c| format!(" [{}]", html_escape(&c)))
-                    .unwrap_or_default();
-                format!(
-                    r#"<span class="meta-item"><a href="{}" target="_blank">{}</a>{}</span>"#,
-                    pr.url,
-                    html_escape(&pr.display()),
-                    comments
-                )
-            } else {
-                String::new()
-            };
-
-            let jira_html = task
-                .jira
-                .as_ref()
-                .and_then(|j| {
-                    jira_instance.map(|i| {
-                        format!(
-                            r#"<span class="meta-item"><a href="https://{}.atlassian.net/browse/{}" target="_blank">{}</a></span>"#,
-                            i,
-                            html_escape(&j.key),
-                            html_escape(&j.key)
-                        )
-                    })
-                })
-                .unwrap_or_default();
-
-            let plan_html = if task.plan_exists {
-                if let Some(ref url) = task.plan_url {
-                    format!(
-                        r#"<span class="meta-item">Plan: <a href="{}" target="_blank" class="check">✓</a></span>"#,
-                        url
-                    )
-                } else {
-                    r#"<span class="meta-item">Plan: <span class="check">✓</span></span>"#
-                        .to_string()
-                }
-            } else {
-                r#"<span class="meta-item">Plan: <span class="cross">✗</span></span>"#.to_string()
-            };
-
-            let iframe_html = match crate::serve_web::manager().get_or_start(&task.name, &task.path)
-            {
-                Ok(port) => {
-                    let folder_encoded = url_encode(&task.path.to_string_lossy());
-                    format!(
-                        r#"<div class="card-actions"><button class="btn btn-terminal">Terminal</button><button class="btn btn-cursor">Cursor</button><button class="btn btn-vscode">VSCode</button><button class="btn btn-maximize">Maximize</button></div>
-<div class="iframe-container"><iframe data-src="http://localhost:{}/?folder={}"></iframe></div>"#,
-                        port, folder_encoded
-                    )
-                }
-                Err(_) => String::new(),
-            };
-
-            let status_attr = task
-                .jira
-                .as_ref()
-                .map(|j| status_data_attr(&j.status))
-                .unwrap_or_default();
-
-            // Task identifier for switching: repo:branch
-            let task_id = task
-                .branch
-                .as_ref()
-                .map(|b| format!("{}:{}", task.name, b))
-                .unwrap_or_else(|| task.name.clone());
-
+    let status_html = task
+        .cached_jira
+        .as_ref()
+        .map(|j| {
             format!(
-                r#"<div class="card" data-task="{}"{}>
+                r#"<span class="card-status">{} {}</span>"#,
+                j.status_emoji(),
+                html_escape(&j.status)
+            )
+        })
+        .unwrap_or_default();
+
+    let pr_html = if let Some(ref pr) = task.cached_pr {
+        let comments = pr
+            .comments_display()
+            .map(|c| format!(" [{}]", html_escape(&c)))
+            .unwrap_or_default();
+        format!(
+            r#"<span class="meta-item"><a href="{}" target="_blank">{}</a>{}</span>"#,
+            pr.url,
+            html_escape(&pr.display()),
+            comments
+        )
+    } else {
+        String::new()
+    };
+
+    let jira_html = task
+        .cached_jira
+        .as_ref()
+        .and_then(|j| {
+            jira_instance.map(|i| {
+                format!(
+                    r#"<span class="meta-item"><a href="https://{}.atlassian.net/browse/{}" target="_blank">{}</a></span>"#,
+                    i,
+                    html_escape(&j.key),
+                    html_escape(&j.key)
+                )
+            })
+        })
+        .unwrap_or_default();
+
+    let path = task.working_dir();
+    let plan_exists = path.join(".task/plan.md").exists();
+    let plan_url = if plan_exists {
+        crate::git::github_file_url(&path, ".task/plan.md")
+    } else {
+        None
+    };
+
+    let plan_html = if plan_exists {
+        if let Some(ref url) = plan_url {
+            format!(
+                r#"<span class="meta-item">Plan: <a href="{}" target="_blank" class="check">✓</a></span>"#,
+                url
+            )
+        } else {
+            r#"<span class="meta-item">Plan: <span class="check">✓</span></span>"#.to_string()
+        }
+    } else {
+        r#"<span class="meta-item">Plan: <span class="cross">✗</span></span>"#.to_string()
+    };
+
+    let iframe_html = match crate::serve_web::manager().get_or_start(&task.repo_name, &path) {
+        Ok(port) => {
+            let folder_encoded = url_encode(&path.to_string_lossy());
+            format!(
+                r#"<div class="card-actions"><button class="btn btn-terminal">Terminal</button><button class="btn btn-cursor">Cursor</button><button class="btn btn-vscode">VSCode</button><button class="btn btn-maximize">Maximize</button></div>
+<div class="iframe-container"><iframe data-src="http://localhost:{}/?folder={}"></iframe></div>"#,
+                port, folder_encoded
+            )
+        }
+        Err(_) => String::new(),
+    };
+
+    let status_attr = task
+        .cached_jira
+        .as_ref()
+        .map(|j| status_data_attr(&j.status))
+        .unwrap_or_default();
+
+    let task_id = task.store_key().to_string();
+
+    format!(
+        r#"<div class="card" data-task="{}"{}>
 <div class="card-header">{}<span class="card-summary">{}</span>{}</div>
 <div class="card-meta">{}{}{}</div>
 {}
 </div>"#,
-                html_escape(&task_id),
-                status_attr,
-                repo_branch,
-                summary,
-                status_html,
-                jira_html,
-                pr_html,
-                plan_html,
-                iframe_html
-            )
-        }
-        SprintShowItem::Issue(issue) => {
-            let jira_url = jira_instance
-                .map(|i| format!("https://{}.atlassian.net/browse/{}", i, issue.key))
-                .unwrap_or_default();
-            let key_html = if jira_url.is_empty() {
-                format!(r#"<span class="card-key">{}</span>"#, issue.key)
-            } else {
-                format!(
-                    r#"<a class="card-key" href="{}" target="_blank">{}</a>"#,
-                    jira_url, issue.key
-                )
-            };
-            let status_html = format!(
-                r#"<span class="card-status">{} {}</span>"#,
-                issue.status_emoji(),
-                html_escape(&issue.status)
-            );
-
-            let status_attr = status_data_attr(&issue.status);
-
-            format!(
-                r#"<div class="card"{}>
-<div class="card-header">{}<span class="card-summary">{}</span>{}</div>
-<div class="no-task">no wormhole task</div>
-</div>"#,
-                status_attr,
-                key_html,
-                html_escape(&issue.summary),
-                status_html
-            )
-        }
-    }
+        html_escape(&task_id),
+        status_attr,
+        repo_branch,
+        summary,
+        status_html,
+        jira_html,
+        pr_html,
+        plan_html,
+        iframe_html
+    )
 }
 
 fn html_escape(s: &str) -> String {

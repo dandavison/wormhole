@@ -1073,14 +1073,42 @@ fn print_sprint_result(result: &SprintCreateResult, output: &str) {
 }
 
 fn sprint_list(client: &Client, output: &str) -> Result<(), String> {
-    let response = client.get("/project/list?sprint=true")?;
+    use std::collections::HashSet;
+
+    // Fetch sprint issues (client-side I/O)
+    let sprint_keys: HashSet<String> = jira::get_sprint_issues()
+        .map(|issues| issues.into_iter().map(|i| i.key).collect())
+        .unwrap_or_default();
+
+    // Get project list from server (in-memory, includes cached JIRA/PR)
+    let response = client.get("/project/list")?;
+    let json: serde_json::Value =
+        serde_json::from_str(&response).map_err(|e| e.to_string())?;
+
+    // Filter to tasks with jira_key in sprint
+    let sprint_tasks: Vec<&serde_json::Value> = json
+        .get("current")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter(|item| {
+                    item.get("kv")
+                        .and_then(|kv| kv.get("jira_key"))
+                        .and_then(|k| k.as_str())
+                        .is_some_and(|k| sprint_keys.contains(k))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
     if output == "json" {
-        println!("{}", response);
-    } else if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response) {
-        if let Some(current) = json.get("current").and_then(|v| v.as_array()) {
-            for item in current {
-                println!("{}", render_project_item(item, true));
-            }
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&sprint_tasks).map_err(|e| e.to_string())?
+        );
+    } else {
+        for item in sprint_tasks {
+            println!("{}", render_project_item(item, true));
         }
     }
     Ok(())
@@ -1165,7 +1193,7 @@ fn render_project_item(item: &serde_json::Value, sprint_view: bool) -> String {
 }
 
 fn sprint_show(output: &str) -> Result<(), String> {
-    use crate::status::{SprintShowItem, TaskStatus};
+    use crate::status::TaskStatus;
     use std::thread;
 
     let issues = jira::get_sprint_issues()?;
@@ -1189,7 +1217,15 @@ fn sprint_show(output: &str) -> Result<(), String> {
         .map(|h| h.join().ok().flatten())
         .collect();
 
-    // Build SprintShowItem list
+    #[derive(serde::Serialize)]
+    #[serde(tag = "type")]
+    enum SprintShowItem {
+        #[serde(rename = "task")]
+        Task(TaskStatus),
+        #[serde(rename = "issue")]
+        Issue(crate::jira::IssueStatus),
+    }
+
     let items: Vec<SprintShowItem> = issues
         .into_iter()
         .zip(statuses)
@@ -1206,7 +1242,12 @@ fn sprint_show(output: &str) -> Result<(), String> {
         );
     } else {
         for item in &items {
-            println!("{}\n\n", render_sprint_show_item(item));
+            match item {
+                SprintShowItem::Task(task) => println!("{}\n\n", render_task_status(task)),
+                SprintShowItem::Issue(issue) => {
+                    println!("{}\n  (no wormhole task)\n\n", render_issue_status(issue))
+                }
+            }
         }
     }
     Ok(())
@@ -1274,16 +1315,6 @@ fn render_task_status(status: &crate::status::TaskStatus) -> String {
     }
 
     lines.join("\n")
-}
-
-fn render_sprint_show_item(item: &crate::status::SprintShowItem) -> String {
-    use crate::status::SprintShowItem;
-    match item {
-        SprintShowItem::Task(task) => render_task_status(task),
-        SprintShowItem::Issue(issue) => {
-            format!("{}\n  (no wormhole task)", render_issue_status(issue))
-        }
-    }
 }
 
 fn render_issue_status(issue: &crate::jira::IssueStatus) -> String {

@@ -54,6 +54,8 @@ pub struct Project {
     pub branch: Option<String>,
     pub github_pr: Option<u64>,
     pub github_repo: Option<String>,
+    pub cached_jira: Option<crate::jira::IssueStatus>,
+    pub cached_pr: Option<crate::github::PrStatus>,
 }
 
 impl Project {

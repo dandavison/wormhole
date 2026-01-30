@@ -168,26 +168,34 @@ HTTP PUT /kv/{project}/{key}
 
 ### I/O Summary
 
-**In-memory only (fast, no I/O)**:
-- `/project/list` — reads from `ProjectsStore.all` HashMap
+The server uses a cache model: all handlers read from in-memory cache only. Network I/O
+(JIRA, GitHub) happens only during explicit refresh.
+
+**All server handlers — in-memory only (fast, no I/O)**:
+- `/project/list` — reads from `ProjectsStore.all`, returns cached JIRA/PR status
+- `/project/show` — reads from cache, returns `TaskStatus` with cached data
 - `/project/neighbors` — reads from `ProjectsStore.ring` VecDeque
 - `/project/previous`, `/project/next` — ring rotation + in-memory lookup
 - `/project/current` — index 0 of ring
 - `/kv/{project}/{key}` GET — reads from `Project.kv` HashMap
 
-**In-memory + network I/O**:
-- `/project/list?sprint=true` — in-memory lookup, then JIRA API + GitHub CLI per matching project
-- `/project/show` — in-memory lookup, then JIRA API + GitHub CLI (concurrent threads)
+**Refresh (POST /project/refresh) — network + disk I/O**:
+- `projects::refresh_tasks()` — discovers worktrees from filesystem
+- `kv::load_kv_data()` — reads KV JSON files
+- `projects::refresh_cache()` — parallel fetch JIRA + GitHub per task via rayon
+
+Cache refresh triggers:
+- On cache miss (any task missing `cached_jira` or `cached_pr`)
+- Manual: `wormhole refresh` CLI command
 
 **Disk I/O**:
 - Startup: `kv::load_kv_data()` — reads `{git_common_dir}/wormhole/kv/*.json`
 - KV write: `kv::save_kv_data()` — writes single JSON file per project
 - Task creation: `git::create_worktree()` — git operations, file creation
 
-**Network I/O (external APIs)**:
-- `jira::get_sprint_issues()` — JIRA REST API via `ureq`
-- `jira::get_issue()` — JIRA REST API via `ureq`
-- `github::get_pr_status()` — GitHub CLI (`gh pr view`)
+**CLI-side network I/O**:
+- `jira sprint list` — fetches sprint issues client-side, matches against cached project list
+- `jira sprint show` — fetches status per issue concurrently
 
 **Subprocess/IPC (external apps)**:
 - `editor::open_workspace()` — launches Cursor/VSCode/IntelliJ
@@ -205,13 +213,13 @@ All endpoints served from `http://127.0.0.1:7117` (configurable via `WORMHOLE_PO
 
 #### GET /project/list
 
-Returns current and available projects.
+Returns current and available projects with cached JIRA/PR status.
 
-[src/endpoints.rs (`list_projects`)](https://github.com/dandavison/wormhole/blob/main/src/endpoints.rs#L8-L98)
+[src/endpoints.rs (`list_projects`)](https://github.com/dandavison/wormhole/blob/main/src/endpoints.rs#L8-L60)
 ```rust
-pub fn list_projects(sprint_only: bool) -> Response<Body> {
+pub fn list_projects() -> Response<Body> {
     let open_projects = projects::lock().open();
-    // ...filters if sprint_only, adds JIRA/PR info
+    // Returns name, branch, path, kv, cached_jira, cached_pr per project
 }
 ```
 
@@ -310,14 +318,17 @@ Used by Chrome extension to show wormhole buttons on GitHub PRs and JIRA issues.
 
 #### GET /project/show/{name}
 
-Get detailed status for a project/task.
+Get detailed status for a project/task. Uses cached JIRA/PR data (triggers refresh on cache miss).
 
-[src/status.rs (`get_status`)](https://github.com/dandavison/wormhole/blob/main/src/status.rs#L43-L88)
+[src/status.rs (`get_status`)](https://github.com/dandavison/wormhole/blob/main/src/status.rs#L29-L52)
 ```rust
 pub fn get_status(project: &Project) -> TaskStatus {
-    // Fetches JIRA info, PR status, plan existence concurrently
+    // Reads cached JIRA/PR data from project
     TaskStatus {
-        name, path, branch, jira, pr, plan_exists, plan_url, aux_repos,
+        name, path, branch,
+        jira: project.cached_jira.clone(),
+        pr: project.cached_pr.clone(),
+        plan_exists, plan_url, aux_repos,
     }
 }
 ```

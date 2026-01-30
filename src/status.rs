@@ -1,21 +1,9 @@
-use std::thread;
-
 use serde::{Deserialize, Serialize};
 
-use crate::github::{self, PrStatus};
-use crate::jira::{self, IssueStatus};
+use crate::github::PrStatus;
+use crate::jira::IssueStatus;
 use crate::project::{Project, ProjectKey};
 use crate::projects;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(tag = "type")]
-#[allow(clippy::large_enum_variant)]
-pub enum SprintShowItem {
-    #[serde(rename = "task")]
-    Task(TaskStatus),
-    #[serde(rename = "issue")]
-    Issue(IssueStatus),
-}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TaskStatus {
@@ -37,22 +25,6 @@ pub fn get_status(project: &Project) -> TaskStatus {
         .unwrap_or_else(|| project.repo_path.clone());
     let kv = project.kv.clone();
 
-    let is_task = project.is_task();
-
-    let jira_handle = if is_task {
-        // JIRA key is stored in kv if available
-        kv.get("jira_key")
-            .cloned()
-            .map(|key| thread::spawn(move || jira::get_issue(&key).ok().flatten()))
-    } else {
-        None
-    };
-
-    let pr_handle = {
-        let path = path.clone();
-        thread::spawn(move || github::get_pr_status(&path))
-    };
-
     let plan_exists = path.join(".task/plan.md").exists();
     let plan_url = if plan_exists {
         crate::git::github_file_url(&path, ".task/plan.md")
@@ -61,22 +33,26 @@ pub fn get_status(project: &Project) -> TaskStatus {
     };
     let aux_repos = kv.get("aux-repos").cloned();
 
-    let jira = jira_handle.and_then(|h| h.join().ok()).flatten();
-    let pr = pr_handle.join().ok().flatten();
-
     TaskStatus {
         name,
         path,
         branch,
-        jira,
-        pr,
+        jira: project.cached_jira.clone(),
+        pr: project.cached_pr.clone(),
         plan_exists,
         plan_url,
         aux_repos,
     }
 }
 
+fn ensure_cache() {
+    if projects::cache_needs_refresh() {
+        projects::refresh_cache();
+    }
+}
+
 pub fn get_status_by_name(name: &str) -> Option<TaskStatus> {
+    ensure_cache();
     let projects = projects::lock();
     let key = ProjectKey::parse(name);
     let project = projects.by_key(&key).or_else(|| {
@@ -87,28 +63,8 @@ pub fn get_status_by_name(name: &str) -> Option<TaskStatus> {
 }
 
 pub fn get_current_status() -> Option<TaskStatus> {
+    ensure_cache();
     let projects = projects::lock();
     let project = projects.current()?;
     Some(get_status(&project))
-}
-
-pub fn get_sprint_status() -> Vec<SprintShowItem> {
-    let issues = match jira::get_sprint_issues() {
-        Ok(issues) => issues,
-        Err(_) => return vec![],
-    };
-    let projects = projects::lock();
-    issues
-        .into_iter()
-        .map(|issue| {
-            let task = projects
-                .all()
-                .into_iter()
-                .find(|p| p.kv.get("jira_key").is_some_and(|k| k == &issue.key));
-            match task {
-                Some(project) => SprintShowItem::Task(get_status(project)),
-                None => SprintShowItem::Issue(issue),
-            }
-        })
-        .collect()
 }

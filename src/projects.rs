@@ -122,6 +122,8 @@ impl<'a> Projects<'a> {
                     branch: None,
                     github_pr: None,
                     github_repo: None,
+                    cached_jira: None,
+                    cached_pr: None,
                 },
             );
             self.0.ring.push_front(key);
@@ -282,6 +284,8 @@ pub fn load() {
                     branch: None,
                     github_pr: None,
                     github_repo: None,
+                    cached_jira: None,
+                    cached_pr: None,
                 },
             );
         }
@@ -326,6 +330,8 @@ fn discover_tasks(additional_paths: HashMap<String, PathBuf>) -> HashMap<Project
                         branch: Some(branch.clone()),
                         github_pr: None,
                         github_repo: None,
+                        cached_jira: None,
+                        cached_pr: None,
                     };
                     Some((task.store_key(), task))
                 })
@@ -362,4 +368,57 @@ pub fn tasks() -> HashMap<ProjectKey, Project> {
         .filter(|(_, p)| p.is_task())
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect()
+}
+
+pub fn refresh_cache() {
+    use crate::{github, jira};
+
+    let task_info: Vec<_> = {
+        let projects = lock();
+        projects
+            .0
+            .all
+            .iter()
+            .filter(|(_, p)| p.is_task())
+            .map(|(key, p)| {
+                let jira_key = p.kv.get("jira_key").cloned();
+                let path = p.worktree_path().unwrap_or_else(|| p.repo_path.clone());
+                (key.clone(), jira_key, path)
+            })
+            .collect()
+    };
+
+    let results: Vec<_> = task_info
+        .par_iter()
+        .map(|(key, jira_key, path)| {
+            let jira = jira_key
+                .as_ref()
+                .and_then(|k| jira::get_issue(k).ok().flatten());
+            let pr = github::get_pr_status(path);
+            (key.clone(), jira, pr)
+        })
+        .collect();
+
+    let mut projects = lock();
+    for (key, jira, pr) in results {
+        if let Some(project) = projects.0.all.get_mut(&key) {
+            project.cached_jira = jira;
+            project.cached_pr = pr;
+        }
+    }
+}
+
+pub fn cache_needs_refresh() -> bool {
+    let projects = lock();
+    projects
+        .0
+        .all
+        .iter()
+        .filter(|(_, p)| p.is_task())
+        .any(|(_, p)| {
+            let has_jira_key = p.kv.contains_key("jira_key");
+            let jira_missing = has_jira_key && p.cached_jira.is_none();
+            let pr_missing = p.cached_pr.is_none();
+            jira_missing || pr_missing
+        })
 }

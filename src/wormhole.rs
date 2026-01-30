@@ -36,7 +36,6 @@ pub struct QueryParams {
     pub focus_terminal: bool,
     pub sync: bool,
     pub pwd: Option<String>,
-    pub sprint: bool,
 }
 
 pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
@@ -57,7 +56,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         ps!("{} {} {:?}", method, uri, params);
     }
     if &path == "/project/list" {
-        Ok(endpoints::list_projects(params.sprint))
+        Ok(endpoints::list_projects())
     } else if &path == "/project/neighbors" {
         let projects = projects::lock();
         let ring: Vec<serde_json::Value> = projects
@@ -75,8 +74,6 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         Ok(Response::new(Body::from(json.to_string())))
     } else if &path == "/project/debug" {
         Ok(endpoints::debug_projects())
-    } else if &path == "/api/sprint" {
-        Ok(endpoints::sprint())
     } else if &path == "/dashboard" {
         Ok(endpoints::dashboard())
     } else if &path == "/shell" {
@@ -233,7 +230,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
                 .body(Body::from("Use POST"))
                 .unwrap());
         }
-        thread::spawn(endpoints::refresh_all);
+        endpoints::refresh_all();
         Ok(Response::new(Body::from("")))
     } else if let Some(name) = path.strip_prefix("/project/refresh/") {
         if method != Method::POST {
@@ -514,7 +511,6 @@ impl QueryParams {
             focus_terminal: false,
             sync: false,
             pwd: None,
-            sprint: false,
         };
         if let Some(query) = query {
             for (key, val) in form_urlencoded::parse(query.as_bytes()).collect::<Vec<(_, _)>>() {
@@ -540,8 +536,6 @@ impl QueryParams {
                     params.sync = val == "true" || val == "1";
                 } else if key_lower == "pwd" {
                     params.pwd = Some(val.to_string());
-                } else if key_lower == "sprint" {
-                    params.sprint = val.to_lowercase() == "true";
                 }
             }
         }

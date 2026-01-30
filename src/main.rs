@@ -45,6 +45,8 @@ async fn main() {
             command: ServerCommand::StartForeground,
         }) => {
             projects::load();
+            // Refresh cache in background so server starts immediately
+            std::thread::spawn(projects::refresh_cache);
             serve_http().await;
         }
         // Other subcommands -> run as client

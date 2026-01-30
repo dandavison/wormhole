@@ -124,6 +124,10 @@ fn available_projects_from_paths(
                 if dir_name.starts_with('.') || is_excluded(&dir_name) {
                     continue;
                 }
+                // Skip git worktrees - they're tasks, not projects
+                if crate::git::is_worktree(&path) {
+                    continue;
+                }
 
                 if seen_names.contains(&dir_name) {
                     let prefixed = format!("{}-{}", parent_name, dir_name);

@@ -33,6 +33,12 @@ pub fn is_git_repo(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
+/// Returns true if the path is a git worktree (not a main repo).
+/// Worktrees have .git as a file, main repos have .git as a directory.
+pub fn is_worktree(path: &Path) -> bool {
+    path.join(".git").is_file()
+}
+
 pub fn github_repo_from_remote(path: &Path) -> Option<String> {
     let output = Command::new("git")
         .args(["remote", "get-url", "origin"])

@@ -1395,4 +1395,92 @@ mod tests {
         assert_eq!(should_skip_issue("Done", true), Some("done"));
         assert_eq!(should_skip_issue("Closed", true), Some("done"));
     }
+
+    #[test]
+    fn test_render_project_item_bare_project() {
+        // Project without branch or JIRA - just shows name
+        let item = serde_json::json!({
+            "name": "wormhole",
+            "path": "/Users/dan/src/wormhole"
+        });
+        let rendered = render_project_item(&item);
+        // Should contain the project name (inside a hyperlink)
+        assert!(rendered.contains("wormhole"), "Should contain project name");
+        // Should not contain emoji (no JIRA)
+        assert!(!rendered.contains("⚫"), "Should not have emoji without JIRA");
+    }
+
+    #[test]
+    fn test_render_project_item_task_without_jira() {
+        // Task (has branch) but no JIRA - shows repo:branch
+        let item = serde_json::json!({
+            "name": "cli",
+            "branch": "feature-branch",
+            "path": "/Users/dan/src/cli/feature-branch"
+        });
+        let rendered = render_project_item(&item);
+        assert!(rendered.contains("cli:feature-branch"), "Should show repo:branch format");
+        assert!(!rendered.contains("⚫"), "Should not have emoji without JIRA");
+    }
+
+    #[test]
+    fn test_render_project_item_task_with_jira() {
+        // Task with JIRA info - shows emoji, task, JIRA key, summary
+        let item = serde_json::json!({
+            "name": "cli",
+            "branch": "standalone-activity",
+            "path": "/Users/dan/src/cli/standalone-activity",
+            "jira": {
+                "key": "ACT-107",
+                "status": "In Progress",
+                "summary": "Standalone activity CLI integration"
+            }
+        });
+        let rendered = render_project_item(&item);
+        assert!(rendered.starts_with("🔵"), "Should start with In Progress emoji");
+        assert!(rendered.contains("cli:standalone-activity"), "Should contain task identifier");
+        assert!(rendered.contains("ACT-107"), "Should contain JIRA key");
+        assert!(rendered.contains("Standalone activity CLI integration"), "Should contain summary");
+    }
+
+    #[test]
+    fn test_render_project_item_task_with_pr() {
+        // Task with JIRA and PR
+        let item = serde_json::json!({
+            "name": "cli",
+            "branch": "feature",
+            "jira": {
+                "key": "ACT-100",
+                "status": "In Review",
+                "summary": "Feature work"
+            },
+            "pr": {
+                "number": 123,
+                "url": "https://github.com/org/cli/pull/123",
+                "isDraft": false
+            }
+        });
+        let rendered = render_project_item(&item);
+        assert!(rendered.contains("#123"), "Should contain PR number");
+    }
+
+    #[test]
+    fn test_render_project_item_draft_pr() {
+        let item = serde_json::json!({
+            "name": "cli",
+            "branch": "feature",
+            "jira": {
+                "key": "ACT-100",
+                "status": "In Review",
+                "summary": "Feature work"
+            },
+            "pr": {
+                "number": 456,
+                "url": "https://github.com/org/cli/pull/456",
+                "isDraft": true
+            }
+        });
+        let rendered = render_project_item(&item);
+        assert!(rendered.contains("#456 (draft)"), "Should show draft PR");
+    }
 }

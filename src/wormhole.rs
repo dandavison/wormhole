@@ -293,15 +293,8 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
             }
             // Check if name_or_path is a store_key format "repo:branch"
             if let Some((repo, branch)) = name_or_path.split_once(':') {
-                if crate::task::get_task_by_branch(repo, branch).is_some() {
-                    return crate::task::open_task(
-                        repo,
-                        branch,
-                        land_in,
-                        skip_editor,
-                        focus_terminal,
-                    );
-                }
+                // Create task if it doesn't exist, then open it
+                return crate::task::open_task(repo, branch, land_in, skip_editor, focus_terminal);
             }
             // Otherwise, treat as regular project
             let project_path = {

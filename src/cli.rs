@@ -1083,55 +1083,64 @@ fn print_sprint_result(result: &SprintCreateResult, output: &str) {
     }
 }
 
-struct TaskInfo {
-    repo: String,
-    branch: String,
-    path: std::path::PathBuf,
+fn sprint_list(client: &Client, output: &str) -> Result<(), String> {
+    use crate::status::SprintShowItem;
+    use std::env;
+
+    let response = client.get("/api/sprint")?;
+    let items: Vec<SprintShowItem> =
+        serde_json::from_str(&response).map_err(|e| e.to_string())?;
+
+    if output == "json" {
+        println!("{}", response);
+    } else {
+        let jira_instance = env::var("JIRA_INSTANCE").ok();
+        for item in &items {
+            println!("{}", render_sprint_list_item(item, jira_instance.as_deref()));
+        }
+    }
+    Ok(())
 }
 
-#[derive(Serialize)]
-struct SprintListItem {
-    task: Option<String>,
-    jira_key: String,
-    status: String,
-    summary: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pr: Option<crate::github::PrStatus>,
-}
+fn render_sprint_list_item(item: &crate::status::SprintShowItem, jira_instance: Option<&str>) -> String {
+    use crate::status::SprintShowItem;
 
-#[derive(Serialize)]
-struct SprintListResult {
-    items: Vec<SprintListItem>,
-}
-
-impl SprintListResult {
-    fn render_terminal(&self, jira_instance: Option<&str>) -> String {
-        self.items
-            .iter()
-            .map(|item| {
-                let task_col = item.task.as_deref().unwrap_or("");
-                let key_display = if let Some(instance) = jira_instance {
-                    let url = format!("https://{}.atlassian.net/browse/{}", instance, item.jira_key);
-                    crate::format_osc8_hyperlink(&url, &item.jira_key)
-                } else {
-                    item.jira_key.clone()
-                };
-                let pr_display = item
-                    .pr
-                    .as_ref()
-                    .map(|p| {
-                        let linked = crate::format_osc8_hyperlink(&p.url, &p.display());
-                        format!("  {}", linked)
-                    })
-                    .unwrap_or_default();
-                let emoji = status_to_emoji(&item.status);
-                format!(
-                    "{:40} {} {}  {}{}",
-                    task_col, emoji, key_display, item.summary, pr_display
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
+    match item {
+        SprintShowItem::Task(task) => {
+            let task_id = task
+                .branch
+                .as_ref()
+                .map(|b| format!("{}:{}", task.name, b))
+                .unwrap_or_else(|| task.name.clone());
+            let (jira_key, status, summary) = task
+                .jira
+                .as_ref()
+                .map(|j| (j.key.clone(), j.status.clone(), j.summary.clone()))
+                .unwrap_or_else(|| (task.name.clone(), String::new(), String::new()));
+            let key_display = if let Some(instance) = jira_instance {
+                let url = format!("https://{}.atlassian.net/browse/{}", instance, jira_key);
+                crate::format_osc8_hyperlink(&url, &jira_key)
+            } else {
+                jira_key.clone()
+            };
+            let pr_display = task
+                .pr
+                .as_ref()
+                .map(|p| format!("  {}", crate::format_osc8_hyperlink(&p.url, &p.display())))
+                .unwrap_or_default();
+            let emoji = status_to_emoji(&status);
+            format!("{:40} {} {}  {}{}", task_id, emoji, key_display, summary, pr_display)
+        }
+        SprintShowItem::Issue(issue) => {
+            let key_display = if let Some(instance) = jira_instance {
+                let url = format!("https://{}.atlassian.net/browse/{}", instance, issue.key);
+                crate::format_osc8_hyperlink(&url, &issue.key)
+            } else {
+                issue.key.clone()
+            };
+            let emoji = status_to_emoji(&issue.status);
+            format!("{:40} {} {}  {}", "", emoji, key_display, issue.summary)
+        }
     }
 }
 
@@ -1142,84 +1151,6 @@ fn status_to_emoji(status: &str) -> &'static str {
         "In Review" => "🔵",
         _ => "⚫",
     }
-}
-
-fn sprint_list(client: &Client, output: &str) -> Result<(), String> {
-    use crate::github::{self, PrStatus};
-    use std::collections::HashMap;
-    use std::env;
-    use std::path::PathBuf;
-    use std::thread;
-
-    let issues = jira::get_sprint_issues()?;
-
-    // Get tasks from daemon, indexed by jira_key
-    let response = client.get("/project/list")?;
-    let tasks_by_jira_key: HashMap<String, TaskInfo> =
-        serde_json::from_str::<serde_json::Value>(&response)
-            .ok()
-            .and_then(|v| v.get("current")?.as_array().cloned())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|v| {
-                        let repo = v.get("name")?.as_str()?.to_string();
-                        let branch = v.get("branch")?.as_str()?.to_string();
-                        let path = PathBuf::from(v.get("path")?.as_str()?);
-                        let jira_key = v
-                            .get("kv")
-                            .and_then(|kv| kv.get("jira_key"))
-                            .and_then(|k| k.as_str())?
-                            .to_string();
-                        Some((jira_key, TaskInfo { repo, branch, path }))
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-
-    // Fetch PRs concurrently
-    let pr_handles: Vec<_> = issues
-        .iter()
-        .map(|issue| {
-            let path = tasks_by_jira_key.get(&issue.key).map(|t| t.path.clone());
-            thread::spawn(move || path.and_then(|p| github::get_pr_status(&p)))
-        })
-        .collect();
-
-    let prs: Vec<Option<PrStatus>> = pr_handles
-        .into_iter()
-        .map(|h| h.join().ok().flatten())
-        .collect();
-
-    // Build result struct
-    let items: Vec<SprintListItem> = issues
-        .into_iter()
-        .zip(prs)
-        .map(|(issue, pr)| {
-            let task = tasks_by_jira_key
-                .get(&issue.key)
-                .map(|t| format!("{}:{}", t.repo, t.branch));
-            SprintListItem {
-                task,
-                jira_key: issue.key,
-                status: issue.status,
-                summary: issue.summary,
-                pr,
-            }
-        })
-        .collect();
-
-    let result = SprintListResult { items };
-
-    if output == "json" {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&result).map_err(|e| e.to_string())?
-        );
-    } else {
-        let jira_instance = env::var("JIRA_INSTANCE").ok();
-        println!("{}", result.render_terminal(jira_instance.as_deref()));
-    }
-    Ok(())
 }
 
 fn sprint_show(output: &str) -> Result<(), String> {

@@ -7,7 +7,7 @@ use crate::jira::{self, IssueStatus};
 use crate::project::{Project, StoreKey};
 use crate::projects;
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
 #[allow(clippy::large_enum_variant)]
 pub enum SprintShowItem {

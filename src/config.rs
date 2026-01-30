@@ -151,7 +151,21 @@ pub fn resolve_project_name(name: &str) -> Option<std::path::PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::process::Command;
     use tempfile::TempDir;
+
+    fn git_init(path: &std::path::Path) {
+        Command::new("git")
+            .args(["init"])
+            .current_dir(path)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "--allow-empty", "-m", "init"])
+            .current_dir(path)
+            .output()
+            .unwrap();
+    }
 
     #[test]
     fn test_first_occurrence_gets_simple_name() {
@@ -234,14 +248,18 @@ mod tests {
         let dir = temp.path().join("src");
         std::fs::create_dir_all(&dir).unwrap();
 
-        // Create a real repo (has .git directory)
+        // Create a real repo with git
         let repo = dir.join("my-repo");
-        std::fs::create_dir_all(repo.join(".git")).unwrap();
+        std::fs::create_dir_all(&repo).unwrap();
+        git_init(&repo);
 
-        // Create a worktree sibling (has .git file, not directory)
+        // Create a worktree using git
         let worktree = dir.join("my-branch");
-        std::fs::create_dir_all(&worktree).unwrap();
-        std::fs::write(worktree.join(".git"), "gitdir: ../my-repo/.git/worktrees/my-branch").unwrap();
+        Command::new("git")
+            .args(["worktree", "add", "-b", "my-branch", worktree.to_str().unwrap()])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
 
         let paths = vec![dir.clone()];
         let projects = available_projects_from_paths(&paths);
@@ -250,6 +268,42 @@ mod tests {
         assert!(
             projects.get("my-branch").is_none(),
             "Worktrees should not appear as projects"
+        );
+    }
+
+    #[test]
+    fn test_submodules_included() {
+        let temp = TempDir::new().unwrap();
+
+        // Create a parent repo that will contain the submodule
+        let parent = temp.path().join("parent");
+        std::fs::create_dir_all(&parent).unwrap();
+        git_init(&parent);
+
+        // Create a child repo to be added as submodule
+        let child_src = temp.path().join("child-src");
+        std::fs::create_dir_all(&child_src).unwrap();
+        git_init(&child_src);
+
+        // Add child as submodule under repos/temporal
+        let repos_dir = parent.join("repos");
+        std::fs::create_dir_all(&repos_dir).unwrap();
+        Command::new("git")
+            .args(["submodule", "add", child_src.to_str().unwrap(), "repos/temporal"])
+            .current_dir(&parent)
+            .output()
+            .unwrap();
+
+        let submodule = repos_dir.join("temporal");
+        assert!(submodule.join(".git").is_file(), "Submodule should have .git file");
+
+        let paths = vec![repos_dir.clone()];
+        let projects = available_projects_from_paths(&paths);
+
+        assert_eq!(
+            projects.get("temporal"),
+            Some(&submodule),
+            "Submodules should appear as projects (unlike worktrees)"
         );
     }
 }

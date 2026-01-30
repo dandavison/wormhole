@@ -33,10 +33,22 @@ pub fn is_git_repo(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-/// Returns true if the path is a git worktree (not a main repo).
-/// Worktrees have .git as a file, main repos have .git as a directory.
+/// Returns true if the path is a git worktree (not a main repo or submodule).
+/// Worktrees have .git as a file pointing to a .git/worktrees/ directory.
+/// Submodules also have .git as a file, but point to .git/modules/.
 pub fn is_worktree(path: &Path) -> bool {
-    path.join(".git").is_file()
+    let git_path = path.join(".git");
+    if !git_path.is_file() {
+        return false;
+    }
+    // Read the .git file to check if it points to a worktrees directory
+    if let Ok(content) = std::fs::read_to_string(&git_path) {
+        // Format: "gitdir: /path/to/repo/.git/worktrees/branch-name"
+        if let Some(gitdir) = content.strip_prefix("gitdir:") {
+            return gitdir.trim().contains("/worktrees/");
+        }
+    }
+    false
 }
 
 pub fn github_repo_from_remote(path: &Path) -> Option<String> {

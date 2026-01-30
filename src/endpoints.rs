@@ -198,6 +198,21 @@ fn render_card(item: &crate::status::SprintShowItem, jira_instance: Option<&str>
                 r#"<span class="meta-item">PR: <span class="cross">✗</span></span>"#.to_string()
             };
 
+            let jira_html = task
+                .jira
+                .as_ref()
+                .and_then(|j| {
+                    jira_instance.map(|i| {
+                        format!(
+                            r#"<span class="meta-item">JIRA: <a href="https://{}.atlassian.net/browse/{}" target="_blank">{}</a></span>"#,
+                            i,
+                            html_escape(&j.key),
+                            html_escape(&j.key)
+                        )
+                    })
+                })
+                .unwrap_or_default();
+
             let plan_html = if task.plan_exists {
                 if let Some(ref url) = task.plan_url {
                     format!(
@@ -241,7 +256,7 @@ fn render_card(item: &crate::status::SprintShowItem, jira_instance: Option<&str>
             format!(
                 r#"<div class="card" data-task="{}"{}>
 <div class="card-header">{}<span class="card-summary">{}</span>{}</div>
-<div class="card-meta">{}{}</div>
+<div class="card-meta">{}{}{}</div>
 {}
 </div>"#,
                 html_escape(&task_id),
@@ -249,6 +264,7 @@ fn render_card(item: &crate::status::SprintShowItem, jira_instance: Option<&str>
                 repo_branch,
                 summary,
                 status_html,
+                jira_html,
                 pr_html,
                 plan_html,
                 iframe_html

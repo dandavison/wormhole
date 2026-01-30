@@ -166,6 +166,35 @@ HTTP PUT /kv/{project}/{key}
     → kv::save_kv_data()          // persist to JSON
 ```
 
+### I/O Summary
+
+**In-memory only (fast, no I/O)**:
+- `/project/list` — reads from `ProjectsStore.all` HashMap
+- `/project/neighbors` — reads from `ProjectsStore.ring` VecDeque
+- `/project/previous`, `/project/next` — ring rotation + in-memory lookup
+- `/project/current` — index 0 of ring
+- `/kv/{project}/{key}` GET — reads from `Project.kv` HashMap
+
+**In-memory + network I/O**:
+- `/project/list?sprint=true` — in-memory lookup, then JIRA API + GitHub CLI per matching project
+- `/project/show` — in-memory lookup, then JIRA API + GitHub CLI (concurrent threads)
+
+**Disk I/O**:
+- Startup: `kv::load_kv_data()` — reads `{git_common_dir}/wormhole/kv/*.json`
+- KV write: `kv::save_kv_data()` — writes single JSON file per project
+- Task creation: `git::create_worktree()` — git operations, file creation
+
+**Network I/O (external APIs)**:
+- `jira::get_sprint_issues()` — JIRA REST API via `ureq`
+- `jira::get_issue()` — JIRA REST API via `ureq`
+- `github::get_pr_status()` — GitHub CLI (`gh pr view`)
+
+**Subprocess/IPC (external apps)**:
+- `editor::open_workspace()` — launches Cursor/VSCode/IntelliJ
+- `terminal::open()` — tmux/wezterm/alacritty commands
+- `hammerspoon::launch_or_focus()` — AppleScript via `osascript`
+- `hammerspoon::current_application()` — Hammerspoon HTTP API
+
 ---
 
 ## HTTP API

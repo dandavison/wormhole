@@ -113,6 +113,19 @@ fn describe_github(gh: &GitHubUrl) -> DescribeResponse {
             github_url: None,
             github_label: None,
         },
+        None if gh.pr.is_some() => {
+            // PR page but no task found - don't show buttons
+            DescribeResponse {
+                name: None,
+                kind: None,
+                home_project: None,
+                pr_branch,
+                jira_url: None,
+                jira_key: None,
+                github_url: None,
+                github_label: None,
+            }
+        }
         None => DescribeResponse {
             name: Some(gh.repo.clone()),
             kind: Some("project".to_string()),
@@ -168,7 +181,7 @@ fn describe_jira(jira_key: &str) -> DescribeResponse {
         let jira_url = jira_url_for_key(jira_key);
 
         DescribeResponse {
-            name: Some(jira_key.to_string()),
+            name: Some(project.store_key().to_string()),
             kind: Some("task".to_string()),
             home_project: if project.is_task() {
                 Some(project.repo_name.clone())
@@ -182,9 +195,9 @@ fn describe_jira(jira_key: &str) -> DescribeResponse {
             github_label,
         }
     } else {
-        // No task found, but we know it's a valid JIRA key
+        // No task found - don't show buttons
         DescribeResponse {
-            name: Some(jira_key.to_string()),
+            name: None,
             kind: None,
             home_project: None,
             pr_branch: None,

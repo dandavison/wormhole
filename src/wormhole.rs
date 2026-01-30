@@ -225,6 +225,15 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
                     .unwrap(),
             )),
         }
+    } else if path == "/project/refresh" {
+        if method != Method::POST {
+            return Ok(Response::builder()
+                .status(StatusCode::METHOD_NOT_ALLOWED)
+                .body(Body::from("Use POST"))
+                .unwrap());
+        }
+        thread::spawn(endpoints::refresh_all);
+        Ok(Response::new(Body::from("")))
     } else if let Some(name) = path.strip_prefix("/project/refresh/") {
         if method != Method::POST {
             return Ok(Response::builder()

@@ -247,6 +247,9 @@ pub enum Command {
 
     /// Report on persisted wormhole state (worktrees, KV)
     Doctor,
+
+    /// Refresh in-memory data from external sources
+    Refresh,
 }
 
 #[derive(Subcommand)]
@@ -676,6 +679,12 @@ pub fn run(command: Command) -> Result<(), String> {
         }
 
         Command::Doctor => doctor(),
+
+        Command::Refresh => {
+            client.post("/project/refresh")?;
+            println!("Refreshed");
+            Ok(())
+        }
     }
 }
 

@@ -107,6 +107,38 @@ pub fn close_project(name: &str) {
     projects.print();
 }
 
+/// Refresh all in-memory data from external sources (fs, github)
+pub fn refresh_all() {
+    use rayon::prelude::*;
+
+    // Refresh tasks from filesystem
+    projects::refresh_tasks();
+
+    // Reload KV data from disk
+    {
+        let mut projects = projects::lock();
+        crate::kv::load_kv_data(&mut projects);
+    }
+
+    // Refresh GitHub info for all projects concurrently
+    let keys: Vec<_> = {
+        let projects = projects::lock();
+        projects.all().iter().map(|p| p.store_key()).collect()
+    };
+
+    keys.par_iter().for_each(|key| {
+        let mut projects = projects::lock();
+        if let Some(project) = projects.get_mut(key) {
+            crate::github::refresh_github_info(project);
+        }
+    });
+
+    if debug() {
+        let projects = projects::lock();
+        projects.print();
+    }
+}
+
 pub fn pin_current() {
     let projects = projects::lock();
     if let Some(current) = projects.current() {

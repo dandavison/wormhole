@@ -977,3 +977,76 @@ fn test_tasks_appear_without_terminal_windows() {
         current
     );
 }
+
+#[test]
+fn test_switch_creates_task_from_colon_syntax() {
+    // `w project switch repo:branch` should create the task if it doesn't exist
+    use std::process::Command;
+
+    let test = harness::WormholeTest::new(8952);
+
+    let home_proj = format!("{}colon-create", TEST_PREFIX);
+    let home_dir = format!("/tmp/{}", home_proj);
+    let task_branch = format!("{}new-task", TEST_PREFIX);
+
+    // Clean up and create home directory
+    let _ = std::fs::remove_dir_all(&home_dir);
+    std::fs::create_dir_all(&home_dir).unwrap();
+
+    // Initialize git repo
+    Command::new("git")
+        .args(["init"])
+        .current_dir(&home_dir)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["commit", "--allow-empty", "-m", "initial"])
+        .current_dir(&home_dir)
+        .output()
+        .unwrap();
+
+    // Register home project
+    test.create_project(&home_dir, &home_proj);
+
+    // Use colon syntax to create a NEW task (not --home-project/--branch)
+    let task_key = format!("{}:{}", home_proj, task_branch);
+    let response = test
+        .hs_get(&format!("/project/switch/{}?sync=1", task_key))
+        .unwrap();
+    assert!(
+        response.contains("ok") || response.is_empty(),
+        "Task creation via colon syntax failed: {}",
+        response
+    );
+
+    // Give time for task creation
+    std::thread::sleep(std::time::Duration::from_millis(500));
+
+    // Verify the worktree was created
+    let worktree_path = format!("{}/.git/wormhole/worktrees/{}", home_dir, task_branch);
+    assert!(
+        std::path::Path::new(&worktree_path).exists(),
+        "Worktree should be created at {}",
+        worktree_path
+    );
+
+    // Refresh and verify task appears in list
+    test.hs_post("/project/refresh").unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(300));
+
+    let response = test.hs_get("/project/list").unwrap();
+    let data: Value = serde_json::from_str(&response).unwrap();
+    let current = data["current"].as_array().expect("current should be array");
+
+    let task_entry = current.iter().find(|e| {
+        e["name"].as_str() == Some(home_proj.as_str())
+            && e["branch"].as_str() == Some(task_branch.as_str())
+    });
+
+    assert!(
+        task_entry.is_some(),
+        "Task '{}' should be created via colon syntax. Got: {:?}",
+        task_key,
+        current
+    );
+}

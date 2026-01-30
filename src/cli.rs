@@ -1107,17 +1107,23 @@ fn render_sprint_list_item(item: &crate::status::SprintShowItem, jira_instance: 
 
     match item {
         SprintShowItem::Task(task) => {
-            let task_id = task
+            let store_key = task
                 .branch
                 .as_ref()
                 .map(|b| format!("{}:{}", task.name, b))
                 .unwrap_or_else(|| task.name.clone());
+            let task_url = format!(
+                "http://127.0.0.1:{}/project/switch/{}",
+                config::wormhole_port(),
+                store_key
+            );
+            let task_display = crate::format_osc8_hyperlink(&task_url, &store_key);
             let (jira_key, status, summary) = task
                 .jira
                 .as_ref()
                 .map(|j| (j.key.clone(), j.status.clone(), j.summary.clone()))
                 .unwrap_or_else(|| (task.name.clone(), String::new(), String::new()));
-            let key_display = if let Some(instance) = jira_instance {
+            let jira_display = if let Some(instance) = jira_instance {
                 let url = format!("https://{}.atlassian.net/browse/{}", instance, jira_key);
                 crate::format_osc8_hyperlink(&url, &jira_key)
             } else {
@@ -1129,17 +1135,27 @@ fn render_sprint_list_item(item: &crate::status::SprintShowItem, jira_instance: 
                 .map(|p| format!("  {}", crate::format_osc8_hyperlink(&p.url, &p.display())))
                 .unwrap_or_default();
             let emoji = status_to_emoji(&status);
-            format!("{:40} {} {}  {}{}", task_id, emoji, key_display, summary, pr_display)
+            // Pad store_key length (not the hyperlink) for alignment
+            let pad = 40_usize.saturating_sub(store_key.len());
+            format!(
+                "{}{} {} {}  {}{}",
+                task_display,
+                " ".repeat(pad),
+                emoji,
+                jira_display,
+                summary,
+                pr_display
+            )
         }
         SprintShowItem::Issue(issue) => {
-            let key_display = if let Some(instance) = jira_instance {
+            let jira_display = if let Some(instance) = jira_instance {
                 let url = format!("https://{}.atlassian.net/browse/{}", instance, issue.key);
                 crate::format_osc8_hyperlink(&url, &issue.key)
             } else {
                 issue.key.clone()
             };
             let emoji = status_to_emoji(&issue.status);
-            format!("{:40} {} {}  {}", "", emoji, key_display, issue.summary)
+            format!("{:40} {} {}  {}", "", emoji, jira_display, issue.summary)
         }
     }
 }

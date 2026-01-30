@@ -374,6 +374,86 @@ fn map_ureq_error(e: ureq::Error) -> String {
     }
 }
 
+// Shared helper for project name tab completion
+use rustyline::completion::{Completer, Pair};
+use rustyline::highlight::Highlighter;
+use rustyline::hint::Hinter;
+use rustyline::validate::Validator;
+use rustyline::{Config, Context, Editor, Helper};
+
+struct ProjectCompleter {
+    projects: Vec<String>,
+}
+impl Helper for ProjectCompleter {}
+impl Validator for ProjectCompleter {}
+impl Hinter for ProjectCompleter {
+    type Hint = String;
+}
+impl Highlighter for ProjectCompleter {}
+impl Completer for ProjectCompleter {
+    type Candidate = Pair;
+    fn complete(
+        &self,
+        line: &str,
+        pos: usize,
+        _ctx: &Context,
+    ) -> rustyline::Result<(usize, Vec<Pair>)> {
+        let prefix = &line[..pos];
+        let candidates: Vec<Pair> = self
+            .projects
+            .iter()
+            .filter(|p| p.starts_with(prefix))
+            .map(|p| Pair {
+                display: p.clone(),
+                replacement: p.clone(),
+            })
+            .collect();
+        Ok((0, candidates))
+    }
+}
+
+fn create_project_editor(
+    available_projects: Vec<String>,
+) -> Result<Editor<ProjectCompleter, rustyline::history::DefaultHistory>, String> {
+    let config = Config::builder()
+        .auto_add_history(false)
+        .completion_type(rustyline::CompletionType::List)
+        .build();
+    let helper = ProjectCompleter {
+        projects: available_projects,
+    };
+    let mut rl: Editor<ProjectCompleter, rustyline::history::DefaultHistory> =
+        Editor::with_config(config).map_err(|e| format!("Failed to init editor: {}", e))?;
+    rl.set_helper(Some(helper));
+    Ok(rl)
+}
+
+fn get_available_projects(client: &Client) -> Result<Vec<String>, String> {
+    let response = client.get("/project/list")?;
+    let parsed: serde_json::Value =
+        serde_json::from_str(&response).map_err(|e| e.to_string())?;
+    Ok(parsed
+        .get("available")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default())
+}
+
+fn create_task(client: &Client, home: &str, branch: &str, jira_key: &str) -> Result<(), String> {
+    let url = format!("/project/create/{}?home-project={}", branch, home);
+    client.get(&url)?;
+
+    let store_key = format!("{}:{}", home, branch);
+    let kv_url = format!("/kv/{}/jira_key", store_key);
+    let _ = client.put(&kv_url, jira_key);
+
+    Ok(())
+}
+
 fn build_query(land_in: &Option<String>, name: &Option<String>) -> String {
     let mut params = vec![];
     if let Some(app) = land_in {
@@ -850,16 +930,10 @@ fn doctor_persisted_data(output: &str) -> Result<(), String> {
 }
 
 fn sprint_create(client: &Client, overrides: Vec<String>, output: &str) -> Result<(), String> {
-    use rustyline::completion::{Completer, Pair};
-    use rustyline::highlight::Highlighter;
-    use rustyline::hint::Hinter;
-    use rustyline::validate::Validator;
-    use rustyline::{Config, Context, Editor, Helper};
     use std::collections::HashMap;
-    use std::env;
     use std::path::PathBuf;
 
-    let default_home = env::var("WORMHOLE_DEFAULT_HOME_PROJECT").ok();
+    let default_home = std::env::var("WORMHOLE_DEFAULT_HOME_PROJECT").ok();
 
     // Parse override pairs
     let mut home_overrides: HashMap<String, String> = HashMap::new();
@@ -904,47 +978,7 @@ fn sprint_create(client: &Client, overrides: Vec<String>, output: &str) -> Resul
     // Get sprint issues
     let issues = jira::get_sprint_issues()?;
 
-    struct ProjectHelper {
-        projects: Vec<String>,
-    }
-    impl Helper for ProjectHelper {}
-    impl Validator for ProjectHelper {}
-    impl Hinter for ProjectHelper {
-        type Hint = String;
-    }
-    impl Highlighter for ProjectHelper {}
-    impl Completer for ProjectHelper {
-        type Candidate = Pair;
-        fn complete(
-            &self,
-            line: &str,
-            pos: usize,
-            _ctx: &Context,
-        ) -> rustyline::Result<(usize, Vec<Pair>)> {
-            let prefix = &line[..pos];
-            let candidates: Vec<Pair> = self
-                .projects
-                .iter()
-                .filter(|p| p.starts_with(prefix))
-                .map(|p| Pair {
-                    display: p.clone(),
-                    replacement: p.clone(),
-                })
-                .collect();
-            Ok((0, candidates))
-        }
-    }
-
-    let config = Config::builder()
-        .auto_add_history(false)
-        .completion_type(rustyline::CompletionType::List)
-        .build();
-    let helper = ProjectHelper {
-        projects: available_projects,
-    };
-    let mut rl =
-        Editor::with_config(config).map_err(|e| format!("Failed to init editor: {}", e))?;
-    rl.set_helper(Some(helper));
+    let mut rl = create_project_editor(available_projects)?;
 
     let mut result = SprintCreateResult {
         created: Vec::new(),
@@ -1067,17 +1101,17 @@ fn sprint_create(client: &Client, overrides: Vec<String>, output: &str) -> Resul
     };
 
     for (key, home, branch) in to_create {
-        let url = format!("/project/create/{}?home-project={}", branch, home);
-        client.get(&url)?;
-        // Store JIRA key in task's KV
-        let store_key = format!("{}:{}", home, branch);
-        let kv_url = format!("/kv/{}/jira_key", store_key);
-        let _ = client.put(&kv_url, &key);
+        create_task(client, &home, &branch, &key)?;
         result.created.push(CreatedTask {
             home,
             key,
             summary: branch,
         });
+    }
+
+    // Refresh cache so dashboard shows JIRA links immediately
+    if !result.created.is_empty() {
+        let _ = client.post("/project/refresh");
     }
 
     print_sprint_result(&result, output);
@@ -1089,13 +1123,6 @@ fn task_create_from_url(
     url: &str,
     home_project: Option<String>,
 ) -> Result<(), String> {
-    use rustyline::completion::{Completer, Pair};
-    use rustyline::highlight::Highlighter;
-    use rustyline::hint::Hinter;
-    use rustyline::validate::Validator;
-    use rustyline::{Config, Context, Editor, Helper};
-    use std::env;
-
     let jira_key = crate::describe::parse_jira_url(url)
         .ok_or_else(|| format!("Could not parse JIRA key from URL: {}", url))?;
 
@@ -1107,62 +1134,9 @@ fn task_create_from_url(
     let home = if let Some(h) = home_project {
         h
     } else {
-        let default_home = env::var("WORMHOLE_DEFAULT_HOME_PROJECT").ok();
-
-        let response = client.get("/project/list")?;
-        let parsed: serde_json::Value =
-            serde_json::from_str(&response).map_err(|e| e.to_string())?;
-        let available_projects: Vec<String> = parsed
-            .get("available")
-            .and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|v| v.as_str().map(String::from))
-                    .collect()
-            })
-            .unwrap_or_default();
-
-        struct ProjectHelper {
-            projects: Vec<String>,
-        }
-        impl Helper for ProjectHelper {}
-        impl Validator for ProjectHelper {}
-        impl Hinter for ProjectHelper {
-            type Hint = String;
-        }
-        impl Highlighter for ProjectHelper {}
-        impl Completer for ProjectHelper {
-            type Candidate = Pair;
-            fn complete(
-                &self,
-                line: &str,
-                pos: usize,
-                _ctx: &Context,
-            ) -> rustyline::Result<(usize, Vec<Pair>)> {
-                let prefix = &line[..pos];
-                let candidates: Vec<Pair> = self
-                    .projects
-                    .iter()
-                    .filter(|p| p.starts_with(prefix))
-                    .map(|p| Pair {
-                        display: p.clone(),
-                        replacement: p.clone(),
-                    })
-                    .collect();
-                Ok((0, candidates))
-            }
-        }
-
-        let config = Config::builder()
-            .auto_add_history(false)
-            .completion_type(rustyline::CompletionType::List)
-            .build();
-        let helper = ProjectHelper {
-            projects: available_projects,
-        };
-        let mut rl =
-            Editor::with_config(config).map_err(|e| format!("Failed to init editor: {}", e))?;
-        rl.set_helper(Some(helper));
+        let default_home = std::env::var("WORMHOLE_DEFAULT_HOME_PROJECT").ok();
+        let available_projects = get_available_projects(client)?;
+        let mut rl = create_project_editor(available_projects)?;
 
         let default_h = default_home.unwrap_or_default();
         match rl.readline_with_initial("home: ", (&default_h, "")) {
@@ -1184,12 +1158,7 @@ fn task_create_from_url(
     let branch = to_kebab_case(&issue.summary);
     println!("Creating {}:{}", home, branch);
 
-    let create_url = format!("/project/create/{}?home-project={}", branch, home);
-    client.get(&create_url)?;
-
-    let store_key = format!("{}:{}", home, branch);
-    let kv_url = format!("/kv/{}/jira_key", store_key);
-    let _ = client.put(&kv_url, &jira_key);
+    create_task(client, &home, &branch, &jira_key)?;
 
     // Refresh cache so dashboard shows JIRA link immediately
     let _ = client.post("/project/refresh");

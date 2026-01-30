@@ -1089,6 +1089,61 @@ struct TaskInfo {
     path: std::path::PathBuf,
 }
 
+#[derive(Serialize)]
+struct SprintListItem {
+    task: Option<String>,
+    jira_key: String,
+    status: String,
+    summary: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pr: Option<crate::github::PrStatus>,
+}
+
+#[derive(Serialize)]
+struct SprintListResult {
+    items: Vec<SprintListItem>,
+}
+
+impl SprintListResult {
+    fn render_terminal(&self, jira_instance: Option<&str>) -> String {
+        self.items
+            .iter()
+            .map(|item| {
+                let task_col = item.task.as_deref().unwrap_or("");
+                let key_display = if let Some(instance) = jira_instance {
+                    let url = format!("https://{}.atlassian.net/browse/{}", instance, item.jira_key);
+                    crate::format_osc8_hyperlink(&url, &item.jira_key)
+                } else {
+                    item.jira_key.clone()
+                };
+                let pr_display = item
+                    .pr
+                    .as_ref()
+                    .map(|p| {
+                        let linked = crate::format_osc8_hyperlink(&p.url, &p.display());
+                        format!("  {}", linked)
+                    })
+                    .unwrap_or_default();
+                let emoji = status_to_emoji(&item.status);
+                format!(
+                    "{:40} {} {}  {}{}",
+                    task_col, emoji, key_display, item.summary, pr_display
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+}
+
+fn status_to_emoji(status: &str) -> &'static str {
+    match status {
+        "Done" => "✅",
+        "In Progress" => "🟢",
+        "In Review" => "🔵",
+        _ => "⚫",
+    }
+}
+
 fn sprint_list(client: &Client, output: &str) -> Result<(), String> {
     use crate::github::{self, PrStatus};
     use std::collections::HashMap;
@@ -1121,82 +1176,48 @@ fn sprint_list(client: &Client, output: &str) -> Result<(), String> {
             })
             .unwrap_or_default();
 
+    // Fetch PRs concurrently
+    let pr_handles: Vec<_> = issues
+        .iter()
+        .map(|issue| {
+            let path = tasks_by_jira_key.get(&issue.key).map(|t| t.path.clone());
+            thread::spawn(move || path.and_then(|p| github::get_pr_status(&p)))
+        })
+        .collect();
+
+    let prs: Vec<Option<PrStatus>> = pr_handles
+        .into_iter()
+        .map(|h| h.join().ok().flatten())
+        .collect();
+
+    // Build result struct
+    let items: Vec<SprintListItem> = issues
+        .into_iter()
+        .zip(prs)
+        .map(|(issue, pr)| {
+            let task = tasks_by_jira_key
+                .get(&issue.key)
+                .map(|t| format!("{}:{}", t.repo, t.branch));
+            SprintListItem {
+                task,
+                jira_key: issue.key,
+                status: issue.status,
+                summary: issue.summary,
+                pr,
+            }
+        })
+        .collect();
+
+    let result = SprintListResult { items };
+
     if output == "json" {
-        let pr_handles: Vec<_> = issues
-            .iter()
-            .map(|issue| {
-                let path = tasks_by_jira_key.get(&issue.key).map(|t| t.path.clone());
-                thread::spawn(move || path.and_then(|p| github::get_pr_status(&p)))
-            })
-            .collect();
-
-        let prs: Vec<Option<PrStatus>> = pr_handles
-            .into_iter()
-            .map(|h| h.join().ok().flatten())
-            .collect();
-
-        let items: Vec<serde_json::Value> = issues
-            .into_iter()
-            .zip(prs)
-            .map(|(issue, pr)| {
-                let mut obj = serde_json::to_value(&issue).unwrap();
-                if let Some(pr) = pr {
-                    obj["pr"] = serde_json::to_value(&pr).unwrap();
-                }
-                obj
-            })
-            .collect();
-
         println!(
             "{}",
-            serde_json::to_string_pretty(&items).map_err(|e| e.to_string())?
+            serde_json::to_string_pretty(&result).map_err(|e| e.to_string())?
         );
     } else {
         let jira_instance = env::var("JIRA_INSTANCE").ok();
-
-        let pr_handles: Vec<_> = issues
-            .iter()
-            .map(|issue| {
-                let path = tasks_by_jira_key.get(&issue.key).map(|t| t.path.clone());
-                thread::spawn(move || path.and_then(|p| github::get_pr_status(&p)))
-            })
-            .collect();
-
-        let prs: Vec<Option<PrStatus>> = pr_handles
-            .into_iter()
-            .map(|h| h.join().ok().flatten())
-            .collect();
-
-        for (issue, pr) in issues.iter().zip(prs.iter()) {
-            let key_display = if let Some(ref instance) = jira_instance {
-                let url = format!("https://{}.atlassian.net/browse/{}", instance, issue.key);
-                crate::format_osc8_hyperlink(&url, &issue.key)
-            } else {
-                issue.key.clone()
-            };
-
-            let pr_display = pr
-                .as_ref()
-                .map(|p| {
-                    let linked = crate::format_osc8_hyperlink(&p.url, &p.display());
-                    format!("  {}", linked)
-                })
-                .unwrap_or_default();
-
-            let task_display = tasks_by_jira_key
-                .get(&issue.key)
-                .map(|t| format!("  {}:{}", t.repo, t.branch))
-                .unwrap_or_default();
-
-            println!(
-                "{} {}  {}{}{}",
-                issue.status_emoji(),
-                key_display,
-                issue.summary,
-                task_display,
-                pr_display
-            );
-        }
+        println!("{}", result.render_terminal(jira_instance.as_deref()));
     }
     Ok(())
 }

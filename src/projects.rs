@@ -263,6 +263,11 @@ pub fn load() {
             continue;
         }
 
+        // Skip worktrees - they're already handled by discover_tasks
+        if git::is_worktree(&path) {
+            continue;
+        }
+
         let name = path_to_name.get(&canonical).cloned().unwrap_or_else(|| {
             path.file_name()
                 .and_then(|n| n.to_str())

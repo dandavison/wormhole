@@ -83,6 +83,23 @@ pub enum JiraCommand {
         #[command(subcommand)]
         command: Option<SprintCommand>,
     },
+    /// Task operations
+    Task {
+        #[command(subcommand)]
+        command: TaskCommand,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum TaskCommand {
+    /// Create a task from a JIRA URL
+    Create {
+        /// JIRA URL (e.g., https://temporalio.atlassian.net/browse/ACT-622)
+        url: String,
+        /// Home project for the worktree
+        #[arg(short = 'p', long)]
+        home_project: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -637,6 +654,11 @@ pub fn run(command: Command) -> Result<(), String> {
                     sprint_create(&client, overrides, &output)
                 }
             },
+            JiraCommand::Task { command } => match command {
+                TaskCommand::Create { url, home_project } => {
+                    task_create_from_url(&client, &url, home_project)
+                }
+            },
         },
 
         Command::Completion {
@@ -1059,6 +1081,117 @@ fn sprint_create(client: &Client, overrides: Vec<String>, output: &str) -> Resul
     }
 
     print_sprint_result(&result, output);
+    Ok(())
+}
+
+fn task_create_from_url(
+    client: &Client,
+    url: &str,
+    home_project: Option<String>,
+) -> Result<(), String> {
+    use rustyline::completion::{Completer, Pair};
+    use rustyline::highlight::Highlighter;
+    use rustyline::hint::Hinter;
+    use rustyline::validate::Validator;
+    use rustyline::{Config, Context, Editor, Helper};
+    use std::env;
+
+    let jira_key = crate::describe::parse_jira_url(url)
+        .ok_or_else(|| format!("Could not parse JIRA key from URL: {}", url))?;
+
+    let issue = jira::get_issue(&jira_key)?
+        .ok_or_else(|| format!("JIRA issue not found: {}", jira_key))?;
+
+    println!("{} {}", jira_key, issue.summary);
+
+    let home = if let Some(h) = home_project {
+        h
+    } else {
+        let default_home = env::var("WORMHOLE_DEFAULT_HOME_PROJECT").ok();
+
+        let response = client.get("/project/list")?;
+        let parsed: serde_json::Value =
+            serde_json::from_str(&response).map_err(|e| e.to_string())?;
+        let available_projects: Vec<String> = parsed
+            .get("available")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        struct ProjectHelper {
+            projects: Vec<String>,
+        }
+        impl Helper for ProjectHelper {}
+        impl Validator for ProjectHelper {}
+        impl Hinter for ProjectHelper {
+            type Hint = String;
+        }
+        impl Highlighter for ProjectHelper {}
+        impl Completer for ProjectHelper {
+            type Candidate = Pair;
+            fn complete(
+                &self,
+                line: &str,
+                pos: usize,
+                _ctx: &Context,
+            ) -> rustyline::Result<(usize, Vec<Pair>)> {
+                let prefix = &line[..pos];
+                let candidates: Vec<Pair> = self
+                    .projects
+                    .iter()
+                    .filter(|p| p.starts_with(prefix))
+                    .map(|p| Pair {
+                        display: p.clone(),
+                        replacement: p.clone(),
+                    })
+                    .collect();
+                Ok((0, candidates))
+            }
+        }
+
+        let config = Config::builder()
+            .auto_add_history(false)
+            .completion_type(rustyline::CompletionType::List)
+            .build();
+        let helper = ProjectHelper {
+            projects: available_projects,
+        };
+        let mut rl =
+            Editor::with_config(config).map_err(|e| format!("Failed to init editor: {}", e))?;
+        rl.set_helper(Some(helper));
+
+        let default_h = default_home.unwrap_or_default();
+        match rl.readline_with_initial("home: ", (&default_h, "")) {
+            Ok(line) => {
+                let trimmed = line.trim();
+                if trimmed.is_empty() {
+                    if default_h.is_empty() {
+                        return Err("Home project is required".to_string());
+                    }
+                    default_h
+                } else {
+                    trimmed.to_string()
+                }
+            }
+            Err(_) => return Err("Aborted".to_string()),
+        }
+    };
+
+    let branch = to_kebab_case(&issue.summary);
+    println!("Creating {}:{}", home, branch);
+
+    let create_url = format!("/project/create/{}?home-project={}", branch, home);
+    client.get(&create_url)?;
+
+    let store_key = format!("{}:{}", home, branch);
+    let kv_url = format!("/kv/{}/jira_key", store_key);
+    let _ = client.put(&kv_url, &jira_key);
+
+    println!("Created task {}:{} for {}", home, branch, jira_key);
     Ok(())
 }
 

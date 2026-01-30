@@ -139,7 +139,7 @@ fn describe_github(gh: &GitHubUrl) -> DescribeResponse {
     }
 }
 
-fn parse_jira_url(url: &str) -> Option<String> {
+pub fn parse_jira_url(url: &str) -> Option<String> {
     // Match URLs like https://temporalio.atlassian.net/browse/ACT-108
     let browse_re = Regex::new(r"atlassian\.net/browse/([A-Z]+-\d+)").ok()?;
     if let Some(caps) = browse_re.captures(url) {

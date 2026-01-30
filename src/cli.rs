@@ -1130,13 +1130,13 @@ fn task_create_from_url(
 
     println!("{} {}", jira_key, issue.summary);
 
+    let available_projects = get_available_projects(client)?;
+    let mut rl = create_project_editor(available_projects)?;
+
     let home = if let Some(h) = home_project {
         h
     } else {
         let default_home = std::env::var("WORMHOLE_DEFAULT_HOME_PROJECT").ok();
-        let available_projects = get_available_projects(client)?;
-        let mut rl = create_project_editor(available_projects)?;
-
         let default_h = default_home.unwrap_or_default();
         match rl.readline_with_initial("home: ", (&default_h, "")) {
             Ok(line) => {
@@ -1154,7 +1154,19 @@ fn task_create_from_url(
         }
     };
 
-    let branch = to_kebab_case(&issue.summary);
+    let default_branch = to_kebab_case(&issue.summary);
+    let branch = match rl.readline_with_initial("branch: ", (&default_branch, "")) {
+        Ok(line) => {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                default_branch
+            } else {
+                trimmed.to_string()
+            }
+        }
+        Err(_) => return Err("Aborted".to_string()),
+    };
+
     println!("Creating {}:{}", home, branch);
 
     create_task(client, &home, &branch, &jira_key)?;

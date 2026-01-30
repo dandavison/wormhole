@@ -22,7 +22,28 @@ local neighborAlertId = nil
 local neighborTap = nil
 local neighborOverlayActive = false
 local neighborDisplayOrder = nil -- locked display order while overlay is shown
+local neighborCurrentIdx = nil   -- current position in neighborDisplayOrder
+local neighborEditorWindows = nil -- cached set of projects with editor windows
 local refreshNeighborOverlay     -- forward declaration
+
+-- Get set of project names that have editor windows open (Cursor/Code)
+local function getEditorWindows()
+    local projects = {}
+    for _, appName in ipairs({ "Cursor", "Code" }) do
+        local app = hs.application.find(appName)
+        if app then
+            for _, win in ipairs(app:allWindows()) do
+                local title = win:title() or ""
+                -- Extract project name from window title (typically "filename - projectname")
+                local project = title:match(" %- ([^%-]+)$")
+                if project then
+                    projects[project] = true
+                end
+            end
+        end
+    end
+    return projects
+end
 
 local function sendMove()
     local now = hs.timer.secondsSinceEpoch()
@@ -99,14 +120,53 @@ function M.select()
     end
 end
 
+-- Check if target project has an editor window (using cached data if available)
+local function hasEditorWindow(item)
+    if not neighborEditorWindows then return true end -- assume yes if not cached
+    if item.branch then
+        -- For tasks, check both "repo:branch" and just the branch
+        return neighborEditorWindows[item.name .. ":" .. item.branch]
+            or neighborEditorWindows[item.branch]
+            or neighborEditorWindows[item.name]
+    else
+        return neighborEditorWindows[item.name]
+    end
+end
+
 function M.previous()
-    hs.http.asyncGet(M.host .. "/project/previous", nil, function()
+    local url = M.host .. "/project/previous"
+    -- During overlay with cached state, check target without extra HTTP call
+    if neighborOverlayActive and neighborDisplayOrder and neighborCurrentIdx and neighborEditorWindows then
+        local n = #neighborDisplayOrder
+        -- Moving left in display = previous
+        local targetIdx = neighborCurrentIdx - 1
+        if targetIdx < 1 then targetIdx = n end
+        local target = neighborDisplayOrder[targetIdx]
+        if target and not hasEditorWindow(target) then
+            url = url .. "?skip-editor=true"
+        end
+        neighborCurrentIdx = targetIdx
+    end
+    hs.http.asyncGet(url, nil, function()
         if neighborOverlayActive then refreshNeighborOverlay() end
     end)
 end
 
 function M.next()
-    hs.http.asyncGet(M.host .. "/project/next", nil, function()
+    local url = M.host .. "/project/next"
+    -- During overlay with cached state, check target without extra HTTP call
+    if neighborOverlayActive and neighborDisplayOrder and neighborCurrentIdx and neighborEditorWindows then
+        local n = #neighborDisplayOrder
+        -- Moving right in display = next
+        local targetIdx = neighborCurrentIdx + 1
+        if targetIdx > n then targetIdx = 1 end
+        local target = neighborDisplayOrder[targetIdx]
+        if target and not hasEditorWindow(target) then
+            url = url .. "?skip-editor=true"
+        end
+        neighborCurrentIdx = targetIdx
+    end
+    hs.http.asyncGet(url, nil, function()
         if neighborOverlayActive then refreshNeighborOverlay() end
     end)
 end
@@ -230,6 +290,10 @@ local function renderNeighborOverlay()
                 local srcIdx = ((i - 1 + offset) % n) + 1
                 table.insert(neighborDisplayOrder, ring[srcIdx])
             end
+            -- Current is at center position
+            neighborCurrentIdx = math.ceil(n / 2)
+            -- Cache editor windows (fast local query, no network)
+            neighborEditorWindows = getEditorWindows()
         end
 
         hs.timer.doAfter(0, function()
@@ -295,6 +359,8 @@ end
 local function hideNeighborOverlay()
     neighborOverlayActive = false
     neighborDisplayOrder = nil -- reset for next show
+    neighborCurrentIdx = nil
+    neighborEditorWindows = nil
     if neighborAlertId then
         hs.alert.closeSpecific(neighborAlertId)
         neighborAlertId = nil

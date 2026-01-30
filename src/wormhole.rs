@@ -103,7 +103,8 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         };
         if let Some(project_path) = p {
             let land_in = params.land_in.clone();
-            thread::spawn(move || project_path.open(Mutation::None, land_in));
+            let skip_editor = params.skip_editor;
+            thread::spawn(move || project_path.open_with_options(Mutation::None, land_in, skip_editor));
         }
         Ok(Response::new(Body::from("")))
     } else if &path == "/project/next" {
@@ -117,7 +118,8 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         };
         if let Some(project_path) = p {
             let land_in = params.land_in.clone();
-            thread::spawn(move || project_path.open(Mutation::None, land_in));
+            let skip_editor = params.skip_editor;
+            thread::spawn(move || project_path.open_with_options(Mutation::None, land_in, skip_editor));
         }
         Ok(Response::new(Body::from("")))
     } else if let Some(name) = path.strip_prefix("/project/remove/") {

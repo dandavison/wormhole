@@ -17,6 +17,15 @@ pub struct ProjectPath {
 
 impl ProjectPath {
     pub fn open(&self, mutation: Mutation, land_in: Option<Application>) {
+        self.open_with_options(mutation, land_in, false);
+    }
+
+    pub fn open_with_options(
+        &self,
+        mutation: Mutation,
+        land_in: Option<Application>,
+        skip_editor: bool,
+    ) {
         let mut projects = projects::lock();
         let current_app = projects.current().map(|current| {
             let app = hammerspoon::current_application();
@@ -25,21 +34,25 @@ impl ProjectPath {
         });
         let project = self.project.clone();
         let is_already_open = project.is_open();
-        if !is_already_open {
+        if !is_already_open && !skip_editor {
             editor::open_workspace(&project);
         }
-        let land_in = land_in.or_else(|| match mutation {
-            Mutation::None | Mutation::RotateLeft | Mutation::RotateRight => {
-                self.project.last_application.clone()
-            }
-            _ => parse_application(self.project.kv.get("land-in")).or({
-                if is_already_open {
-                    current_app
-                } else {
-                    None
+        let land_in = if skip_editor {
+            Some(Application::Terminal)
+        } else {
+            land_in.or_else(|| match mutation {
+                Mutation::None | Mutation::RotateLeft | Mutation::RotateRight => {
+                    self.project.last_application.clone()
                 }
-            }),
-        });
+                _ => parse_application(self.project.kv.get("land-in")).or({
+                    if is_already_open {
+                        current_app
+                    } else {
+                        None
+                    }
+                }),
+            })
+        };
         projects.apply(mutation, &self.project.store_key());
         if util::debug() {
             projects.print();
@@ -53,6 +66,13 @@ impl ProjectPath {
                 ))
             })
         };
+
+        if skip_editor {
+            open_terminal();
+            config::TERMINAL.focus();
+            return;
+        }
+
         let project_path = self.clone();
         let open_editor = move || {
             editor::open_path(&project_path).unwrap_or_else(|err| {

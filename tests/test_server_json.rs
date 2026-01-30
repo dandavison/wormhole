@@ -11,7 +11,7 @@ fn test_project_list_json_structure() {
     // Use unique port to avoid conflicts with other tests
     let test = harness::WormholeTest::new(18910);
 
-    let response = test.hs_get("/project/list").unwrap();
+    let response = test.http_get("/project/list").unwrap();
     let json: Value = serde_json::from_str(&response).expect("Should be valid JSON");
 
     // Should have "current" and "available" arrays
@@ -29,7 +29,7 @@ fn test_project_show_returns_json() {
     std::fs::create_dir_all(&dir).unwrap();
     test.create_project(&dir, &proj);
 
-    let response = test.hs_get(&format!("/project/show/{}", proj)).unwrap();
+    let response = test.http_get(&format!("/project/show/{}", proj)).unwrap();
     let json: Value = serde_json::from_str(&response).expect("Should be valid JSON");
 
     // Should have expected fields

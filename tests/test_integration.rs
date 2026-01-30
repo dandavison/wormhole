@@ -26,12 +26,14 @@ fn test_open_project() {
     test.create_project(&dir_b, &proj_b);
 
     // Initially, editor gains focus.
-    test.hs_get(&format!("/project/switch/{}", proj_a)).unwrap();
+    test.http_get(&format!("/project/switch/{}", proj_a))
+        .unwrap();
     test.assert_focus(Editor(&proj_a));
     test.assert_tmux_cwd(&dir_a);
 
     // Switching stays with editor.
-    test.hs_get(&format!("/project/switch/{}", proj_b)).unwrap();
+    test.http_get(&format!("/project/switch/{}", proj_b))
+        .unwrap();
     test.assert_focus(Editor(&proj_b));
     test.assert_tmux_cwd(&dir_b);
 
@@ -39,24 +41,26 @@ fn test_open_project() {
     test.focus_terminal();
 
     // Switching now stays with terminal.
-    test.hs_get(&format!("/project/switch/{}", proj_a)).unwrap();
+    test.http_get(&format!("/project/switch/{}", proj_a))
+        .unwrap();
     test.assert_focus(Terminal(&proj_a));
     test.assert_tmux_cwd(&dir_a);
 
     // land-in=editor overrides: even though we're in terminal, we land in editor
-    test.hs_get(&format!("/project/switch/{}?land-in=editor", proj_b))
+    test.http_get(&format!("/project/switch/{}?land-in=editor", proj_b))
         .unwrap();
     test.assert_focus(Editor(&proj_b));
 
     // land-in=terminal overrides: even though we're now in editor, we land in terminal
-    test.hs_get(&format!("/project/switch/{}?land-in=terminal", proj_a))
+    test.http_get(&format!("/project/switch/{}?land-in=terminal", proj_a))
         .unwrap();
     test.assert_focus(Terminal(&proj_a));
 
     // land-in is also respected from project kv store.
-    test.hs_put(&format!("/kv/{}/land-in", proj_b), "editor")
+    test.http_put(&format!("/kv/{}/land-in", proj_b), "editor")
         .unwrap();
-    test.hs_get(&format!("/project/switch/{}", proj_b)).unwrap();
+    test.http_get(&format!("/project/switch/{}", proj_b))
+        .unwrap();
     test.assert_focus(Editor(&proj_b));
 }
 
@@ -76,20 +80,22 @@ fn test_previous_project_and_next_project() {
     test.create_project(&dir_b, &proj_b);
 
     // Start in (a, editor)
-    test.hs_get(&format!("/project/switch/{}", proj_a)).unwrap();
+    test.http_get(&format!("/project/switch/{}", proj_a))
+        .unwrap();
     test.assert_focus(Editor(&proj_a));
 
     // Transition to (b, editor)
-    test.hs_get(&format!("/project/switch/{}", proj_b)).unwrap();
+    test.http_get(&format!("/project/switch/{}", proj_b))
+        .unwrap();
     test.assert_focus(Editor(&proj_b));
 
     for _ in 0..2 {
         // Previous should transition to (a, editor)
-        test.hs_get("/project/previous").unwrap();
+        test.http_get("/project/previous").unwrap();
         test.assert_focus(Editor(&proj_a));
 
         // Next should transition to (b, editor)
-        test.hs_get("/project/next").unwrap();
+        test.http_get("/project/next").unwrap();
         test.assert_focus(Editor(&proj_b));
     }
 
@@ -98,11 +104,11 @@ fn test_previous_project_and_next_project() {
     test.assert_focus(Terminal(&proj_b));
 
     // Set land-in in kv to check that previous disregards it
-    test.hs_put(&format!("/kv/{}/land-in", proj_a), "terminal")
+    test.http_put(&format!("/kv/{}/land-in", proj_a), "terminal")
         .unwrap();
 
     // Previous should transition to (a, editor)
-    test.hs_get("/project/previous").unwrap();
+    test.http_get("/project/previous").unwrap();
     test.assert_focus(Editor(&proj_a));
 }
 
@@ -116,10 +122,10 @@ fn test_close_project() {
     std::fs::create_dir_all(&dir).unwrap();
 
     test.create_project(&dir, &proj);
-    test.hs_get(&format!("/project/switch/{}", proj)).unwrap();
+    test.http_get(&format!("/project/switch/{}", proj)).unwrap();
     test.assert_focus(Editor(&proj));
 
-    test.hs_post(&format!("/project/close/{}", proj)).unwrap();
+    test.http_post(&format!("/project/close/{}", proj)).unwrap();
 
     assert!(
         test.wait_until(|| !test.window_exists(&proj), 5),
@@ -164,12 +170,14 @@ fn test_project_list_sorted() {
     // Open all in reverse alphabetical order using store_key format for tasks
     let task_b1_key = test.task_store_key(&task_b1, &proj_b);
     let task_a1_key = test.task_store_key(&task_a1, &proj_a);
-    test.hs_get(&format!("/project/switch/{}", task_b1_key))
+    test.http_get(&format!("/project/switch/{}", task_b1_key))
         .unwrap();
-    test.hs_get(&format!("/project/switch/{}", proj_b)).unwrap();
-    test.hs_get(&format!("/project/switch/{}", task_a1_key))
+    test.http_get(&format!("/project/switch/{}", proj_b))
         .unwrap();
-    test.hs_get(&format!("/project/switch/{}", proj_a)).unwrap();
+    test.http_get(&format!("/project/switch/{}", task_a1_key))
+        .unwrap();
+    test.http_get(&format!("/project/switch/{}", proj_a))
+        .unwrap();
 
     // Get project list via curl (Hammerspoon can timeout with many rapid calls)
     let output = Command::new("curl")
@@ -242,7 +250,7 @@ fn test_close_task_removes_from_list() {
     test.assert_focus(Editor(&store_key));
 
     // Verify task is in project list (check name == repo AND branch == task_id)
-    let list_json = test.hs_get("/project/list").unwrap();
+    let list_json = test.http_get("/project/list").unwrap();
     let list: Value = serde_json::from_str(&list_json).unwrap();
     let current = list["current"].as_array().unwrap();
     assert!(
@@ -255,7 +263,7 @@ fn test_close_task_removes_from_list() {
     );
 
     // Close the task using store_key format
-    test.hs_post(&format!("/project/close/{}", store_key))
+    test.http_post(&format!("/project/close/{}", store_key))
         .unwrap();
 
     // Wait for window to close (window name is store_key)
@@ -265,7 +273,7 @@ fn test_close_task_removes_from_list() {
     );
 
     // Verify task is NOT in project list
-    let list_json = test.hs_get("/project/list").unwrap();
+    let list_json = test.http_get("/project/list").unwrap();
     let list: Value = serde_json::from_str(&list_json).unwrap();
     let current = list["current"].as_array().unwrap();
     assert!(
@@ -293,7 +301,7 @@ fn test_open_github_url() {
 
     // GitHub URL format: /<owner>/<repo>/blob/<branch>/<path>
     // The repo name should match the project name
-    test.hs_get(&format!("/owner/{}/blob/main/src/main.rs", proj))
+    test.http_get(&format!("/owner/{}/blob/main/src/main.rs", proj))
         .unwrap();
     test.assert_focus(Editor(&proj));
 }
@@ -310,7 +318,7 @@ fn test_open_file() {
     std::fs::write(&file, "fn main() {}").unwrap();
 
     test.create_project(&dir, &proj);
-    test.hs_get(&format!("/file/{}", file)).unwrap();
+    test.http_get(&format!("/file/{}", file)).unwrap();
     test.assert_focus(Editor(&proj));
 }
 
@@ -331,11 +339,11 @@ fn test_pin() {
     test.create_project(&dir, &proj);
 
     // Go to project in editor
-    test.hs_get(&format!("/project/switch/{}", proj)).unwrap();
+    test.http_get(&format!("/project/switch/{}", proj)).unwrap();
     test.assert_focus(Editor(&proj));
 
     // Pin while in editor - should set land-in=editor
-    test.hs_post("/project/pin").unwrap();
+    test.http_post("/project/pin").unwrap();
     assert!(
         test.wait_for_kv(&proj, "land-in", "editor", 10),
         "Expected land-in=editor after pinning in editor"
@@ -345,7 +353,7 @@ fn test_pin() {
     test.focus_terminal();
     test.assert_focus(Terminal(&proj));
 
-    test.hs_post("/project/pin").unwrap();
+    test.http_post("/project/pin").unwrap();
     assert!(
         test.wait_for_kv(&proj, "land-in", "terminal", 5),
         "Expected land-in=terminal after pinning in terminal"
@@ -390,31 +398,31 @@ fn test_task_switching() {
     let task_2_dir = format!("{}/.git/wormhole/worktrees/{}", home_dir, task_2);
 
     // Switch to home project
-    test.hs_get(&format!("/project/switch/{}", home_proj))
+    test.http_get(&format!("/project/switch/{}", home_proj))
         .unwrap();
     test.assert_focus(Editor(&home_proj));
     test.assert_tmux_cwd(&home_dir);
 
     // Switch to task 1 using store_key
-    test.hs_get(&format!("/project/switch/{}", task_1_key))
+    test.http_get(&format!("/project/switch/{}", task_1_key))
         .unwrap();
     test.assert_focus(Editor(&task_1_key));
     test.assert_tmux_cwd(&task_1_dir);
 
     // Switch to task 2 using store_key
-    test.hs_get(&format!("/project/switch/{}", task_2_key))
+    test.http_get(&format!("/project/switch/{}", task_2_key))
         .unwrap();
     test.assert_focus(Editor(&task_2_key));
     test.assert_tmux_cwd(&task_2_dir);
 
     // Switch back to home project
-    test.hs_get(&format!("/project/switch/{}", home_proj))
+    test.http_get(&format!("/project/switch/{}", home_proj))
         .unwrap();
     test.assert_focus(Editor(&home_proj));
     test.assert_tmux_cwd(&home_dir);
 
     // Switch to task 1 again
-    test.hs_get(&format!("/project/switch/{}", task_1_key))
+    test.http_get(&format!("/project/switch/{}", task_1_key))
         .unwrap();
     test.assert_focus(Editor(&task_1_key));
     test.assert_tmux_cwd(&task_1_dir);
@@ -490,14 +498,14 @@ fn test_task_in_submodule() {
     );
 
     // Switch between submodule project and task
-    test.hs_get(&format!("/project/switch/{}", submodule_name))
+    test.http_get(&format!("/project/switch/{}", submodule_name))
         .unwrap();
     test.assert_focus(Editor(&submodule_name));
     test.assert_tmux_cwd(&submodule_dir);
 
     // Switch to task using store_key format
     let store_key = test.task_store_key(&task_id, &submodule_name);
-    test.hs_get(&format!("/project/switch/{}", store_key))
+    test.http_get(&format!("/project/switch/{}", store_key))
         .unwrap();
     // Window name is now the store_key for tasks
     test.assert_focus(Editor(&store_key));
@@ -530,13 +538,13 @@ fn test_task_home_project_not_self() {
 
     // Switch to task so it's in the open projects list
     let store_key = test.task_store_key(&task_id, &home_proj);
-    test.hs_get(&format!("/project/switch/{}", store_key))
+    test.http_get(&format!("/project/switch/{}", store_key))
         .unwrap();
     // Window name is now the store_key for tasks
     test.assert_focus(Editor(&store_key));
 
     // Get project list and verify task has correct name and branch
-    let list_json = test.hs_get("/project/list").unwrap();
+    let list_json = test.http_get("/project/list").unwrap();
     let list: Value = serde_json::from_str(&list_json).unwrap();
     let current = list["current"].as_array().unwrap();
 
@@ -588,18 +596,18 @@ fn test_task_switching_updates_ring_order() {
     let store_key = test.task_store_key(&task_id, &home_proj);
 
     // Switch to home project first
-    test.hs_get(&format!("/project/switch/{}", home_proj))
+    test.http_get(&format!("/project/switch/{}", home_proj))
         .unwrap();
     test.assert_focus(Editor(&home_proj));
 
     // Switch to task using store_key
-    test.hs_get(&format!("/project/switch/{}", store_key))
+    test.http_get(&format!("/project/switch/{}", store_key))
         .unwrap();
     // Window name is the store_key for tasks
     test.assert_focus(Editor(&store_key));
 
     // Verify both are in the list
-    let list_json = test.hs_get("/project/list").unwrap();
+    let list_json = test.http_get("/project/list").unwrap();
     let list: Value = serde_json::from_str(&list_json).unwrap();
     let current = list["current"].as_array().unwrap();
 
@@ -615,11 +623,11 @@ fn test_task_switching_updates_ring_order() {
     assert!(has_task, "Task should be in list");
 
     // Toggle back via previous - should go to home project
-    test.hs_get("/project/previous").unwrap();
+    test.http_get("/project/previous").unwrap();
     test.assert_focus(Editor(&home_proj));
 
     // Toggle forward via next - should go to task
-    test.hs_get("/project/next").unwrap();
+    test.http_get("/project/next").unwrap();
     test.assert_focus(Editor(&store_key));
 }
 
@@ -637,11 +645,11 @@ fn test_project_status() {
     test.assert_focus(Editor(&proj));
 
     // Get info by name
-    let status = test.hs_get(&format!("/project/show/{}", proj)).unwrap();
+    let status = test.http_get(&format!("/project/show/{}", proj)).unwrap();
     assert!(status.contains(&proj), "Status should contain project name");
 
     // Get current project info
-    let status = test.hs_get("/project/show").unwrap();
+    let status = test.http_get("/project/show").unwrap();
     assert!(
         status.contains(&proj),
         "Current status should contain project name"
@@ -649,7 +657,7 @@ fn test_project_status() {
 
     // Get JSON format
     let status = test
-        .hs_get(&format!("/project/show/{}?format=json", proj))
+        .http_get(&format!("/project/show/{}?format=json", proj))
         .unwrap();
     assert!(status.contains("\"name\""), "JSON should have name field");
     assert!(
@@ -689,16 +697,16 @@ fn test_task_respects_land_in_kv() {
     let store_key = test.task_store_key(&task_id, &home_proj);
 
     // Directly set land-in=terminal for the task using store_key
-    test.hs_put(&format!("/kv/{}/land-in", store_key), "terminal")
+    test.http_put(&format!("/kv/{}/land-in", store_key), "terminal")
         .unwrap();
 
     // Switch to home project first (so we're not on the task)
-    test.hs_get(&format!("/project/switch/{}", home_proj))
+    test.http_get(&format!("/project/switch/{}", home_proj))
         .unwrap();
     test.assert_focus(Editor(&home_proj));
 
     // Switch to task - should respect land-in=terminal
-    test.hs_get(&format!("/project/switch/{}", store_key))
+    test.http_get(&format!("/project/switch/{}", store_key))
         .unwrap();
     test.assert_focus(Terminal(&store_key));
 }
@@ -736,13 +744,13 @@ fn test_tasks_persist_after_tmux_window_closed() {
     let task_2_key = test.task_store_key(&task_2, &home_proj);
 
     // Switch to both tasks to ensure they're in the ring and have tmux windows
-    test.hs_get(&format!("/project/switch/{}", task_1_key))
+    test.http_get(&format!("/project/switch/{}", task_1_key))
         .unwrap();
-    test.hs_get(&format!("/project/switch/{}", task_2_key))
+    test.http_get(&format!("/project/switch/{}", task_2_key))
         .unwrap();
 
     // Verify both tasks are in the project list
-    let list_json = test.hs_get("/project/list").unwrap();
+    let list_json = test.http_get("/project/list").unwrap();
     let list: Value = serde_json::from_str(&list_json).unwrap();
     let current = list["current"].as_array().unwrap();
 
@@ -767,7 +775,7 @@ fn test_tasks_persist_after_tmux_window_closed() {
     );
 
     // Both tasks should STILL be in the list (tasks persist regardless of tmux windows)
-    let list_json = test.hs_get("/project/list").unwrap();
+    let list_json = test.http_get("/project/list").unwrap();
     let list: Value = serde_json::from_str(&list_json).unwrap();
     let current = list["current"].as_array().unwrap();
 
@@ -825,13 +833,13 @@ fn test_neighbors_returns_branch_for_tasks() {
     let task_2_key = test.task_store_key(&task_2, &home_proj);
 
     // Switch to both tasks to add them to the ring
-    test.hs_get(&format!("/project/switch/{}", task_1_key))
+    test.http_get(&format!("/project/switch/{}", task_1_key))
         .unwrap();
-    test.hs_get(&format!("/project/switch/{}", task_2_key))
+    test.http_get(&format!("/project/switch/{}", task_2_key))
         .unwrap();
 
     // Get neighbors endpoint
-    let neighbors_json = test.hs_get("/project/neighbors").unwrap();
+    let neighbors_json = test.http_get("/project/neighbors").unwrap();
     let neighbors: Value = serde_json::from_str(&neighbors_json).unwrap();
     let ring = neighbors["ring"]
         .as_array()
@@ -944,13 +952,13 @@ fn test_tasks_appear_without_terminal_windows() {
     );
 
     // Refresh to discover the new task
-    test.hs_post("/project/refresh").unwrap();
+    test.http_post("/project/refresh").unwrap();
 
     // Give a moment for refresh to complete
     std::thread::sleep(std::time::Duration::from_millis(500));
 
     // Get project list
-    let response = test.hs_get("/project/list").unwrap();
+    let response = test.http_get("/project/list").unwrap();
     let data: Value = serde_json::from_str(&response).unwrap();
     let current = data["current"].as_array().expect("current should be array");
 
@@ -1002,7 +1010,7 @@ fn test_switch_creates_task_from_colon_syntax() {
     // Use colon syntax to create a NEW task (not --home-project/--branch)
     let task_key = format!("{}:{}", home_proj, task_branch);
     let response = test
-        .hs_get(&format!("/project/switch/{}?sync=1", task_key))
+        .http_get(&format!("/project/switch/{}?sync=1", task_key))
         .unwrap();
     assert!(
         response.contains("ok") || response.is_empty(),
@@ -1022,10 +1030,10 @@ fn test_switch_creates_task_from_colon_syntax() {
     );
 
     // Refresh and verify task appears in list
-    test.hs_post("/project/refresh").unwrap();
+    test.http_post("/project/refresh").unwrap();
     std::thread::sleep(std::time::Duration::from_millis(300));
 
-    let response = test.hs_get("/project/list").unwrap();
+    let response = test.http_get("/project/list").unwrap();
     let data: Value = serde_json::from_str(&response).unwrap();
     let current = data["current"].as_array().expect("current should be array");
 

@@ -81,29 +81,52 @@ impl WormholeTest {
         WormholeTest { port, tmux }
     }
 
-    pub fn hs_get(&self, path: &str) -> Result<String, String> {
-        self.hs_request_with_body("get", path, "")
-    }
-
-    pub fn hs_put(&self, path: &str, body: &str) -> Result<String, String> {
-        self.hs_request_with_body("put", path, body)
-    }
-
-    pub fn hs_post(&self, path: &str) -> Result<String, String> {
-        self.hs_request_with_body("post", path, "")
-    }
-
-    fn hs_request_with_body(&self, method: &str, path: &str, body: &str) -> Result<String, String> {
+    pub fn http_get(&self, path: &str) -> Result<String, String> {
         let url = format!("http://127.0.0.1:{}{}", self.port, path);
-        let call = match method {
-            "get" => format!(r#"hs.http.get("{}", nil)"#, url),
-            _ => format!(r#"hs.http.{}("{}", "{}", nil)"#, method, url, body),
-        };
-        let lua = format!(
-            r#"local s, b = {}; if s == 200 then return b else error("HTTP " .. s) end"#,
-            call
-        );
-        self.run_hs(&lua)
+        let output = Command::new("curl")
+            .args(["-s", "-f", &url])
+            .output()
+            .map_err(|e| format!("curl failed: {}", e))?;
+        if output.status.success() {
+            Ok(String::from_utf8_lossy(&output.stdout).to_string())
+        } else {
+            Err(format!(
+                "HTTP error: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ))
+        }
+    }
+
+    pub fn http_put(&self, path: &str, body: &str) -> Result<String, String> {
+        let url = format!("http://127.0.0.1:{}{}", self.port, path);
+        let output = Command::new("curl")
+            .args(["-s", "-f", "-X", "PUT", "-d", body, &url])
+            .output()
+            .map_err(|e| format!("curl failed: {}", e))?;
+        if output.status.success() {
+            Ok(String::from_utf8_lossy(&output.stdout).to_string())
+        } else {
+            Err(format!(
+                "HTTP error: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ))
+        }
+    }
+
+    pub fn http_post(&self, path: &str) -> Result<String, String> {
+        let url = format!("http://127.0.0.1:{}{}", self.port, path);
+        let output = Command::new("curl")
+            .args(["-s", "-f", "-X", "POST", &url])
+            .output()
+            .map_err(|e| format!("curl failed: {}", e))?;
+        if output.status.success() {
+            Ok(String::from_utf8_lossy(&output.stdout).to_string())
+        } else {
+            Err(format!(
+                "HTTP error: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ))
+        }
     }
 
     pub fn get_focused_app(&self) -> String {
@@ -208,7 +231,7 @@ impl WormholeTest {
     }
 
     pub fn create_project(&self, dir: &str, name: &str) {
-        self.hs_get(&format!("/project/switch/{}?name={}", dir, name))
+        self.http_get(&format!("/project/switch/{}?name={}", dir, name))
             .unwrap();
         if editor_is_none() {
             self.assert_tmux_window(name);
@@ -226,7 +249,7 @@ impl WormholeTest {
     pub fn create_task(&self, task_id: &str, home_project: &str) {
         // Use sync=1 to get errors if task creation fails
         let response = self
-            .hs_get(&format!(
+            .http_get(&format!(
                 "/project/switch/?home-project={}&branch={}&sync=1",
                 home_project, task_id
             ))

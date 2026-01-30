@@ -3,7 +3,7 @@ use std::thread;
 
 use crate::config;
 use crate::endpoints;
-use crate::project::StoreKey;
+use crate::project::ProjectKey;
 use crate::project_path::ProjectPath;
 use crate::projects;
 use crate::projects::Mutation;
@@ -242,7 +242,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
                 .body(Body::from("Use POST"))
                 .unwrap());
         }
-        let key = StoreKey::parse(name.trim());
+        let key = ProjectKey::parse(name.trim());
         let mut projects = projects::lock();
         if let Some(project) = projects.get_mut(&key) {
             crate::github::refresh_github_info(project);
@@ -342,7 +342,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
             ))
         }
     } else if let Some(name) = path.strip_prefix("/project/vscode/") {
-        let key = StoreKey::parse(name.trim());
+        let key = ProjectKey::parse(name.trim());
         let result = {
             let projects = projects::lock();
             projects
@@ -412,7 +412,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
 }
 
 fn resolve_project(projects: &mut projects::Projects, name_or_path: &str) -> Option<ProjectPath> {
-    let key = StoreKey::parse(name_or_path);
+    let key = ProjectKey::parse(name_or_path);
     if let Some(project) = projects.by_key(&key) {
         Some(project.as_project_path())
     } else if name_or_path.starts_with('/') {
@@ -471,7 +471,7 @@ async fn handle_kv_request(
         [project] => {
             // /kv/<project> - get all KV for project
             if method == Method::GET {
-                let key = StoreKey::parse(project);
+                let key = ProjectKey::parse(project);
                 Ok(crate::kv::get_project_kv(&key))
             } else {
                 Ok(Response::builder()
@@ -482,7 +482,7 @@ async fn handle_kv_request(
         }
         [project, kv_key] => {
             // /kv/<project>/<key>
-            let key = StoreKey::parse(project);
+            let key = ProjectKey::parse(project);
             match *method {
                 Method::GET => Ok(crate::kv::get_value(&key, kv_key)),
                 Method::PUT => {

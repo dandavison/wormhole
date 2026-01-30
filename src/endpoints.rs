@@ -1,7 +1,7 @@
 use hyper::{Body, Response, StatusCode};
 use std::collections::HashSet;
 
-use crate::project::StoreKey;
+use crate::project::ProjectKey;
 use crate::{config, github, hammerspoon, jira, projects, util::debug};
 
 /// Return JSON with current and available projects (including tasks)
@@ -121,7 +121,7 @@ pub fn debug_projects() -> Response<Body> {
 }
 
 pub fn remove_project(name: &str) -> Response<Body> {
-    let key = StoreKey::parse(name);
+    let key = ProjectKey::parse(name);
     let mut projects = projects::lock();
     if let Some(p) = projects.by_key(&key) {
         config::TERMINAL.close(&p);
@@ -138,7 +138,7 @@ pub fn remove_project(name: &str) -> Response<Body> {
 }
 
 pub fn close_project(name: &str) {
-    let key = StoreKey::parse(name);
+    let key = ProjectKey::parse(name);
     let mut projects = projects::lock();
     if let Some(p) = projects.by_key(&key) {
         config::TERMINAL.close(&p);

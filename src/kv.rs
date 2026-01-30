@@ -5,10 +5,10 @@ use std::path::PathBuf;
 
 use crate::config;
 use crate::git;
-use crate::project::{Project, StoreKey};
+use crate::project::{Project, ProjectKey};
 use crate::projects;
 
-pub fn get_value(key: &StoreKey, kv_key: &str) -> Response<Body> {
+pub fn get_value(key: &ProjectKey, kv_key: &str) -> Response<Body> {
     let projects = projects::lock();
     let Some(project) = projects.by_key(key) else {
         return Response::builder()
@@ -28,7 +28,7 @@ pub fn get_value(key: &StoreKey, kv_key: &str) -> Response<Body> {
     }
 }
 
-pub async fn set_value(key: &StoreKey, kv_key: &str, body: Body) -> Response<Body> {
+pub async fn set_value(key: &ProjectKey, kv_key: &str, body: Body) -> Response<Body> {
     let bytes = hyper::body::to_bytes(body).await.unwrap_or_default();
     let value = String::from_utf8_lossy(&bytes).to_string();
 
@@ -46,7 +46,7 @@ pub async fn set_value(key: &StoreKey, kv_key: &str, body: Body) -> Response<Bod
     }
 }
 
-pub fn set_value_sync(key: &StoreKey, kv_key: &str, value: &str) {
+pub fn set_value_sync(key: &ProjectKey, kv_key: &str, value: &str) {
     let mut projects = projects::lock();
 
     if let Some(project) = projects.get_mut(key) {
@@ -55,7 +55,7 @@ pub fn set_value_sync(key: &StoreKey, kv_key: &str, value: &str) {
     }
 }
 
-pub fn delete_value(key: &StoreKey, kv_key: &str) -> Response<Body> {
+pub fn delete_value(key: &ProjectKey, kv_key: &str) -> Response<Body> {
     let mut projects = projects::lock();
 
     if let Some(project) = projects.get_mut(key) {
@@ -79,7 +79,7 @@ pub fn delete_value(key: &StoreKey, kv_key: &str) -> Response<Body> {
     }
 }
 
-pub fn get_project_kv(key: &StoreKey) -> Response<Body> {
+pub fn get_project_kv(key: &ProjectKey) -> Response<Body> {
     let projects = projects::lock();
     match projects.by_key(key) {
         Some(project) => {
@@ -152,7 +152,7 @@ pub fn list_all_kv_fresh() -> Response<Body> {
     let available = config::available_projects();
 
     // Collect all (store_key, repo_path) pairs for projects and tasks
-    let entries: Vec<(StoreKey, PathBuf)> = available
+    let entries: Vec<(ProjectKey, PathBuf)> = available
         .into_par_iter()
         .flat_map(|(name, path)| {
             let mut result = vec![];
@@ -162,14 +162,14 @@ pub fn list_all_kv_fresh() -> Response<Body> {
             }
 
             // Add the main project
-            result.push((StoreKey::project(name.clone()), path.clone()));
+            result.push((ProjectKey::project(name.clone()), path.clone()));
 
             // Discover tasks (worktrees)
             let worktrees_dir = git::worktree_base_path(&path);
             for wt in git::list_worktrees(&path) {
                 if wt.path.starts_with(&worktrees_dir) {
                     if let Some(branch) = wt.branch {
-                        result.push((StoreKey::task(name.clone(), branch), path.clone()));
+                        result.push((ProjectKey::task(name.clone(), branch), path.clone()));
                     }
                 }
             }
@@ -197,7 +197,7 @@ pub fn list_all_kv_fresh() -> Response<Body> {
     Response::new(Body::from(json))
 }
 
-fn kv_file_for_key(key: &StoreKey, repo_path: &PathBuf) -> PathBuf {
+fn kv_file_for_key(key: &ProjectKey, repo_path: &PathBuf) -> PathBuf {
     let filename = key.to_string().replace(':', "_");
     git::git_common_dir(repo_path)
         .join("wormhole")

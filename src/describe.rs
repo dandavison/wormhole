@@ -5,7 +5,7 @@ use std::sync::mpsc;
 use std::thread;
 
 use crate::github;
-use crate::project::StoreKey;
+use crate::project::ProjectKey;
 use crate::projects;
 
 #[derive(Debug, Deserialize)]
@@ -219,9 +219,9 @@ fn jira_url_for_key(key: &str) -> Option<String> {
     Some(format!("https://{}.atlassian.net/browse/{}", instance, key))
 }
 
-fn find_task_by_pr(owner: &str, repo: &str, pr_number: u64) -> Option<(StoreKey, String)> {
+fn find_task_by_pr(owner: &str, repo: &str, pr_number: u64) -> Option<(ProjectKey, String)> {
     let expected_repo = format!("{}/{}", owner, repo);
-    let tasks: Vec<(StoreKey, crate::project::Project)> = projects::tasks().into_iter().collect();
+    let tasks: Vec<(ProjectKey, crate::project::Project)> = projects::tasks().into_iter().collect();
 
     tasks.par_iter().find_map_any(|(key, project)| {
         let task_pr = github::get_open_pr_number(project)?;

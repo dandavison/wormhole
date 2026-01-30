@@ -8,12 +8,12 @@ use std::fmt;
 use std::path::PathBuf;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct StoreKey {
+pub struct ProjectKey {
     pub repo: String,
     pub branch: Option<String>,
 }
 
-impl StoreKey {
+impl ProjectKey {
     pub fn project(repo: impl Into<String>) -> Self {
         Self {
             repo: repo.into(),
@@ -36,7 +36,7 @@ impl StoreKey {
     }
 }
 
-impl fmt::Display for StoreKey {
+impl fmt::Display for ProjectKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.branch {
             Some(branch) => write!(f, "{}:{}", self.repo, branch),
@@ -61,10 +61,10 @@ impl Project {
         self.branch.is_some()
     }
 
-    pub fn store_key(&self) -> StoreKey {
+    pub fn store_key(&self) -> ProjectKey {
         match &self.branch {
-            Some(branch) => StoreKey::task(&self.repo_name, branch),
-            None => StoreKey::project(&self.repo_name),
+            Some(branch) => ProjectKey::task(&self.repo_name, branch),
+            None => ProjectKey::project(&self.repo_name),
         }
     }
 

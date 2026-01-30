@@ -4,20 +4,20 @@ Wormhole is a project/task management system that integrates terminal (tmux), ed
 
 ## Data Model
 
-### StoreKey
+### ProjectKey
 
 The fundamental identifier for projects and tasks.
 
-[src/project.rs (`StoreKey`)](https://github.com/dandavison/wormhole/blob/main/src/project.rs#L10-L46)
+[src/project.rs (`ProjectKey`)](https://github.com/dandavison/wormhole/blob/main/src/project.rs#L10-L46)
 ```rust
-pub struct StoreKey {
+pub struct ProjectKey {
     pub repo: String,
     pub branch: Option<String>,
 }
 ```
 
-- Projects: `StoreKey { repo: "myrepo", branch: None }` → displays as `"myrepo"`
-- Tasks: `StoreKey { repo: "myrepo", branch: Some("feature") }` → displays as `"myrepo:feature"`
+- Projects: `ProjectKey { repo: "myrepo", branch: None }` → displays as `"myrepo"`
+- Tasks: `ProjectKey { repo: "myrepo", branch: Some("feature") }` → displays as `"myrepo:feature"`
 
 ### Project
 
@@ -38,7 +38,7 @@ pub struct Project {
 
 Key methods:
 - `is_task()` — returns true if `branch.is_some()`
-- `store_key()` — returns the `StoreKey` for this project
+- `store_key()` — returns the `ProjectKey` for this project
 - `worktree_path()` — for tasks, returns the worktree directory
 - `is_open()` — checks if terminal window exists
 
@@ -46,11 +46,11 @@ Key methods:
 
 The in-memory store managing all projects with a navigation ring.
 
-[src/projects.rs (`Store`)](https://github.com/dandavison/wormhole/blob/main/src/projects.rs#L25-L28)
+[src/projects.rs (`ProjectsStore`)](https://github.com/dandavison/wormhole/blob/main/src/projects.rs#L25-L28)
 ```rust
-struct Store {
-    all: HashMap<StoreKey, Project>,
-    ring: VecDeque<StoreKey>,
+struct ProjectsStore {
+    all: HashMap<ProjectKey, Project>,
+    ring: VecDeque<ProjectKey>,
 }
 ```
 
@@ -98,7 +98,7 @@ Per-project key-value storage, persisted as JSON files.
 
 [src/kv.rs (`kv_file_for_key`)](https://github.com/dandavison/wormhole/blob/main/src/kv.rs#L96-L107)
 ```rust
-fn kv_file_for_key(key: &StoreKey, repo_path: &Path) -> PathBuf {
+fn kv_file_for_key(key: &ProjectKey, repo_path: &Path) -> PathBuf {
     let filename = key.to_string().replace(':', "_");
     git::git_common_dir(repo_path)
         .join("wormhole/kv")
@@ -317,7 +317,7 @@ Close windows or remove project from store.
 [src/endpoints.rs (`close_project`)](https://github.com/dandavison/wormhole/blob/main/src/endpoints.rs#L140-L152)
 ```rust
 pub fn close_project(name: &str) {
-    let key = StoreKey::parse(name);
+    let key = ProjectKey::parse(name);
     let mut projects = projects::lock();
     if let Some(project) = projects.by_key(&key) {
         config::TERMINAL.close(&project);
@@ -348,7 +348,7 @@ pub fn refresh_all() {
 
 [src/kv.rs (`get_value`)](https://github.com/dandavison/wormhole/blob/main/src/kv.rs#L11-L29)
 ```rust
-pub fn get_value(store_key: &StoreKey, key: &str) -> Option<String> {
+pub fn get_value(store_key: &ProjectKey, key: &str) -> Option<String> {
     let projects = projects::lock();
     projects.by_key(store_key).and_then(|p| p.kv.get(key).cloned())
 }
@@ -358,7 +358,7 @@ pub fn get_value(store_key: &StoreKey, key: &str) -> Option<String> {
 
 [src/kv.rs (`set_value`)](https://github.com/dandavison/wormhole/blob/main/src/kv.rs#L31-L47)
 ```rust
-pub fn set_value(store_key: &StoreKey, key: &str, value: &str) {
+pub fn set_value(store_key: &ProjectKey, key: &str, value: &str) {
     let mut projects = projects::lock();
     if let Some(project) = projects.get_mut(store_key) {
         project.kv.insert(key.to_string(), value.to_string());

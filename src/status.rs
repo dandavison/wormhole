@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::github::{self, PrStatus};
 use crate::jira::{self, IssueStatus};
-use crate::project::{Project, StoreKey};
+use crate::project::{Project, ProjectKey};
 use crate::projects;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -78,7 +78,7 @@ pub fn get_status(project: &Project) -> TaskStatus {
 
 pub fn get_status_by_name(name: &str) -> Option<TaskStatus> {
     let projects = projects::lock();
-    let key = StoreKey::parse(name);
+    let key = ProjectKey::parse(name);
     let project = projects.by_key(&key).or_else(|| {
         let path = std::path::Path::new(name);
         crate::task::task_by_path(path).or_else(|| projects.by_path(path))

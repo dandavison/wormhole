@@ -2,18 +2,18 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::thread;
 
-use crate::project::StoreKey;
+use crate::project::ProjectKey;
 use crate::wormhole::Application;
 use crate::{config, editor, git, project::Project, projects, util::warn};
 
-pub fn get_task(key: &StoreKey) -> Option<Project> {
+pub fn get_task(key: &ProjectKey) -> Option<Project> {
     let projects = projects::lock();
     projects.by_key(key).filter(|p| p.is_task())
 }
 
 /// Get a task by repo and branch
 pub fn get_task_by_branch(repo: &str, branch: &str) -> Option<Project> {
-    get_task(&StoreKey::task(repo, branch))
+    get_task(&ProjectKey::task(repo, branch))
 }
 
 pub fn task_by_path(path: &Path) -> Option<Project> {
@@ -160,7 +160,7 @@ fn resolve_project_path(project_name: &str) -> Result<PathBuf, String> {
     config::resolve_project_name(project_name)
         .or_else(|| {
             projects::lock()
-                .by_key(&StoreKey::project(project_name))
+                .by_key(&ProjectKey::project(project_name))
                 .map(|p| p.repo_path.clone())
         })
         .ok_or_else(|| format!("Project '{}' not found", project_name))

@@ -1,4 +1,4 @@
-use crate::project::{Project, StoreKey};
+use crate::project::{Project, ProjectKey};
 use crate::util::execute_command;
 use crate::wormhole::Application;
 use crate::{config, git, ps};
@@ -22,22 +22,22 @@ use std::time::Duration;
     - When switching to next, we rotate left.
 */
 
-struct Store {
-    all: HashMap<StoreKey, Project>,
-    ring: VecDeque<StoreKey>,
+struct ProjectsStore {
+    all: HashMap<ProjectKey, Project>,
+    ring: VecDeque<ProjectKey>,
 }
 
 lazy_static! {
-    static ref STORE: Mutex<Store> = Mutex::new(Store {
+    static ref PROJECTS_STORE: Mutex<ProjectsStore> = Mutex::new(ProjectsStore {
         all: HashMap::new(),
         ring: VecDeque::new(),
     });
 }
 
-pub struct Projects<'a>(MutexGuard<'a, Store>);
+pub struct Projects<'a>(MutexGuard<'a, ProjectsStore>);
 
 pub fn lock<'a>() -> Projects<'a> {
-    Projects(STORE.lock().unwrap())
+    Projects(PROJECTS_STORE.lock().unwrap())
 }
 
 #[derive(Debug)]
@@ -61,7 +61,7 @@ impl<'a> Projects<'a> {
         self.0.all.values_mut()
     }
 
-    pub fn keys(&self) -> Vec<StoreKey> {
+    pub fn keys(&self) -> Vec<ProjectKey> {
         self.0.ring.iter().cloned().collect()
     }
 
@@ -77,7 +77,7 @@ impl<'a> Projects<'a> {
         self.0.ring.back().and_then(|k| self.0.all.get(k)).cloned()
     }
 
-    pub fn apply(&mut self, mutation: Mutation, key: &StoreKey) {
+    pub fn apply(&mut self, mutation: Mutation, key: &ProjectKey) {
         match mutation {
             Mutation::None => {}
             Mutation::Insert => {
@@ -109,7 +109,7 @@ impl<'a> Projects<'a> {
         let name = name
             .map(|s| s.to_string())
             .unwrap_or_else(|| path.file_name().unwrap().to_str().unwrap().to_string());
-        let key = StoreKey::project(&name);
+        let key = ProjectKey::project(&name);
         if !self.0.all.contains_key(&key) {
             ps!("projects::add");
             self.0.all.insert(
@@ -142,7 +142,7 @@ impl<'a> Projects<'a> {
         }
     }
 
-    pub fn remove(&mut self, key: &StoreKey) -> bool {
+    pub fn remove(&mut self, key: &ProjectKey) -> bool {
         if self.0.all.remove(key).is_some() {
             if let Some(i) = self.ring_index(key) {
                 self.0.ring.remove(i);
@@ -153,13 +153,13 @@ impl<'a> Projects<'a> {
         }
     }
 
-    pub fn remove_from_ring(&mut self, key: &StoreKey) {
+    pub fn remove_from_ring(&mut self, key: &ProjectKey) {
         if let Some(i) = self.ring_index(key) {
             self.0.ring.remove(i);
         }
     }
 
-    pub fn move_to_back(&mut self, key: &StoreKey) {
+    pub fn move_to_back(&mut self, key: &ProjectKey) {
         if let Some(i) = self.ring_index(key) {
             if let Some(k) = self.0.ring.remove(i) {
                 self.0.ring.push_back(k);
@@ -167,7 +167,7 @@ impl<'a> Projects<'a> {
         }
     }
 
-    pub fn set_last_application(&mut self, key: &StoreKey, application: Application) {
+    pub fn set_last_application(&mut self, key: &ProjectKey, application: Application) {
         if let Some(p) = self.0.all.get_mut(key) {
             p.last_application = Some(application);
         }
@@ -199,15 +199,15 @@ impl<'a> Projects<'a> {
         self.0.all.values().find(|p| p.repo_path == path).cloned()
     }
 
-    pub fn by_key(&self, key: &StoreKey) -> Option<Project> {
+    pub fn by_key(&self, key: &ProjectKey) -> Option<Project> {
         self.0.all.get(key).cloned()
     }
 
-    pub fn get_mut(&mut self, key: &StoreKey) -> Option<&mut Project> {
+    pub fn get_mut(&mut self, key: &ProjectKey) -> Option<&mut Project> {
         self.0.all.get_mut(key)
     }
 
-    fn ring_index(&self, key: &StoreKey) -> Option<usize> {
+    fn ring_index(&self, key: &ProjectKey) -> Option<usize> {
         self.0.ring.iter().position(|k| k == key)
     }
 
@@ -268,7 +268,7 @@ pub fn load() {
                 .to_string()
         });
 
-        let key = StoreKey::project(&name);
+        let key = ProjectKey::project(&name);
 
         // Add to all if not already present
         if !projects.0.all.contains_key(&key) {
@@ -298,7 +298,7 @@ pub fn load() {
     }
 }
 
-fn discover_tasks(additional_paths: HashMap<String, PathBuf>) -> HashMap<StoreKey, Project> {
+fn discover_tasks(additional_paths: HashMap<String, PathBuf>) -> HashMap<ProjectKey, Project> {
     let mut project_paths: HashMap<String, PathBuf> =
         config::available_projects().into_iter().collect();
 
@@ -336,7 +336,7 @@ fn discover_tasks(additional_paths: HashMap<String, PathBuf>) -> HashMap<StoreKe
 
 pub fn refresh_tasks() {
     let additional_paths: HashMap<String, PathBuf> = {
-        let store = STORE.lock().unwrap();
+        let store = PROJECTS_STORE.lock().unwrap();
         store
             .all
             .iter()
@@ -353,7 +353,7 @@ pub fn refresh_tasks() {
     }
 }
 
-pub fn tasks() -> HashMap<StoreKey, Project> {
+pub fn tasks() -> HashMap<ProjectKey, Project> {
     let projects = lock();
     projects
         .0

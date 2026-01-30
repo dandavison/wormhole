@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::thread;
 
-use crate::project::StoreKey;
+use crate::project::ProjectKey;
 use crate::projects::{self, Mutation, Projects};
 use crate::util::warn;
 use crate::wormhole::Application;
@@ -143,7 +143,7 @@ impl ProjectPath {
                 line,
                 repo
             );
-            if let Some(project) = projects.by_key(&StoreKey::project(repo)) {
+            if let Some(project) = projects.by_key(&ProjectKey::project(repo)) {
                 Some(ProjectPath {
                     project,
                     relative_path: Some((path, line)),

@@ -37,6 +37,7 @@ pub struct QueryParams {
     pub focus_terminal: bool,
     pub sync: bool,
     pub pwd: Option<String>,
+    pub sprint: bool,
 }
 
 pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
@@ -57,7 +58,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         ps!("{} {} {:?}", method, uri, params);
     }
     if &path == "/project/list" {
-        Ok(endpoints::list_projects())
+        Ok(endpoints::list_projects(params.sprint))
     } else if &path == "/project/neighbors" {
         let projects = projects::lock();
         let ring: Vec<serde_json::Value> = projects
@@ -104,7 +105,9 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         if let Some(project_path) = p {
             let land_in = params.land_in.clone();
             let skip_editor = params.skip_editor;
-            thread::spawn(move || project_path.open_with_options(Mutation::None, land_in, skip_editor));
+            thread::spawn(move || {
+                project_path.open_with_options(Mutation::None, land_in, skip_editor)
+            });
         }
         Ok(Response::new(Body::from("")))
     } else if &path == "/project/next" {
@@ -119,7 +122,9 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         if let Some(project_path) = p {
             let land_in = params.land_in.clone();
             let skip_editor = params.skip_editor;
-            thread::spawn(move || project_path.open_with_options(Mutation::None, land_in, skip_editor));
+            thread::spawn(move || {
+                project_path.open_with_options(Mutation::None, land_in, skip_editor)
+            });
         }
         Ok(Response::new(Body::from("")))
     } else if let Some(name) = path.strip_prefix("/project/remove/") {
@@ -516,6 +521,7 @@ impl QueryParams {
             focus_terminal: false,
             sync: false,
             pwd: None,
+            sprint: false,
         };
         if let Some(query) = query {
             for (key, val) in form_urlencoded::parse(query.as_bytes()).collect::<Vec<(_, _)>>() {
@@ -543,6 +549,8 @@ impl QueryParams {
                     params.sync = val == "true" || val == "1";
                 } else if key_lower == "pwd" {
                     params.pwd = Some(val.to_string());
+                } else if key_lower == "sprint" {
+                    params.sprint = val.to_lowercase() == "true";
                 }
             }
         }

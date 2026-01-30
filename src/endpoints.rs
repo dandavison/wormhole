@@ -1,15 +1,37 @@
 use hyper::{Body, Response, StatusCode};
+use std::collections::HashSet;
 
 use crate::project::StoreKey;
-use crate::{config, hammerspoon, projects, util::debug};
+use crate::{config, github, hammerspoon, jira, projects, util::debug};
 
 /// Return JSON with current and available projects (including tasks)
-pub fn list_projects() -> Response<Body> {
+/// If sprint_only is true, filter to tasks in the current sprint and include JIRA/PR info
+pub fn list_projects(sprint_only: bool) -> Response<Body> {
+    // Get sprint issue keys if filtering
+    let sprint_keys: HashSet<String> = if sprint_only {
+        jira::get_sprint_issues()
+            .map(|issues| issues.into_iter().map(|i| i.key).collect())
+            .unwrap_or_default()
+    } else {
+        HashSet::new()
+    };
+
     // Get currently open projects
-    let mut current: Vec<_> = projects::lock()
-        .open()
+    let open_projects = projects::lock().open();
+
+    let mut current: Vec<_> = open_projects
         .into_iter()
-        .map(|project| {
+        .filter_map(|project| {
+            let jira_key = project.kv.get("jira_key").cloned();
+
+            // If sprint_only, filter to tasks with jira_key in sprint
+            if sprint_only {
+                let key = jira_key.as_ref()?;
+                if !sprint_keys.contains(key) {
+                    return None;
+                }
+            }
+
             let mut obj = serde_json::json!({ "name": project.repo_name });
             if let Some(branch) = &project.branch {
                 obj["branch"] = serde_json::json!(branch);
@@ -22,7 +44,27 @@ pub fn list_projects() -> Response<Body> {
             if !project.kv.is_empty() {
                 obj["kv"] = serde_json::json!(project.kv);
             }
-            obj
+
+            // For sprint view, add JIRA status and PR info
+            if sprint_only {
+                if let Some(ref key) = jira_key {
+                    if let Ok(Some(issue)) = jira::get_issue(key) {
+                        obj["jira"] = serde_json::json!({
+                            "key": issue.key,
+                            "status": issue.status,
+                            "summary": issue.summary,
+                        });
+                    }
+                }
+                let path = project
+                    .worktree_path()
+                    .unwrap_or_else(|| project.repo_path.clone());
+                if let Some(pr) = github::get_pr_status(&path) {
+                    obj["pr"] = serde_json::json!(pr);
+                }
+            }
+
+            Some(obj)
         })
         .collect();
 
@@ -41,13 +83,13 @@ pub fn list_projects() -> Response<Body> {
         }
     });
 
-    let available = config::available_projects();
-    let available: Vec<&str> = available.keys().map(|s| s.as_str()).collect();
+    let mut json = serde_json::json!({ "current": current });
 
-    let json = serde_json::json!({
-        "current": current,
-        "available": available
-    });
+    if !sprint_only {
+        let available = config::available_projects();
+        let available: Vec<&str> = available.keys().map(|s| s.as_str()).collect();
+        json["available"] = serde_json::json!(available);
+    }
 
     Response::builder()
         .header("Content-Type", "application/json")

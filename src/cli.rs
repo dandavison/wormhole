@@ -500,23 +500,7 @@ pub fn run(command: Command) -> Result<(), String> {
                         }
                     } else if let Some(current) = json.get("current").and_then(|v| v.as_array()) {
                         for item in current {
-                            let name = match item.get("name").and_then(|n| n.as_str()) {
-                                Some(n) => n,
-                                None => continue,
-                            };
-                            let store_key = if let Some(branch) =
-                                item.get("branch").and_then(|b| b.as_str())
-                            {
-                                format!("{}:{}", name, branch)
-                            } else {
-                                name.to_string()
-                            };
-                            let url = format!(
-                                "http://127.0.0.1:{}/project/switch/{}",
-                                config::wormhole_port(),
-                                store_key
-                            );
-                            println!("{}", crate::format_osc8_hyperlink(&url, &store_key));
+                            println!("{}", render_project_item(item, false));
                         }
                     }
                 }
@@ -1084,89 +1068,95 @@ fn print_sprint_result(result: &SprintCreateResult, output: &str) {
 }
 
 fn sprint_list(client: &Client, output: &str) -> Result<(), String> {
-    use crate::status::SprintShowItem;
-    use std::env;
-
-    let response = client.get("/api/sprint")?;
-    let items: Vec<SprintShowItem> =
-        serde_json::from_str(&response).map_err(|e| e.to_string())?;
-
+    let response = client.get("/project/list?sprint=true")?;
     if output == "json" {
         println!("{}", response);
-    } else {
-        let jira_instance = env::var("JIRA_INSTANCE").ok();
-        for item in &items {
-            println!("{}", render_sprint_list_item(item, jira_instance.as_deref()));
+    } else if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response) {
+        if let Some(current) = json.get("current").and_then(|v| v.as_array()) {
+            for item in current {
+                println!("{}", render_project_item(item, true));
+            }
         }
     }
     Ok(())
 }
 
-fn render_sprint_list_item(item: &crate::status::SprintShowItem, jira_instance: Option<&str>) -> String {
-    use crate::status::SprintShowItem;
+/// Render a project item from /project/list response
+/// If sprint_view is true, includes JIRA status and PR info
+fn render_project_item(item: &serde_json::Value, sprint_view: bool) -> String {
+    let name = item.get("name").and_then(|n| n.as_str()).unwrap_or("");
+    let store_key = if let Some(branch) = item.get("branch").and_then(|b| b.as_str()) {
+        format!("{}:{}", name, branch)
+    } else {
+        name.to_string()
+    };
+    let task_url = format!(
+        "http://127.0.0.1:{}/project/switch/{}",
+        config::wormhole_port(),
+        store_key
+    );
+    let task_display = crate::format_osc8_hyperlink(&task_url, &store_key);
 
-    match item {
-        SprintShowItem::Task(task) => {
-            let store_key = task
-                .branch
-                .as_ref()
-                .map(|b| format!("{}:{}", task.name, b))
-                .unwrap_or_else(|| task.name.clone());
-            let task_url = format!(
-                "http://127.0.0.1:{}/project/switch/{}",
-                config::wormhole_port(),
-                store_key
-            );
-            let task_display = crate::format_osc8_hyperlink(&task_url, &store_key);
-            let (jira_key, status, summary) = task
-                .jira
-                .as_ref()
-                .map(|j| (j.key.clone(), j.status.clone(), j.summary.clone()))
-                .unwrap_or_else(|| (task.name.clone(), String::new(), String::new()));
-            let jira_display = if let Some(instance) = jira_instance {
-                let url = format!("https://{}.atlassian.net/browse/{}", instance, jira_key);
-                crate::format_osc8_hyperlink(&url, &jira_key)
-            } else {
-                jira_key.clone()
-            };
-            let pr_display = task
-                .pr
-                .as_ref()
-                .map(|p| format!("  {}", crate::format_osc8_hyperlink(&p.url, &p.display())))
-                .unwrap_or_default();
-            let emoji = status_to_emoji(&status);
-            // Pad store_key length (not the hyperlink) for alignment
-            let pad = 40_usize.saturating_sub(store_key.len());
-            format!(
-                "{}{} {} {}  {}{}",
-                task_display,
-                " ".repeat(pad),
-                emoji,
-                jira_display,
-                summary,
-                pr_display
-            )
-        }
-        SprintShowItem::Issue(issue) => {
-            let jira_display = if let Some(instance) = jira_instance {
-                let url = format!("https://{}.atlassian.net/browse/{}", instance, issue.key);
-                crate::format_osc8_hyperlink(&url, &issue.key)
-            } else {
-                issue.key.clone()
-            };
-            let emoji = status_to_emoji(&issue.status);
-            format!("{:40} {} {}  {}", "", emoji, jira_display, issue.summary)
-        }
+    if !sprint_view {
+        return task_display;
     }
-}
 
-fn status_to_emoji(status: &str) -> &'static str {
-    match status {
+    // Sprint view: add JIRA and PR info
+    let jira_instance = std::env::var("JIRA_INSTANCE").ok();
+    let (jira_key, status, summary) = item
+        .get("jira")
+        .map(|j| {
+            (
+                j.get("key").and_then(|k| k.as_str()).unwrap_or(""),
+                j.get("status").and_then(|s| s.as_str()).unwrap_or(""),
+                j.get("summary").and_then(|s| s.as_str()).unwrap_or(""),
+            )
+        })
+        .unwrap_or(("", "", ""));
+
+    let jira_display = if !jira_key.is_empty() {
+        if let Some(ref instance) = jira_instance {
+            let url = format!("https://{}.atlassian.net/browse/{}", instance, jira_key);
+            crate::format_osc8_hyperlink(&url, jira_key)
+        } else {
+            jira_key.to_string()
+        }
+    } else {
+        String::new()
+    };
+
+    let pr_display = item
+        .get("pr")
+        .map(|p| {
+            let url = p.get("url").and_then(|u| u.as_str()).unwrap_or("");
+            let number = p.get("number").and_then(|n| n.as_u64()).unwrap_or(0);
+            let is_draft = p.get("isDraft").and_then(|d| d.as_bool()).unwrap_or(false);
+            let display = if is_draft {
+                format!("#{} (draft)", number)
+            } else {
+                format!("#{}", number)
+            };
+            format!("  {}", crate::format_osc8_hyperlink(url, &display))
+        })
+        .unwrap_or_default();
+
+    let emoji = match status {
         "Done" => "✅",
         "In Progress" => "🟢",
         "In Review" => "🔵",
         _ => "⚫",
-    }
+    };
+
+    let pad = 40_usize.saturating_sub(store_key.len());
+    format!(
+        "{}{} {} {}  {}{}",
+        task_display,
+        " ".repeat(pad),
+        emoji,
+        jira_display,
+        summary,
+        pr_display
+    )
 }
 
 fn sprint_show(output: &str) -> Result<(), String> {

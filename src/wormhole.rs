@@ -344,7 +344,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
             let projects = projects::lock();
             projects
                 .by_key(&key)
-                .map(|p| (p.repo_name.clone(), p.repo_path.clone()))
+                .map(|p| (p.repo_name.to_string(), p.repo_path.clone()))
         };
 
         match result {

@@ -3,28 +3,67 @@ use crate::editor::Editor;
 use crate::git;
 use crate::project_path::ProjectPath;
 use crate::wormhole::Application;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 use std::path::PathBuf;
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct RepoName(String);
+
+impl RepoName {
+    pub fn new(s: impl Into<String>) -> Self {
+        Self(s.into())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for RepoName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct BranchName(String);
+
+impl BranchName {
+    pub fn new(s: impl Into<String>) -> Self {
+        Self(s.into())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for BranchName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ProjectKey {
-    pub repo: String,
-    pub branch: Option<String>,
+    pub repo: RepoName,
+    pub branch: Option<BranchName>,
 }
 
 impl ProjectKey {
     pub fn project(repo: impl Into<String>) -> Self {
         Self {
-            repo: repo.into(),
+            repo: RepoName::new(repo),
             branch: None,
         }
     }
 
     pub fn task(repo: impl Into<String>, branch: impl Into<String>) -> Self {
         Self {
-            repo: repo.into(),
-            branch: Some(branch.into()),
+            repo: RepoName::new(repo),
+            branch: Some(BranchName::new(branch)),
         }
     }
 
@@ -47,11 +86,11 @@ impl fmt::Display for ProjectKey {
 
 #[derive(Clone, Debug)]
 pub struct Project {
-    pub repo_name: String,
+    pub repo_name: RepoName,
     pub repo_path: PathBuf,
     pub kv: HashMap<String, String>,
     pub last_application: Option<Application>,
-    pub branch: Option<String>,
+    pub branch: Option<BranchName>,
     pub github_pr: Option<u64>,
     pub github_repo: Option<String>,
     pub cached_jira: Option<crate::jira::IssueStatus>,
@@ -65,15 +104,15 @@ impl Project {
 
     pub fn store_key(&self) -> ProjectKey {
         match &self.branch {
-            Some(branch) => ProjectKey::task(&self.repo_name, branch),
-            None => ProjectKey::project(&self.repo_name),
+            Some(branch) => ProjectKey::task(self.repo_name.as_str(), branch.as_str()),
+            None => ProjectKey::project(self.repo_name.as_str()),
         }
     }
 
     pub fn worktree_path(&self) -> Option<PathBuf> {
         self.branch
             .as_ref()
-            .map(|branch| git::worktree_base_path(&self.repo_path).join(branch))
+            .map(|branch| git::worktree_base_path(&self.repo_path).join(branch.as_str()))
     }
 
     pub fn working_dir(&self) -> PathBuf {
@@ -100,7 +139,7 @@ impl Project {
     }
 
     pub fn editor(&self) -> &'static Editor {
-        if self.repo_name == "mathematics" {
+        if self.repo_name.as_str() == "mathematics" {
             &Editor::Emacs
         } else {
             config::editor()

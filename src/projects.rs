@@ -1,4 +1,4 @@
-use crate::project::{Project, ProjectKey};
+use crate::project::{BranchName, Project, ProjectKey, RepoName};
 use crate::util::execute_command;
 use crate::wormhole::Application;
 use crate::{config, git, ps};
@@ -115,7 +115,7 @@ impl<'a> Projects<'a> {
             self.0.all.insert(
                 key.clone(),
                 Project {
-                    repo_name: name,
+                    repo_name: RepoName::new(name),
                     repo_path: path,
                     kv: HashMap::new(),
                     last_application: None,
@@ -216,10 +216,16 @@ impl<'a> Projects<'a> {
     pub fn print(&self) {
         let previous = self
             .previous()
-            .map(|p| p.repo_name)
-            .unwrap_or("none".into());
-        let current = self.current().map(|p| p.repo_name).unwrap_or("none".into());
-        let next = self.next().map(|p| p.repo_name).unwrap_or("none".into());
+            .map(|p| p.repo_name.to_string())
+            .unwrap_or_else(|| "none".to_string());
+        let current = self
+            .current()
+            .map(|p| p.repo_name.to_string())
+            .unwrap_or_else(|| "none".to_string());
+        let next = self
+            .next()
+            .map(|p| p.repo_name.to_string())
+            .unwrap_or_else(|| "none".to_string());
         let len = self.0.ring.len();
 
         thread::spawn(move || {
@@ -282,7 +288,7 @@ pub fn load() {
             projects.0.all.insert(
                 key.clone(),
                 Project {
-                    repo_name: name,
+                    repo_name: RepoName::new(name),
                     repo_path: canonical,
                     kv: HashMap::new(),
                     last_application: None,
@@ -328,11 +334,11 @@ fn discover_tasks(additional_paths: HashMap<String, PathBuf>) -> HashMap<Project
                 .filter_map(|wt| {
                     let branch = wt.branch.as_ref()?;
                     let task = Project {
-                        repo_name: project_name.clone(),
+                        repo_name: RepoName::new(project_name.clone()),
                         repo_path: project_path.clone(),
                         kv: HashMap::new(),
                         last_application: None,
-                        branch: Some(branch.clone()),
+                        branch: Some(BranchName::new(branch.clone())),
                         github_pr: None,
                         github_repo: None,
                         cached_jira: None,
@@ -352,7 +358,7 @@ pub fn refresh_tasks() {
             .all
             .iter()
             .filter(|(_, p)| !p.is_task())
-            .map(|(key, project)| (key.repo.clone(), project.repo_path.clone()))
+            .map(|(key, project)| (key.repo.to_string(), project.repo_path.clone()))
             .collect()
     };
 

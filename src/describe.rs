@@ -184,11 +184,11 @@ fn describe_jira(jira_key: &str) -> DescribeResponse {
             name: Some(project.store_key().to_string()),
             kind: Some("task".to_string()),
             home_project: if project.is_task() {
-                Some(project.repo_name.clone())
+                Some(project.repo_name.to_string())
             } else {
                 None
             },
-            pr_branch: project.branch.clone(),
+            pr_branch: project.branch.as_ref().map(|b| b.to_string()),
             jira_url,
             jira_key: Some(jira_key.to_string()),
             github_url,
@@ -232,7 +232,7 @@ fn find_task_by_pr(owner: &str, repo: &str, pr_number: u64) -> Option<(ProjectKe
         if task_repo != expected_repo {
             return None;
         }
-        Some((key.clone(), project.repo_name.clone()))
+        Some((key.clone(), project.repo_name.to_string()))
     })
 }
 

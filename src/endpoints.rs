@@ -177,11 +177,11 @@ fn render_task_card(task: &crate::project::Project, jira_instance: Option<&str>)
     let branch_html = task
         .branch
         .as_ref()
-        .map(|b| format!(" {}", html_escape(b)))
+        .map(|b| format!(" {}", html_escape(b.as_str())))
         .unwrap_or_default();
     let repo_branch = format!(
         r#"<span class="card-key">{}{}</span>"#,
-        html_escape(&task.repo_name),
+        html_escape(task.repo_name.as_str()),
         branch_html
     );
 
@@ -254,7 +254,7 @@ fn render_task_card(task: &crate::project::Project, jira_instance: Option<&str>)
         r#"<span class="meta-item">Plan: <span class="cross">✗</span></span>"#.to_string()
     };
 
-    let iframe_html = match crate::serve_web::manager().get_or_start(&task.repo_name, &path) {
+    let iframe_html = match crate::serve_web::manager().get_or_start(task.repo_name.as_str(), &path) {
         Ok(port) => {
             let folder_encoded = url_encode(&path.to_string_lossy());
             format!(

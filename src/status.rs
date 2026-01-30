@@ -18,8 +18,8 @@ pub struct TaskStatus {
 }
 
 pub fn get_status(project: &Project) -> TaskStatus {
-    let name = project.repo_name.clone();
-    let branch = project.branch.clone();
+    let name = project.repo_name.to_string();
+    let branch = project.branch.as_ref().map(|b| b.to_string());
     let path = project
         .worktree_path()
         .unwrap_or_else(|| project.repo_path.clone());

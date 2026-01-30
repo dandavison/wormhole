@@ -24,86 +24,7 @@ local neighborOverlayActive = false
 local neighborDisplayOrder = nil -- locked display order while overlay is shown
 local neighborCurrentIdx = nil   -- current position in neighborDisplayOrder
 local neighborEditorWindows = nil -- cached set of projects with editor windows
-local neighborViewStart = nil    -- first visible item index (for scrolling)
-local neighborLastDirection = nil -- "left" or "right", for scroll positioning
 local refreshNeighborOverlay     -- forward declaration
-
--- Estimate pixel width of an item (rough approximation for Menlo font)
-local function estimateItemWidth(item, isCurrent)
-    local charWidth = isCurrent and 9 or 8 -- bold is slightly wider
-    local text
-    if item.branch then
-        -- "name(branch)" format
-        text = item.name .. "(" .. item.branch .. ")"
-    else
-        text = item.name
-    end
-    return #text * charWidth
-end
-
--- Calculate visible range given screen width and current position
-local function calculateVisibleRange(items, currentIdx, screenWidth, direction)
-    local spacing = 32 -- 4 spaces at ~8px each
-    local margin = 80  -- alert padding/margin
-
-    -- Calculate widths for all items
-    local widths = {}
-    local totalWidth = 0
-    for i, item in ipairs(items) do
-        local w = estimateItemWidth(item, i == currentIdx)
-        widths[i] = w
-        totalWidth = totalWidth + w + (i > 1 and spacing or 0)
-    end
-
-    local availableWidth = screenWidth - margin
-
-    -- If everything fits, show all
-    if totalWidth <= availableWidth then
-        return 1, #items
-    end
-
-    -- Need to scroll - position current at edge based on direction
-    local startIdx, endIdx
-    if direction == "left" then
-        -- Current at right edge, fill leftward
-        endIdx = currentIdx
-        local usedWidth = widths[endIdx]
-        startIdx = endIdx
-        for i = endIdx - 1, 1, -1 do
-            local needed = widths[i] + spacing
-            if usedWidth + needed > availableWidth then break end
-            usedWidth = usedWidth + needed
-            startIdx = i
-        end
-        -- Try to add items to the right if space remains
-        for i = endIdx + 1, #items do
-            local needed = widths[i] + spacing
-            if usedWidth + needed > availableWidth then break end
-            usedWidth = usedWidth + needed
-            endIdx = i
-        end
-    else
-        -- Current at left edge (or centered for "right" direction), fill rightward
-        startIdx = currentIdx
-        local usedWidth = widths[startIdx]
-        endIdx = startIdx
-        for i = startIdx + 1, #items do
-            local needed = widths[i] + spacing
-            if usedWidth + needed > availableWidth then break end
-            usedWidth = usedWidth + needed
-            endIdx = i
-        end
-        -- Try to add items to the left if space remains
-        for i = startIdx - 1, 1, -1 do
-            local needed = widths[i] + spacing
-            if usedWidth + needed > availableWidth then break end
-            usedWidth = usedWidth + needed
-            startIdx = i
-        end
-    end
-
-    return startIdx, endIdx
-end
 
 -- Get set of project names that have editor windows open (Cursor/Code)
 local function getEditorWindows()
@@ -225,7 +146,6 @@ function M.previous()
             url = url .. "?skip-editor=true"
         end
         neighborCurrentIdx = targetIdx
-        neighborLastDirection = "left"
     end
     hs.http.asyncGet(url, nil, function()
         if neighborOverlayActive then refreshNeighborOverlay() end
@@ -245,7 +165,6 @@ function M.next()
             url = url .. "?skip-editor=true"
         end
         neighborCurrentIdx = targetIdx
-        neighborLastDirection = "right"
     end
     hs.http.asyncGet(url, nil, function()
         if neighborOverlayActive then refreshNeighborOverlay() end
@@ -380,34 +299,15 @@ local function renderNeighborOverlay()
         hs.timer.doAfter(0, function()
             if not neighborOverlayActive then return end
 
-            -- Get screen width for viewport calculation
-            local screen = hs.screen.mainScreen()
-            local screenWidth = screen and screen:frame().w or 3456
-
-            -- Calculate visible range based on current position and direction
-            local direction = neighborLastDirection or "right"
-            local viewStart, viewEnd = calculateVisibleRange(
-                neighborDisplayOrder, neighborCurrentIdx, screenWidth, direction
-            )
-
             local styledText = hs.styledtext.new("")
-            local dimColor = { white = 0.5, alpha = 0.8 }
-            local brightColor = { white = 1, alpha = 1 }
-
-            -- Show scroll indicator if items hidden on left
-            if viewStart > 1 then
-                styledText = styledText .. hs.styledtext.new("« ", { font = { size = 12 }, color = dimColor })
-            end
-
-            local first = true
-            for i = viewStart, viewEnd do
-                local item = neighborDisplayOrder[i]
-                if not first then
+            for i, item in ipairs(neighborDisplayOrder) do
+                if i > 1 then
                     styledText = styledText .. hs.styledtext.new("    ", { font = { size = 14 } })
                 end
-                first = false
 
                 local isCurrent = (itemKey(item) == currentKey)
+                local dimColor = { white = 0.5, alpha = 0.8 }
+                local brightColor = { white = 1, alpha = 1 }
 
                 if item.branch then
                     -- Task: name(branch) format, horizontal
@@ -426,11 +326,6 @@ local function renderNeighborOverlay()
                     local font = isCurrent and { size = 14, name = "Menlo-Bold" } or { size = 12 }
                     styledText = styledText .. hs.styledtext.new(item.name, { font = font, color = color })
                 end
-            end
-
-            -- Show scroll indicator if items hidden on right
-            if viewEnd < #neighborDisplayOrder then
-                styledText = styledText .. hs.styledtext.new(" »", { font = { size = 12 }, color = dimColor })
             end
 
             if neighborAlertId then
@@ -466,8 +361,6 @@ local function hideNeighborOverlay()
     neighborDisplayOrder = nil -- reset for next show
     neighborCurrentIdx = nil
     neighborEditorWindows = nil
-    neighborViewStart = nil
-    neighborLastDirection = nil
     if neighborAlertId then
         hs.alert.closeSpecific(neighborAlertId)
         neighborAlertId = nil

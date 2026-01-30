@@ -704,12 +704,9 @@ fn test_task_respects_land_in_kv() {
 }
 
 #[test]
-fn test_task_list_reflects_tmux_window_state() {
-    // Regression test: The project list should only include tasks whose tmux windows exist.
-    // Bug: The filter was `terminal_windows.contains(&p.repo_name) || p.is_task()` which
-    // incorrectly included ALL tasks regardless of whether their tmux window was open.
-    // Fix: Changed to `terminal_windows.contains(&p.store_key().to_string())` to properly
-    // check for window existence using the full store key (repo:branch).
+fn test_tasks_persist_after_tmux_window_closed() {
+    // Tasks should remain in project list even after their tmux window is closed.
+    // This allows users to see all their tasks after restarting tmux or wormhole.
     let test = harness::WormholeTest::new(8945);
 
     let home_proj = format!("{}list-home", TEST_PREFIX);
@@ -761,7 +758,6 @@ fn test_task_list_reflects_tmux_window_state() {
     assert!(has_task_2, "Task 2 should be in list initially");
 
     // Kill task 1's tmux window directly (bypassing wormhole's close_project)
-    // This leaves task 1 in the ring but without a tmux window
     test.kill_tmux_window(&task_1_key);
 
     // Wait for window to be gone
@@ -770,8 +766,7 @@ fn test_task_list_reflects_tmux_window_state() {
         "Task 1 tmux window should be closed"
     );
 
-    // Verify task 1 is NOT in the project list (window closed)
-    // but task 2 IS still in the list (window still open)
+    // Both tasks should STILL be in the list (tasks persist regardless of tmux windows)
     let list_json = test.hs_get("/project/list").unwrap();
     let list: Value = serde_json::from_str(&list_json).unwrap();
     let current = list["current"].as_array().unwrap();
@@ -786,14 +781,10 @@ fn test_task_list_reflects_tmux_window_state() {
     });
 
     assert!(
-        !has_task_1_after,
-        "Task 1 should NOT be in list after tmux window closed, got: {:?}",
-        current
+        has_task_1_after,
+        "Task 1 should STILL be in list after tmux window closed"
     );
-    assert!(
-        has_task_2_after,
-        "Task 2 should still be in list (window still open)"
-    );
+    assert!(has_task_2_after, "Task 2 should still be in list");
 }
 
 #[test]

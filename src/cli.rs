@@ -1115,22 +1115,21 @@ fn sprint_list(client: &Client, output: &str) -> Result<(), String> {
                 .as_ref()
                 .map(|p| {
                     let linked = crate::format_osc8_hyperlink(&p.url, &p.display());
-                    format!(" {}", linked)
+                    format!("  {}", linked)
                 })
                 .unwrap_or_default();
 
-            // Show repo:branch prefix if task exists
-            let prefix = tasks_by_jira_key
+            let task_display = tasks_by_jira_key
                 .get(&issue.key)
-                .map(|t| format!("{}: {}  ", t.repo, t.branch))
+                .map(|t| format!("  {}:{}", t.repo, t.branch))
                 .unwrap_or_default();
 
             println!(
-                "{}{} {}: {}{}",
-                prefix,
+                "{} {}  {}{}{}",
                 issue.status_emoji(),
                 key_display,
                 issue.summary,
+                task_display,
                 pr_display
             );
         }

@@ -245,11 +245,20 @@ pub enum Command {
     /// Kill tmux session and clean up
     Kill,
 
-    /// Report on persisted wormhole state (worktrees, KV)
-    Doctor,
+    /// Diagnostic commands
+    Doctor {
+        #[command(subcommand)]
+        command: DoctorCommand,
+    },
 
     /// Refresh in-memory data from external sources
     Refresh,
+}
+
+#[derive(Subcommand)]
+pub enum DoctorCommand {
+    /// Report on persisted wormhole data (worktrees, KV files on disk)
+    PersistedData,
 }
 
 #[derive(Subcommand)]
@@ -678,7 +687,9 @@ pub fn run(command: Command) -> Result<(), String> {
             Ok(())
         }
 
-        Command::Doctor => doctor(),
+        Command::Doctor { command } => match command {
+            DoctorCommand::PersistedData => doctor_persisted_data(),
+        },
 
         Command::Refresh => {
             client.post("/project/refresh")?;
@@ -688,27 +699,23 @@ pub fn run(command: Command) -> Result<(), String> {
     }
 }
 
-fn doctor() -> Result<(), String> {
+fn doctor_persisted_data() -> Result<(), String> {
     use rayon::prelude::*;
     use std::collections::HashMap;
     use std::fs;
     use std::path::PathBuf;
 
-    let repos = ["temporal", "saas-cicd", "documentation", "cli"];
+    // Discover all available projects
+    let available = config::available_projects();
+    let repo_paths: Vec<(String, PathBuf)> = available.into_iter().collect();
 
-    // Resolve repo paths
-    let repo_paths: Vec<(&str, Option<PathBuf>)> = repos
-        .iter()
-        .map(|name| (*name, config::resolve_project_name(name)))
-        .collect();
-
-    // Query each repo in parallel
+    // Query each repo in parallel - only include repos with wormhole data
     let results: Vec<_> = repo_paths
         .par_iter()
-        .map(|(name, path_opt)| {
-            let Some(path) = path_opt else {
-                return (*name, None, vec![], HashMap::new());
-            };
+        .filter_map(|(name, path)| {
+            if !crate::git::is_git_repo(path) {
+                return None;
+            }
 
             // Get worktrees
             let worktrees = crate::git::list_worktrees(path);
@@ -741,39 +748,40 @@ fn doctor() -> Result<(), String> {
                 }
             }
 
-            (*name, Some(path.clone()), wormhole_worktrees, all_kv)
+            // Only include if there's wormhole data
+            if wormhole_worktrees.is_empty() && all_kv.is_empty() {
+                return None;
+            }
+
+            Some((name.clone(), path.clone(), wormhole_worktrees, all_kv))
         })
         .collect();
 
+    if results.is_empty() {
+        println!("No persisted wormhole data found.");
+        return Ok(());
+    }
+
     // Print results
-    for (name, path_opt, worktrees, kv) in results {
+    for (name, path, worktrees, kv) in results {
         println!("{}:", name);
-        match path_opt {
-            None => println!("  (not found)"),
-            Some(path) => {
-                println!("  path: {}", path.display());
+        println!("  path: {}", path.display());
 
-                if worktrees.is_empty() {
-                    println!("  worktrees: (none)");
-                } else {
-                    println!("  worktrees:");
-                    for wt in &worktrees {
-                        let branch = wt.branch.as_deref().unwrap_or("(detached)");
-                        let dir_name = wt.path.file_name().and_then(|s| s.to_str()).unwrap_or("?");
-                        println!("    {} -> {}", dir_name, branch);
-                    }
-                }
+        if !worktrees.is_empty() {
+            println!("  worktrees:");
+            for wt in &worktrees {
+                let branch = wt.branch.as_deref().unwrap_or("(detached)");
+                let dir_name = wt.path.file_name().and_then(|s| s.to_str()).unwrap_or("?");
+                println!("    {} -> {}", dir_name, branch);
+            }
+        }
 
-                if kv.is_empty() {
-                    println!("  kv: (none)");
-                } else {
-                    println!("  kv:");
-                    for (file, pairs) in &kv {
-                        println!("    {}:", file);
-                        for (k, v) in pairs {
-                            println!("      {}: {}", k, v);
-                        }
-                    }
+        if !kv.is_empty() {
+            println!("  kv:");
+            for (file, pairs) in &kv {
+                println!("    {}:", file);
+                for (k, v) in pairs {
+                    println!("      {}: {}", k, v);
                 }
             }
         }

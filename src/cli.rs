@@ -499,28 +499,24 @@ pub fn run(command: Command) -> Result<(), String> {
                             }
                         }
                     } else if let Some(current) = json.get("current").and_then(|v| v.as_array()) {
-                        let rows: Vec<Vec<String>> = current
-                            .iter()
-                            .filter_map(|item| {
-                                let name = item.get("name")?.as_str()?;
-                                let row = if let Some(branch) =
-                                    item.get("branch").and_then(|b| b.as_str())
-                                {
-                                    // Task: show repo:branch
-                                    vec![format!("{}:{}", name, branch)]
-                                } else {
-                                    // Project: just name
-                                    vec![name.to_string()]
-                                };
-                                Some(row)
-                            })
-                            .collect();
-                        let formatted: Vec<Vec<&str>> = rows
-                            .iter()
-                            .map(|row| row.iter().map(|s| s.as_str()).collect())
-                            .collect();
-                        for line in crate::util::format_columns(&formatted) {
-                            println!("{}", line);
+                        for item in current {
+                            let name = match item.get("name").and_then(|n| n.as_str()) {
+                                Some(n) => n,
+                                None => continue,
+                            };
+                            let store_key = if let Some(branch) =
+                                item.get("branch").and_then(|b| b.as_str())
+                            {
+                                format!("{}:{}", name, branch)
+                            } else {
+                                name.to_string()
+                            };
+                            let url = format!(
+                                "http://127.0.0.1:{}/project/switch/{}",
+                                config::wormhole_port(),
+                                store_key
+                            );
+                            println!("{}", crate::format_osc8_hyperlink(&url, &store_key));
                         }
                     }
                 }

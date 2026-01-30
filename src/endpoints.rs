@@ -16,6 +16,8 @@ pub fn list_projects() -> Response<Body> {
                 if let Some(worktree_path) = project.worktree_path() {
                     obj["path"] = serde_json::json!(worktree_path);
                 }
+            } else {
+                obj["path"] = serde_json::json!(project.repo_path);
             }
             if !project.kv.is_empty() {
                 obj["kv"] = serde_json::json!(project.kv);

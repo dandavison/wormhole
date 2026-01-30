@@ -77,35 +77,3 @@ where
     }
     stdout
 }
-
-pub fn format_columns(rows: &[Vec<&str>]) -> Vec<String> {
-    if rows.is_empty() {
-        return vec![];
-    }
-    let num_cols = rows.iter().map(|r| r.len()).max().unwrap_or(0);
-    let widths: Vec<usize> = (0..num_cols)
-        .map(|col| {
-            rows.iter()
-                .filter_map(|r| r.get(col))
-                .map(|s| s.len())
-                .max()
-                .unwrap_or(0)
-        })
-        .collect();
-
-    rows.iter()
-        .map(|row| {
-            row.iter()
-                .enumerate()
-                .map(|(i, s)| {
-                    if i < row.len() - 1 {
-                        format!("{:width$}", s, width = widths[i])
-                    } else {
-                        s.to_string()
-                    }
-                })
-                .collect::<Vec<_>>()
-                .join("  ")
-        })
-        .collect()
-}

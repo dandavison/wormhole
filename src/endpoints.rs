@@ -258,7 +258,7 @@ fn render_task_card(task: &crate::project::Project, jira_instance: Option<&str>)
         Ok(port) => {
             let folder_encoded = url_encode(&path.to_string_lossy());
             format!(
-                r#"<div class="card-actions"><button class="btn btn-terminal">Terminal</button><button class="btn btn-cursor">Cursor</button><button class="btn btn-vscode">VSCode</button><button class="btn btn-maximize">Maximize</button></div>
+                r#"<div class="card-actions"><button class="btn btn-icon btn-terminal" title="Terminal"><img src="https://cdn.jim-nielsen.com/macos/1024/terminal-2021-06-03.png?rf=1024" alt="Terminal"></button><button class="btn btn-icon btn-cursor" title="Cursor"><img src="https://cursor.com/marketing-static/icon-192x192.png" alt="Cursor"></button><button class="btn btn-icon btn-vscode" title="VSCode"><img src="https://vscode.dev/static/stable/code-192.png" alt="VSCode"></button><button class="btn btn-maximize">Maximize</button></div>
 <div class="iframe-container"><iframe data-src="http://localhost:{}/?folder={}"></iframe></div>"#,
                 port, folder_encoded
             )

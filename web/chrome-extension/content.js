@@ -61,9 +61,9 @@ function createButtons(info) {
     // Terminal/Cursor/VSCode buttons if we have a task/project
     if (info?.name && info?.kind) {
         html += `
-            <button class="wormhole-btn wormhole-btn-terminal" title="Open in Terminal">Terminal</button>
-            <button class="wormhole-btn wormhole-btn-cursor" title="Open in Cursor">Cursor</button>
-            <button class="wormhole-btn wormhole-btn-vscode" title="Open embedded VSCode">VSCode</button>
+            <button class="wormhole-btn wormhole-btn-icon wormhole-btn-terminal" title="Open in Terminal"><img src="https://cdn.jim-nielsen.com/macos/1024/terminal-2021-06-03.png?rf=1024" alt="Terminal"></button>
+            <button class="wormhole-btn wormhole-btn-icon wormhole-btn-cursor" title="Open in Cursor"><img src="https://cursor.com/marketing-static/icon-192x192.png" alt="Cursor"></button>
+            <button class="wormhole-btn wormhole-btn-icon wormhole-btn-vscode" title="Open embedded VSCode"><img src="https://vscode.dev/static/stable/code-192.png" alt="VSCode"></button>
         `;
     }
 
@@ -110,7 +110,7 @@ async function toggleVSCode(projectName, vscodeBtn) {
         if (container) {
             container.classList.remove('expanded');
         }
-        vscodeBtn.textContent = 'VSCode';
+        vscodeBtn.classList.remove('active');
         vscodeBtn.style.display = '';
         vscodeExpanded = false;
 
@@ -121,14 +121,14 @@ async function toggleVSCode(projectName, vscodeBtn) {
         }
     } else {
         // Open
-        vscodeBtn.textContent = 'Loading...';
+        vscodeBtn.style.opacity = '0.5';
         vscodeBtn.disabled = true;
 
         try {
             const resp = await fetch(`${WORMHOLE_BASE}/project/vscode/${encodeURIComponent(projectName)}`);
             if (!resp.ok) {
                 console.warn('[Wormhole] VSCode server failed:', await resp.text());
-                vscodeBtn.textContent = 'VSCode';
+                vscodeBtn.style.opacity = '';
                 vscodeBtn.disabled = false;
                 return;
             }
@@ -143,15 +143,15 @@ async function toggleVSCode(projectName, vscodeBtn) {
             iframe.src = data.url;
 
             container.classList.add('expanded');
-            // Hide header VSCode button - iframe has its own controls
-            vscodeBtn.style.display = 'none';
+            vscodeBtn.classList.add('active');
+            vscodeBtn.style.opacity = '';
             vscodeExpanded = true;
 
             // Also switch to the project (skip editor since we're showing embedded)
             fetch(`${WORMHOLE_BASE}/project/switch/${encodeURIComponent(projectName)}?skip-editor=true`);
         } catch (err) {
             console.warn('[Wormhole] VSCode error:', err.message);
-            vscodeBtn.textContent = 'VSCode';
+            vscodeBtn.style.opacity = '';
             vscodeBtn.style.display = '';
         } finally {
             vscodeBtn.disabled = false;
@@ -229,7 +229,7 @@ function closeVSCode() {
     // Restore header VSCode button
     const vscodeBtn = document.querySelector('.wormhole-btn-vscode');
     if (vscodeBtn) {
-        vscodeBtn.textContent = 'VSCode';
+        vscodeBtn.classList.remove('active');
         vscodeBtn.style.display = '';
     }
 }
@@ -283,7 +283,7 @@ function injectStyles() {
             background: #fff;
             color: #666;
             cursor: pointer;
-            transition: background 0.1s, color 0.1s;
+            transition: background 0.1s, color 0.1s, opacity 0.1s;
             text-decoration: none;
         }
         .wormhole-btn:hover {
@@ -294,17 +294,25 @@ function injectStyles() {
             opacity: 0.5;
             cursor: not-allowed;
         }
-        .wormhole-btn-cursor, .wormhole-btn-vscode {
-            border-color: #0066cc;
-            color: #0066cc;
+        .wormhole-btn-icon {
+            padding: 0.25rem;
+            border: none;
+            background: transparent;
+            opacity: 0.7;
         }
-        .wormhole-btn-cursor:hover, .wormhole-btn-vscode:hover {
-            background: #0066cc;
-            color: #fff;
+        .wormhole-btn-icon:hover {
+            background: transparent;
+            opacity: 1;
+        }
+        .wormhole-btn-icon img {
+            width: 20px;
+            height: 20px;
+            display: block;
         }
         .wormhole-btn-vscode.active {
-            background: #0066cc;
-            color: #fff;
+            opacity: 1;
+            background: rgba(0, 102, 204, 0.1);
+            border-radius: 4px;
         }
         .wormhole-link {
             font-family: "SF Mono", "Menlo", "Monaco", monospace;

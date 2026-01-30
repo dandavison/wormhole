@@ -126,23 +126,31 @@ h1 {
     background: #fff;
     color: #666;
     cursor: pointer;
-    transition: background 0.1s, color 0.1s;
+    transition: background 0.1s, color 0.1s, opacity 0.1s;
 }
 .btn:hover {
     background: #666;
     color: #fff;
 }
-.btn-vscode, .btn-cursor {
-    border-color: #0066cc;
-    color: #0066cc;
+.btn-icon {
+    padding: 0.25rem;
+    border: none;
+    background: transparent;
+    opacity: 0.7;
 }
-.btn-vscode:hover, .btn-cursor:hover {
-    background: #0066cc;
-    color: #fff;
+.btn-icon:hover {
+    background: transparent;
+    opacity: 1;
+}
+.btn-icon img {
+    width: 24px;
+    height: 24px;
+    display: block;
 }
 .btn-vscode.active {
-    background: #0066cc;
-    color: #fff;
+    opacity: 1;
+    background: rgba(0, 102, 204, 0.1);
+    border-radius: 4px;
 }
 .btn-maximize {
     display: none;
@@ -228,7 +236,6 @@ document.querySelectorAll('.btn-vscode').forEach(btn => {
         container.classList.toggle('expanded');
         card.classList.toggle('expanded');
         btn.classList.toggle('active');
-        btn.textContent = isExpanding ? 'Close' : 'VSCode';
 
         if (isExpanding) {
             if (!iframe.src) {

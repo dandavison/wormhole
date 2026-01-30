@@ -1191,6 +1191,9 @@ fn task_create_from_url(
     let kv_url = format!("/kv/{}/jira_key", store_key);
     let _ = client.put(&kv_url, &jira_key);
 
+    // Refresh cache so dashboard shows JIRA link immediately
+    let _ = client.post("/project/refresh");
+
     println!("Created task {}:{} for {}", home, branch, jira_key);
     Ok(())
 }

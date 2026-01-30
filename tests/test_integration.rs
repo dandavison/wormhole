@@ -891,3 +891,89 @@ fn test_neighbors_returns_branch_for_tasks() {
         "Regular project should be in ring without branch field"
     );
 }
+
+#[test]
+fn test_tasks_appear_without_terminal_windows() {
+    // Tasks should appear in project list even without active terminal windows.
+    // This test creates worktrees directly with git (not via create_task which opens terminals),
+    // then verifies they appear in project list after refresh.
+    use std::process::Command;
+
+    let test = harness::WormholeTest::new(8951);
+
+    let home_proj = format!("{}tasks-no-term", TEST_PREFIX);
+    let home_dir = format!("/tmp/{}", home_proj);
+    let task_branch = format!("{}task-branch", TEST_PREFIX);
+
+    // Clean up and create home directory
+    let _ = std::fs::remove_dir_all(&home_dir);
+    std::fs::create_dir_all(&home_dir).unwrap();
+
+    // Initialize git repo
+    Command::new("git")
+        .args(["init"])
+        .current_dir(&home_dir)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["commit", "--allow-empty", "-m", "initial"])
+        .current_dir(&home_dir)
+        .output()
+        .unwrap();
+
+    // Register home project (this creates a terminal window for the project)
+    test.create_project(&home_dir, &home_proj);
+
+    // Create worktree directory and worktree using git directly
+    // (NOT via create_task, so no terminal window is created for the task)
+    let worktrees_dir = format!("{}/.git/wormhole/worktrees", home_dir);
+    std::fs::create_dir_all(&worktrees_dir).unwrap();
+    let output = Command::new("git")
+        .args([
+            "worktree",
+            "add",
+            "-b",
+            &task_branch,
+            &format!("{}/{}", worktrees_dir, task_branch),
+        ])
+        .current_dir(&home_dir)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "Failed to create worktree: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Verify the worktree was created
+    let worktree_path = format!("{}/{}", worktrees_dir, task_branch);
+    assert!(
+        std::path::Path::new(&worktree_path).exists(),
+        "Worktree directory should exist"
+    );
+
+    // Refresh to discover the new task
+    test.hs_post("/project/refresh").unwrap();
+
+    // Give a moment for refresh to complete
+    std::thread::sleep(std::time::Duration::from_millis(500));
+
+    // Get project list
+    let response = test.hs_get("/project/list").unwrap();
+    let data: Value = serde_json::from_str(&response).unwrap();
+    let current = data["current"].as_array().expect("current should be array");
+
+    // The task should appear in the list even though it has no terminal window
+    let task_store_key = format!("{}:{}", home_proj, task_branch);
+    let task_entry = current.iter().find(|e| {
+        e["name"].as_str() == Some(home_proj.as_str())
+            && e["branch"].as_str() == Some(task_branch.as_str())
+    });
+
+    assert!(
+        task_entry.is_some(),
+        "Task '{}' should appear in project list even without terminal window. Got: {:?}",
+        task_store_key,
+        current
+    );
+}

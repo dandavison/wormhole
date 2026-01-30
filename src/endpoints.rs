@@ -189,13 +189,13 @@ fn render_card(item: &crate::status::SprintShowItem, jira_instance: Option<&str>
                     .map(|c| format!(" [{}]", html_escape(&c)))
                     .unwrap_or_default();
                 format!(
-                    r#"<span class="meta-item">PR: <a href="{}" target="_blank">{}</a>{}</span>"#,
+                    r#"<span class="meta-item"><a href="{}" target="_blank">{}</a>{}</span>"#,
                     pr.url,
                     html_escape(&pr.display()),
                     comments
                 )
             } else {
-                r#"<span class="meta-item">PR: <span class="cross">✗</span></span>"#.to_string()
+                String::new()
             };
 
             let jira_html = task
@@ -204,7 +204,7 @@ fn render_card(item: &crate::status::SprintShowItem, jira_instance: Option<&str>
                 .and_then(|j| {
                     jira_instance.map(|i| {
                         format!(
-                            r#"<span class="meta-item">JIRA: <a href="https://{}.atlassian.net/browse/{}" target="_blank">{}</a></span>"#,
+                            r#"<span class="meta-item"><a href="https://{}.atlassian.net/browse/{}" target="_blank">{}</a></span>"#,
                             i,
                             html_escape(&j.key),
                             html_escape(&j.key)

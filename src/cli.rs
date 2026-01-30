@@ -258,7 +258,11 @@ pub enum Command {
 #[derive(Subcommand)]
 pub enum DoctorCommand {
     /// Report on persisted wormhole data (worktrees, KV files on disk)
-    PersistedData,
+    PersistedData {
+        /// Output format: text (default) or json
+        #[arg(short, long, default_value = "text")]
+        output: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -688,7 +692,7 @@ pub fn run(command: Command) -> Result<(), String> {
         }
 
         Command::Doctor { command } => match command {
-            DoctorCommand::PersistedData => doctor_persisted_data(),
+            DoctorCommand::PersistedData { output } => doctor_persisted_data(&output),
         },
 
         Command::Refresh => {
@@ -699,7 +703,60 @@ pub fn run(command: Command) -> Result<(), String> {
     }
 }
 
-fn doctor_persisted_data() -> Result<(), String> {
+#[derive(Serialize)]
+struct PersistedDataReport {
+    projects: Vec<ProjectPersistedData>,
+}
+
+#[derive(Serialize)]
+struct ProjectPersistedData {
+    name: String,
+    path: String,
+    worktrees: Vec<WorktreeInfo>,
+    kv: std::collections::HashMap<String, std::collections::HashMap<String, String>>,
+}
+
+#[derive(Serialize)]
+struct WorktreeInfo {
+    dir: String,
+    branch: Option<String>,
+}
+
+impl PersistedDataReport {
+    fn render_terminal(&self) -> String {
+        if self.projects.is_empty() {
+            return "No persisted wormhole data found.".to_string();
+        }
+
+        let mut lines = Vec::new();
+        for project in &self.projects {
+            lines.push(format!("{}:", project.name));
+            lines.push(format!("  path: {}", project.path));
+
+            if !project.worktrees.is_empty() {
+                lines.push("  worktrees:".to_string());
+                for wt in &project.worktrees {
+                    let branch = wt.branch.as_deref().unwrap_or("(detached)");
+                    lines.push(format!("    {} -> {}", wt.dir, branch));
+                }
+            }
+
+            if !project.kv.is_empty() {
+                lines.push("  kv:".to_string());
+                for (file, pairs) in &project.kv {
+                    lines.push(format!("    {}:", file));
+                    for (k, v) in pairs {
+                        lines.push(format!("      {}: {}", k, v));
+                    }
+                }
+            }
+            lines.push(String::new());
+        }
+        lines.join("\n")
+    }
+}
+
+fn doctor_persisted_data(output: &str) -> Result<(), String> {
     use rayon::prelude::*;
     use std::collections::HashMap;
     use std::fs;
@@ -710,7 +767,7 @@ fn doctor_persisted_data() -> Result<(), String> {
     let repo_paths: Vec<(String, PathBuf)> = available.into_iter().collect();
 
     // Query each repo in parallel - only include repos with wormhole data
-    let results: Vec<_> = repo_paths
+    let projects: Vec<ProjectPersistedData> = repo_paths
         .par_iter()
         .filter_map(|(name, path)| {
             if !crate::git::is_git_repo(path) {
@@ -720,9 +777,18 @@ fn doctor_persisted_data() -> Result<(), String> {
             // Get worktrees
             let worktrees = crate::git::list_worktrees(path);
             let worktree_base = crate::git::worktree_base_path(path);
-            let wormhole_worktrees: Vec<_> = worktrees
+            let wormhole_worktrees: Vec<WorktreeInfo> = worktrees
                 .into_iter()
                 .filter(|wt| wt.path.starts_with(&worktree_base))
+                .map(|wt| WorktreeInfo {
+                    dir: wt
+                        .path
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("?")
+                        .to_string(),
+                    branch: wt.branch,
+                })
                 .collect();
 
             // Read KV files
@@ -753,39 +819,24 @@ fn doctor_persisted_data() -> Result<(), String> {
                 return None;
             }
 
-            Some((name.clone(), path.clone(), wormhole_worktrees, all_kv))
+            Some(ProjectPersistedData {
+                name: name.clone(),
+                path: path.display().to_string(),
+                worktrees: wormhole_worktrees,
+                kv: all_kv,
+            })
         })
         .collect();
 
-    if results.is_empty() {
-        println!("No persisted wormhole data found.");
-        return Ok(());
-    }
+    let report = PersistedDataReport { projects };
 
-    // Print results
-    for (name, path, worktrees, kv) in results {
-        println!("{}:", name);
-        println!("  path: {}", path.display());
-
-        if !worktrees.is_empty() {
-            println!("  worktrees:");
-            for wt in &worktrees {
-                let branch = wt.branch.as_deref().unwrap_or("(detached)");
-                let dir_name = wt.path.file_name().and_then(|s| s.to_str()).unwrap_or("?");
-                println!("    {} -> {}", dir_name, branch);
-            }
-        }
-
-        if !kv.is_empty() {
-            println!("  kv:");
-            for (file, pairs) in &kv {
-                println!("    {}:", file);
-                for (k, v) in pairs {
-                    println!("      {}: {}", k, v);
-                }
-            }
-        }
-        println!();
+    if output == "json" {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&report).map_err(|e| e.to_string())?
+        );
+    } else {
+        println!("{}", report.render_terminal());
     }
 
     Ok(())

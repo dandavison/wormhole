@@ -95,7 +95,10 @@ impl<'a> Projects<'a> {
             .ring
             .iter()
             .filter_map(|k| self.0.all.get(k))
-            .filter(|p| terminal_windows.contains(&p.store_key().to_string()))
+            .filter(|p| {
+                // Tasks always appear, projects only if they have terminal windows
+                p.is_task() || terminal_windows.contains(&p.store_key().to_string())
+            })
             .cloned()
             .collect()
     }
@@ -366,6 +369,10 @@ pub fn refresh_tasks() {
 
     let mut projects = lock();
     for (key, project) in tasks {
+        // Add to ring if not already present (so tasks appear in project list)
+        if !projects.0.ring.contains(&key) {
+            projects.0.ring.push_back(key.clone());
+        }
         projects.0.all.entry(key).or_insert(project);
     }
 }

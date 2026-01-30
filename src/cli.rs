@@ -430,8 +430,7 @@ fn create_project_editor(
 
 fn get_available_projects(client: &Client) -> Result<Vec<String>, String> {
     let response = client.get("/project/list")?;
-    let parsed: serde_json::Value =
-        serde_json::from_str(&response).map_err(|e| e.to_string())?;
+    let parsed: serde_json::Value = serde_json::from_str(&response).map_err(|e| e.to_string())?;
     Ok(parsed
         .get("available")
         .and_then(|v| v.as_array())
@@ -1126,8 +1125,8 @@ fn task_create_from_url(
     let jira_key = crate::describe::parse_jira_url(url)
         .ok_or_else(|| format!("Could not parse JIRA key from URL: {}", url))?;
 
-    let issue = jira::get_issue(&jira_key)?
-        .ok_or_else(|| format!("JIRA issue not found: {}", jira_key))?;
+    let issue =
+        jira::get_issue(&jira_key)?.ok_or_else(|| format!("JIRA issue not found: {}", jira_key))?;
 
     println!("{} {}", jira_key, issue.summary);
 
@@ -1187,8 +1186,7 @@ fn sprint_list(client: &Client, output: &str) -> Result<(), String> {
 
     // Get project list from server (in-memory, includes cached JIRA/PR)
     let response = client.get("/project/list")?;
-    let json: serde_json::Value =
-        serde_json::from_str(&response).map_err(|e| e.to_string())?;
+    let json: serde_json::Value = serde_json::from_str(&response).map_err(|e| e.to_string())?;
 
     // Filter to tasks with jira_key in sprint
     let sprint_tasks: Vec<&serde_json::Value> = json
@@ -1512,7 +1510,10 @@ mod tests {
         // Should contain the project name (inside a hyperlink)
         assert!(rendered.contains("wormhole"), "Should contain project name");
         // Should not contain emoji (no JIRA)
-        assert!(!rendered.contains("⚫"), "Should not have emoji without JIRA");
+        assert!(
+            !rendered.contains("⚫"),
+            "Should not have emoji without JIRA"
+        );
     }
 
     #[test]
@@ -1524,8 +1525,14 @@ mod tests {
             "path": "/Users/dan/src/cli/feature-branch"
         });
         let rendered = render_project_item(&item);
-        assert!(rendered.contains("cli:feature-branch"), "Should show repo:branch format");
-        assert!(!rendered.contains("⚫"), "Should not have emoji without JIRA");
+        assert!(
+            rendered.contains("cli:feature-branch"),
+            "Should show repo:branch format"
+        );
+        assert!(
+            !rendered.contains("⚫"),
+            "Should not have emoji without JIRA"
+        );
     }
 
     #[test]
@@ -1542,10 +1549,19 @@ mod tests {
             }
         });
         let rendered = render_project_item(&item);
-        assert!(rendered.starts_with("🔵"), "Should start with In Progress emoji");
-        assert!(rendered.contains("cli:standalone-activity"), "Should contain task identifier");
+        assert!(
+            rendered.starts_with("🔵"),
+            "Should start with In Progress emoji"
+        );
+        assert!(
+            rendered.contains("cli:standalone-activity"),
+            "Should contain task identifier"
+        );
         assert!(rendered.contains("ACT-107"), "Should contain JIRA key");
-        assert!(rendered.contains("Standalone activity CLI integration"), "Should contain summary");
+        assert!(
+            rendered.contains("Standalone activity CLI integration"),
+            "Should contain summary"
+        );
     }
 
     #[test]

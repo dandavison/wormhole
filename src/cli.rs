@@ -7,41 +7,6 @@ use std::io;
 use crate::config;
 use crate::jira;
 
-#[derive(Serialize)]
-struct CreatedTask {
-    home: String,
-    key: String,
-    summary: String,
-}
-
-impl CreatedTask {
-    fn render_terminal(&self) -> String {
-        format!("{:<18} {:<10} {}", self.home, self.key, self.summary)
-    }
-}
-
-#[derive(Serialize)]
-struct SprintCreateResult {
-    created: Vec<CreatedTask>,
-    skipped: Vec<String>,
-    no_home: Vec<String>,
-}
-
-impl SprintCreateResult {
-    fn render_terminal(&self) -> String {
-        let mut lines: Vec<String> = self.created.iter().map(|t| t.render_terminal()).collect();
-        for key in &self.no_home {
-            lines.push(format!("Skipping {} (no home project)", key));
-        }
-        lines.push(format!(
-            "\nCreated {} tasks, skipped {} (already exist)",
-            self.created.len(),
-            self.skipped.len()
-        ));
-        lines.join("\n")
-    }
-}
-
 #[derive(Serialize, serde::Deserialize)]
 struct ProjectDebug {
     index: usize,
@@ -100,6 +65,8 @@ pub enum TaskCommand {
         #[arg(short = 'p', long)]
         home_project: Option<String>,
     },
+    /// Create tasks from current sprint issues
+    CreateFromSprint,
 }
 
 #[derive(Subcommand)]
@@ -115,16 +82,6 @@ pub enum SprintCommand {
         /// Output format: text (default) or json
         #[arg(short, long, default_value = "text")]
         output: String,
-    },
-    /// Create tasks for sprint issues
-    Create {
-        /// Output format: text (default) or json
-        #[arg(short, long, default_value = "text")]
-        output: String,
-        /// Override pairs: <ticket> <home-project> ...
-        /// Tickets not listed use WORMHOLE_DEFAULT_HOME_PROJECT
-        #[arg(trailing_var_arg = true)]
-        overrides: Vec<String>,
     },
 }
 
@@ -729,14 +686,12 @@ pub fn run(command: Command) -> Result<(), String> {
                 None => sprint_list(&client, "text"),
                 Some(SprintCommand::List { output }) => sprint_list(&client, &output),
                 Some(SprintCommand::Show { output }) => sprint_show(&output),
-                Some(SprintCommand::Create { output, overrides }) => {
-                    sprint_create(&client, overrides, &output)
-                }
             },
             JiraCommand::Task { command } => match command {
                 TaskCommand::Create { url, home_project } => {
                     task_create_from_url(&client, &url, home_project)
                 }
+                TaskCommand::CreateFromSprint => task_create_from_sprint(&client),
             },
         },
 
@@ -928,23 +883,12 @@ fn doctor_persisted_data(output: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn sprint_create(client: &Client, overrides: Vec<String>, output: &str) -> Result<(), String> {
+fn task_create_from_sprint(client: &Client) -> Result<(), String> {
     use std::collections::HashMap;
     use std::path::PathBuf;
 
     let default_home = std::env::var("WORMHOLE_DEFAULT_HOME_PROJECT").ok();
 
-    // Parse override pairs
-    let mut home_overrides: HashMap<String, String> = HashMap::new();
-    let mut iter = overrides.iter();
-    while let Some(ticket) = iter.next() {
-        let home = iter
-            .next()
-            .ok_or_else(|| format!("Missing home project for ticket {}", ticket))?;
-        home_overrides.insert(ticket.clone(), home.clone());
-    }
-
-    // Get existing tasks from daemon (includes path and branch)
     let response = client.get("/project/list")?;
     let parsed: serde_json::Value = serde_json::from_str(&response).map_err(|e| e.to_string())?;
     let current = parsed
@@ -956,164 +900,86 @@ fn sprint_create(client: &Client, overrides: Vec<String>, output: &str) -> Resul
     let existing_tasks: HashMap<String, (PathBuf, String)> = current
         .iter()
         .filter_map(|v| {
-            let name = v.get("name")?.as_str()?;
+            let jira_key = v.get("kv")?.get("jira_key")?.as_str()?;
             let path = v.get("path")?.as_str()?;
-            let branch = v.get("branch")?.as_str().unwrap_or(name);
-            Some((name.to_string(), (PathBuf::from(path), branch.to_string())))
+            let branch = v.get("branch")?.as_str()?;
+            Some((jira_key.to_string(), (PathBuf::from(path), branch.to_string())))
         })
         .collect();
 
-    // Get available projects for completion
-    let available_projects: Vec<String> = parsed
-        .get("available")
-        .and_then(|v| v.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|v| v.as_str().map(String::from))
-                .collect()
-        })
-        .unwrap_or_default();
-
-    // Get sprint issues
+    let available_projects = get_available_projects(client)?;
     let issues = jira::get_sprint_issues()?;
 
     let mut rl = create_project_editor(available_projects)?;
+    let mut last_home = default_home;
+    let mut created_count = 0;
 
-    let mut result = SprintCreateResult {
-        created: Vec::new(),
-        skipped: Vec::new(),
-        no_home: Vec::new(),
-    };
+    for issue in &issues {
+        let existing = existing_tasks.get(&issue.key);
+        let has_pr = existing
+            .map(|(path, _)| crate::github::get_pr_status(path).is_some())
+            .unwrap_or(false);
 
-    // Filter issues that will be skipped
-    let actionable: Vec<_> = issues
-        .iter()
-        .filter(|issue| {
-            let existing = existing_tasks.get(&issue.key);
-            let has_pr = existing
-                .map(|(path, _)| crate::github::get_pr_status(path).is_some())
-                .unwrap_or(false);
-            if should_skip_issue(&issue.status, has_pr).is_some() {
-                result.skipped.push(issue.key.clone());
-                false
-            } else {
-                true
+        if let Some(reason) = should_skip_issue(&issue.status, has_pr) {
+            println!("{} {} [{}]", issue.key, issue.summary, reason);
+            continue;
+        }
+
+        println!("\n{} {}", issue.key, issue.summary);
+
+        let default_h = last_home.clone().unwrap_or_default();
+        let home = match rl.readline_with_initial("home: ", (&default_h, "")) {
+            Ok(line) => {
+                let trimmed = line.trim();
+                if trimmed.is_empty() {
+                    if default_h.is_empty() {
+                        eprintln!("Skipping (no home)");
+                        continue;
+                    }
+                    default_h
+                } else {
+                    trimmed.to_string()
+                }
             }
-        })
-        .collect();
+            Err(rustyline::error::ReadlineError::Interrupted) => {
+                eprintln!("Skipping");
+                continue;
+            }
+            Err(rustyline::error::ReadlineError::Eof) => break,
+            Err(e) => return Err(format!("Input error: {}", e)),
+        };
+        last_home = Some(home.clone());
 
-    if actionable.is_empty() {
-        print_sprint_result(&result, output);
-        return Ok(());
+        let default_branch = existing
+            .map(|(_, branch)| branch.clone())
+            .unwrap_or_else(|| to_kebab_case(&issue.summary));
+
+        let branch = match rl.readline_with_initial("branch: ", (&default_branch, "")) {
+            Ok(line) => {
+                let trimmed = line.trim();
+                if trimmed.is_empty() {
+                    default_branch
+                } else {
+                    trimmed.to_string()
+                }
+            }
+            Err(rustyline::error::ReadlineError::Interrupted) => {
+                eprintln!("Skipping");
+                continue;
+            }
+            Err(rustyline::error::ReadlineError::Eof) => break,
+            Err(e) => return Err(format!("Input error: {}", e)),
+        };
+
+        create_task(client, &home, &branch, &issue.key)?;
+        println!("Created {}:{}", home, branch);
+        created_count += 1;
     }
 
-    // Collect home repo and branch for each issue, with confirmation loop
-    let to_create = loop {
-        let mut entries: Vec<(String, String, String)> = Vec::new(); // (key, home, branch)
-        let mut aborted = false;
-        let mut last_home = default_home.clone();
-
-        for issue in &actionable {
-            println!("\n{} {}", issue.key, issue.summary);
-
-            // Prompt for home repo
-            let default_h = home_overrides
-                .get(&issue.key)
-                .cloned()
-                .or(last_home.clone())
-                .unwrap_or_default();
-            let issue_home = match rl.readline_with_initial("  home: ", (&default_h, "")) {
-                Ok(line) => {
-                    let trimmed = line.trim();
-                    if trimmed.is_empty() {
-                        if default_h.is_empty() {
-                            eprintln!("Home repo is required.");
-                            aborted = true;
-                            break;
-                        }
-                        default_h
-                    } else {
-                        trimmed.to_string()
-                    }
-                }
-                Err(rustyline::error::ReadlineError::Interrupted)
-                | Err(rustyline::error::ReadlineError::Eof) => {
-                    aborted = true;
-                    break;
-                }
-                Err(e) => return Err(format!("Input error: {}", e)),
-            };
-            last_home = Some(issue_home.clone());
-
-            // Prompt for branch
-            let existing = existing_tasks.get(&issue.key);
-            let default_branch = existing
-                .map(|(_, branch)| branch.clone())
-                .unwrap_or_else(|| to_kebab_case(&issue.summary));
-
-            let branch = match rl.readline_with_initial("  branch: ", (&default_branch, "")) {
-                Ok(line) => {
-                    let trimmed = line.trim();
-                    if trimmed.is_empty() {
-                        default_branch
-                    } else {
-                        trimmed.to_string()
-                    }
-                }
-                Err(rustyline::error::ReadlineError::Interrupted)
-                | Err(rustyline::error::ReadlineError::Eof) => {
-                    aborted = true;
-                    break;
-                }
-                Err(e) => return Err(format!("Input error: {}", e)),
-            };
-
-            entries.push((issue.key.clone(), issue_home, branch));
-        }
-
-        if aborted {
-            eprintln!("Aborted.");
-            return Ok(());
-        }
-
-        // Show confirmation
-        println!("\nWill create:");
-        for (key, h, branch) in &entries {
-            println!("  {:18} {:18} {}", h, key, branch);
-        }
-
-        let confirm = rl.readline("\n[c]reate, [r]edo, [a]bort? ");
-        match confirm {
-            Ok(s) if s.trim().eq_ignore_ascii_case("c") => break entries,
-            Ok(s) if s.trim().eq_ignore_ascii_case("a") => {
-                eprintln!("Aborted.");
-                return Ok(());
-            }
-            Ok(s) if s.trim().eq_ignore_ascii_case("r") => continue,
-            Err(rustyline::error::ReadlineError::Interrupted)
-            | Err(rustyline::error::ReadlineError::Eof) => {
-                eprintln!("Aborted.");
-                return Ok(());
-            }
-            _ => continue,
-        }
-    };
-
-    for (key, home, branch) in to_create {
-        create_task(client, &home, &branch, &key)?;
-        result.created.push(CreatedTask {
-            home,
-            key,
-            summary: branch,
-        });
-    }
-
-    // Refresh cache so dashboard shows JIRA links immediately
-    if !result.created.is_empty() {
+    if created_count > 0 {
         let _ = client.post("/project/refresh");
     }
 
-    print_sprint_result(&result, output);
     Ok(())
 }
 
@@ -1176,16 +1042,6 @@ fn task_create_from_url(
 
     println!("Created task {}:{} for {}", home, branch, jira_key);
     Ok(())
-}
-
-fn print_sprint_result(result: &SprintCreateResult, output: &str) {
-    if output == "json" {
-        if let Ok(json) = serde_json::to_string_pretty(result) {
-            println!("{}", json);
-        }
-    } else {
-        println!("{}", result.render_terminal());
-    }
 }
 
 fn sprint_list(client: &Client, output: &str) -> Result<(), String> {

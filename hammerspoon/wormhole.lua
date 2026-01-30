@@ -222,10 +222,13 @@ local function renderNeighborOverlay()
         local currentKey = ring[1] and itemKey(ring[1])
 
         -- Lock display order on first show, keep it fixed while overlay is visible
+        -- Center current item, with "previous" items to the left
         if not neighborDisplayOrder then
             neighborDisplayOrder = {}
-            for i = #ring, 1, -1 do
-                table.insert(neighborDisplayOrder, ring[i])
+            local offset = n - math.floor(n / 2)
+            for i = n, 1, -1 do
+                local srcIdx = ((i - 1 + offset) % n) + 1
+                table.insert(neighborDisplayOrder, ring[srcIdx])
             end
         end
 

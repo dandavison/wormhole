@@ -227,4 +227,29 @@ mod tests {
         );
         assert_eq!(projects.get("work-temporal"), Some(&dir3.join("temporal")));
     }
+
+    #[test]
+    fn test_worktrees_excluded() {
+        let temp = TempDir::new().unwrap();
+        let dir = temp.path().join("src");
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // Create a real repo (has .git directory)
+        let repo = dir.join("my-repo");
+        std::fs::create_dir_all(repo.join(".git")).unwrap();
+
+        // Create a worktree sibling (has .git file, not directory)
+        let worktree = dir.join("my-branch");
+        std::fs::create_dir_all(&worktree).unwrap();
+        std::fs::write(worktree.join(".git"), "gitdir: ../my-repo/.git/worktrees/my-branch").unwrap();
+
+        let paths = vec![dir.clone()];
+        let projects = available_projects_from_paths(&paths);
+
+        assert_eq!(projects.get("my-repo"), Some(&repo));
+        assert!(
+            projects.get("my-branch").is_none(),
+            "Worktrees should not appear as projects"
+        );
+    }
 }

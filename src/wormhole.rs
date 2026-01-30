@@ -370,7 +370,7 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
             )),
         }
     } else if path == "/kv" {
-        Ok(crate::kv::get_all_kv())
+        Ok(crate::kv::list_all_kv_fresh())
     } else if let Some(kv_path) = path.strip_prefix("/kv/") {
         handle_kv_request(&method, kv_path, req).await
     } else {
@@ -456,7 +456,7 @@ async fn handle_kv_request(
     match parts.as_slice() {
         [""] => {
             // /kv/ - same as /kv
-            Ok(crate::kv::get_all_kv())
+            Ok(crate::kv::list_all_kv_fresh())
         }
         [project] => {
             // /kv/<project> - get all KV for project

@@ -1,7 +1,10 @@
 use hyper::{Body, Response, StatusCode};
+use rayon::prelude::*;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use crate::config;
+use crate::git;
 use crate::project::{Project, StoreKey};
 use crate::projects;
 
@@ -90,20 +93,6 @@ pub fn get_project_kv(key: &StoreKey) -> Response<Body> {
     }
 }
 
-pub fn get_all_kv() -> Response<Body> {
-    let projects = projects::lock();
-    let mut all_kv = HashMap::new();
-
-    for project in projects.all() {
-        if !project.kv.is_empty() {
-            all_kv.insert(&project.repo_name, &project.kv);
-        }
-    }
-
-    let json = serde_json::to_string_pretty(&all_kv).unwrap();
-    Response::new(Body::from(json))
-}
-
 fn wormhole_dir(project: &Project) -> PathBuf {
     crate::git::git_common_dir(&project.repo_path).join("wormhole")
 }
@@ -155,4 +144,63 @@ pub fn load_kv_data(projects: &mut projects::Projects) {
             project.kv = kv;
         }
     }
+}
+
+/// List all KV data from disk for all discoverable projects and tasks.
+/// Does not use cached data - reads directly from disk with concurrent I/O.
+pub fn list_all_kv_fresh() -> Response<Body> {
+    let available = config::available_projects();
+
+    // Collect all (store_key, repo_path) pairs for projects and tasks
+    let entries: Vec<(StoreKey, PathBuf)> = available
+        .into_par_iter()
+        .flat_map(|(name, path)| {
+            let mut result = vec![];
+
+            if !git::is_git_repo(&path) {
+                return result;
+            }
+
+            // Add the main project
+            result.push((StoreKey::project(name.clone()), path.clone()));
+
+            // Discover tasks (worktrees)
+            let worktrees_dir = git::worktree_base_path(&path);
+            for wt in git::list_worktrees(&path) {
+                if wt.path.starts_with(&worktrees_dir) {
+                    if let Some(branch) = wt.branch {
+                        result.push((StoreKey::task(name.clone(), branch), path.clone()));
+                    }
+                }
+            }
+
+            result
+        })
+        .collect();
+
+    // Read KV files concurrently
+    let all_kv: HashMap<String, HashMap<String, String>> = entries
+        .into_par_iter()
+        .filter_map(|(store_key, repo_path)| {
+            let kv_path = kv_file_for_key(&store_key, &repo_path);
+            let data = std::fs::read_to_string(&kv_path).ok()?;
+            let kv: HashMap<String, String> = serde_json::from_str(&data).ok()?;
+            if kv.is_empty() {
+                None
+            } else {
+                Some((store_key.to_string(), kv))
+            }
+        })
+        .collect();
+
+    let json = serde_json::to_string_pretty(&all_kv).unwrap();
+    Response::new(Body::from(json))
+}
+
+fn kv_file_for_key(key: &StoreKey, repo_path: &PathBuf) -> PathBuf {
+    let filename = key.to_string().replace(':', "_");
+    git::git_common_dir(repo_path)
+        .join("wormhole")
+        .join("kv")
+        .join(format!("{}.json", filename))
 }

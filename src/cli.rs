@@ -551,9 +551,14 @@ pub fn run(command: Command) -> Result<(), String> {
                         format!("/project/show/{}", cwd)
                     }
                 };
-                let query = if output == "json" { "?format=json" } else { "" };
-                let response = client.get(&format!("{}{}", path, query))?;
-                print!("{}", response);
+                let response = client.get(&path)?;
+                if output == "json" {
+                    println!("{}", response);
+                } else {
+                    let status: crate::status::TaskStatus =
+                        serde_json::from_str(&response).map_err(|e| e.to_string())?;
+                    println!("{}", render_task_status(&status));
+                }
                 Ok(())
             }
         },
@@ -1165,14 +1170,14 @@ fn sprint_show(output: &str) -> Result<(), String> {
 
     let issues = jira::get_sprint_issues()?;
 
-    // Fetch status for each issue concurrently (as JSON)
+    // Fetch status for each issue concurrently
     let statuses: Vec<_> = issues
         .iter()
         .map(|issue| {
             let key = issue.key.clone();
             let client_url = format!("http://127.0.0.1:{}", crate::config::wormhole_port());
             thread::spawn(move || {
-                ureq::get(&format!("{}/project/show/{}?format=json", client_url, key))
+                ureq::get(&format!("{}/project/show/{}", client_url, key))
                     .call()
                     .ok()
                     .and_then(|r| r.into_string().ok())
@@ -1201,10 +1206,93 @@ fn sprint_show(output: &str) -> Result<(), String> {
         );
     } else {
         for item in &items {
-            println!("{}\n\n", item.render_terminal());
+            println!("{}\n\n", render_sprint_show_item(item));
         }
     }
     Ok(())
+}
+
+fn render_task_status(status: &crate::status::TaskStatus) -> String {
+    let jira_instance = std::env::var("JIRA_INSTANCE").ok();
+
+    let name_linked = if let Some(ref instance) = jira_instance {
+        let url = format!("https://{}.atlassian.net/browse/{}", instance, status.name);
+        crate::format_osc8_hyperlink(&url, &status.name)
+    } else {
+        status.name.clone()
+    };
+
+    let title = if let Some(ref jira) = status.jira {
+        format!("{}: {}", name_linked, jira.summary)
+    } else {
+        name_linked.clone()
+    };
+    let title_len = if let Some(ref jira) = status.jira {
+        status.name.len() + 2 + jira.summary.len()
+    } else {
+        status.name.len()
+    };
+
+    let mut lines = vec![title, "─".repeat(title_len)];
+
+    if let Some(ref branch) = status.branch {
+        lines.push(format!("Branch:    {}", branch));
+    }
+
+    if let Some(ref jira) = status.jira {
+        lines.push(format!(
+            "JIRA:      {} {}",
+            crate::jira::status_emoji(&jira.status),
+            jira.status
+        ));
+    } else if status.branch.is_some() {
+        lines.push("JIRA:      ✗".to_string());
+    }
+
+    if let Some(ref pr) = status.pr {
+        let pr_linked = crate::format_osc8_hyperlink(&pr.url, &pr.display());
+        let comments = pr
+            .comments_display()
+            .map(|c| format!(" [{}]", c))
+            .unwrap_or_default();
+        lines.push(format!("PR:        {}{}", pr_linked, comments));
+    } else {
+        lines.push("PR:        ✗".to_string());
+    }
+
+    if let Some(ref url) = status.plan_url {
+        let plan_linked = crate::format_osc8_hyperlink(url, "✓ plan.md");
+        lines.push(format!("Plan:      {}", plan_linked));
+    } else {
+        lines.push("Plan:      ✗".to_string());
+    }
+
+    if let Some(ref repos) = status.aux_repos {
+        lines.push(format!("Aux repos: {}", repos));
+    } else {
+        lines.push("Aux repos: ✗".to_string());
+    }
+
+    lines.join("\n")
+}
+
+fn render_sprint_show_item(item: &crate::status::SprintShowItem) -> String {
+    use crate::status::SprintShowItem;
+    match item {
+        SprintShowItem::Task(task) => render_task_status(task),
+        SprintShowItem::Issue(issue) => {
+            format!("{}\n  (no wormhole task)", render_issue_status(issue))
+        }
+    }
+}
+
+fn render_issue_status(issue: &crate::jira::IssueStatus) -> String {
+    format!(
+        "{} {}: {}",
+        crate::jira::status_emoji(&issue.status),
+        issue.key,
+        issue.summary
+    )
 }
 
 fn to_kebab_case(s: &str) -> String {

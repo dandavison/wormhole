@@ -32,7 +32,6 @@ pub struct QueryParams {
     pub line: Option<usize>,
     pub home_project: Option<String>,
     pub branch: Option<String>,
-    pub format: Option<String>,
     pub skip_editor: bool,
     pub focus_terminal: bool,
     pub sync: bool,
@@ -179,7 +178,6 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         Ok(Response::new(Body::from("Pinning current state...")))
     } else if path == "/project/show" || path.starts_with("/project/show/") {
         let name = path.strip_prefix("/project/show/").map(|s| s.trim());
-        let json_format = params.format.as_deref() == Some("json");
         let status = if let Some(n) = name.filter(|s| !s.is_empty()) {
             crate::status::get_status_by_name(n)
         } else {
@@ -187,15 +185,11 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
         };
         match status {
             Some(s) => {
-                if json_format {
-                    let json = serde_json::to_string_pretty(&s).unwrap_or_default();
-                    Ok(Response::builder()
-                        .header("Content-Type", "application/json")
-                        .body(Body::from(json))
-                        .unwrap())
-                } else {
-                    Ok(Response::new(Body::from(s.render_terminal())))
-                }
+                let json = serde_json::to_string_pretty(&s).unwrap_or_default();
+                Ok(Response::builder()
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(json))
+                    .unwrap())
             }
             None => Ok(Response::builder()
                 .status(StatusCode::NOT_FOUND)
@@ -516,7 +510,6 @@ impl QueryParams {
             line: None,
             home_project: None,
             branch: None,
-            format: None,
             skip_editor: false,
             focus_terminal: false,
             sync: false,
@@ -539,8 +532,6 @@ impl QueryParams {
                     params.home_project = Some(val.to_string());
                 } else if key_lower == "branch" {
                     params.branch = Some(val.to_string());
-                } else if key_lower == "format" {
-                    params.format = Some(val.to_string());
                 } else if key_lower == "skip-editor" {
                     params.skip_editor = val.to_lowercase() == "true";
                 } else if key_lower == "focus-terminal" {

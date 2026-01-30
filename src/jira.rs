@@ -35,10 +35,6 @@ impl IssueStatus {
     pub fn status_emoji(&self) -> &'static str {
         status_emoji(&self.status)
     }
-
-    pub fn render_terminal(&self) -> String {
-        format!("{} {}: {}", self.status_emoji(), self.key, self.summary)
-    }
 }
 
 pub fn status_emoji(status: &str) -> &'static str {

@@ -293,8 +293,7 @@ pub fn get_status(project: &Project) -> TaskStatus {
 }
 ```
 
-Query parameters:
-- `?format=json` — return JSON instead of terminal-formatted text
+Returns JSON. The CLI formats for terminal display.
 
 #### POST /project/pin
 
@@ -458,15 +457,20 @@ ProjectCommand::List { output, available } => {
 
 Show detailed status for a project/task.
 
-[src/cli.rs (`Project::Show`)](https://github.com/dandavison/wormhole/blob/main/src/cli.rs#L544-L558)
+[src/cli.rs (`Project::Show`)](https://github.com/dandavison/wormhole/blob/main/src/cli.rs#L544-L562)
 ```rust
 ProjectCommand::Show { name, output } => {
     let path = match name {
         Some(n) => format!("/project/show/{}", n),
         None => format!("/project/show/{}", cwd),
     };
-    let query = if output == "json" { "?format=json" } else { "" };
-    let response = client.get(&format!("{}{}", path, query))?;
+    let response = client.get(&path)?;
+    if output == "json" {
+        println!("{}", response);
+    } else {
+        let status: TaskStatus = serde_json::from_str(&response)?;
+        println!("{}", render_task_status(&status));
+    }
 }
 ```
 

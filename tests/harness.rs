@@ -145,6 +145,31 @@ impl WormholeTest {
         }
     }
 
+    pub fn task_in_list(&self, repo: &str, branch: &str) -> bool {
+        let response = self.http_get("/project/list").unwrap();
+        let data: serde_json::Value = serde_json::from_str(&response).unwrap();
+        data["current"]
+            .as_array()
+            .map(|arr| {
+                arr.iter().any(|e| {
+                    e["name"].as_str() == Some(repo) && e["branch"].as_str() == Some(branch)
+                })
+            })
+            .unwrap_or(false)
+    }
+
+    pub fn project_in_list(&self, name: &str) -> bool {
+        let response = self.http_get("/project/list").unwrap();
+        let data: serde_json::Value = serde_json::from_str(&response).unwrap();
+        data["current"]
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .any(|e| e["name"].as_str() == Some(name) && e["branch"].is_null())
+            })
+            .unwrap_or(false)
+    }
+
     pub fn get_focused_app(&self) -> String {
         let lua = r#"local w = hs.window.focusedWindow(); if w then return w:application():title() else return "" end"#;
         self.run_hs(lua).unwrap_or_default()

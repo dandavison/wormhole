@@ -1,6 +1,5 @@
 mod harness;
-use harness::Focus::*;
-use harness::TEST_PREFIX;
+use harness::{init_git_repo, Focus::*, TEST_PREFIX};
 use serde_json::Value;
 use std::process::Command;
 
@@ -19,8 +18,8 @@ fn test_open_project() {
     let dir_a = format!("/tmp/{}", proj_a);
     let dir_b = format!("/tmp/{}", proj_b);
 
-    std::fs::create_dir_all(&dir_a).unwrap();
-    std::fs::create_dir_all(&dir_b).unwrap();
+    init_git_repo(&dir_a);
+    init_git_repo(&dir_b);
 
     test.create_project(&dir_a, &proj_a);
     test.create_project(&dir_b, &proj_b);
@@ -73,8 +72,8 @@ fn test_previous_project_and_next_project() {
     let dir_a = format!("/tmp/{}", proj_a);
     let dir_b = format!("/tmp/{}", proj_b);
 
-    std::fs::create_dir_all(&dir_a).unwrap();
-    std::fs::create_dir_all(&dir_b).unwrap();
+    init_git_repo(&dir_a);
+    init_git_repo(&dir_b);
 
     test.create_project(&dir_a, &proj_a);
     test.create_project(&dir_b, &proj_b);
@@ -119,7 +118,7 @@ fn test_close_project() {
     let proj = format!("{}close-proj", TEST_PREFIX);
     let dir = format!("/tmp/{}", proj);
 
-    std::fs::create_dir_all(&dir).unwrap();
+    init_git_repo(&dir);
 
     test.create_project(&dir, &proj);
     test.http_get(&format!("/project/switch/{}", proj)).unwrap();
@@ -145,21 +144,8 @@ fn test_project_list_sorted() {
     let task_a1 = format!("{}SORT-A1", TEST_PREFIX);
 
     // Create projects in reverse order
-    let _ = std::fs::remove_dir_all(&dir_b);
-    let _ = std::fs::remove_dir_all(&dir_a);
-
     for (dir, proj) in [(&dir_b, &proj_b), (&dir_a, &proj_a)] {
-        std::fs::create_dir_all(dir).unwrap();
-        Command::new("git")
-            .args(["init"])
-            .current_dir(dir)
-            .output()
-            .unwrap();
-        Command::new("git")
-            .args(["commit", "--allow-empty", "-m", "initial"])
-            .current_dir(dir)
-            .output()
-            .unwrap();
+        init_git_repo(dir);
         test.create_project(dir, proj);
     }
 
@@ -226,18 +212,7 @@ fn test_close_task_removes_from_list() {
     let home_dir = format!("/tmp/{}", home_proj);
     let task_id = format!("{}CLOSE-TASK", TEST_PREFIX);
 
-    let _ = std::fs::remove_dir_all(&home_dir);
-    std::fs::create_dir_all(&home_dir).unwrap();
-    Command::new("git")
-        .args(["init"])
-        .current_dir(&home_dir)
-        .output()
-        .unwrap();
-    Command::new("git")
-        .args(["commit", "--allow-empty", "-m", "initial"])
-        .current_dir(&home_dir)
-        .output()
-        .unwrap();
+    init_git_repo(&home_dir);
 
     test.create_project(&home_dir, &home_proj);
     test.create_task(&task_id, &home_proj);
@@ -294,6 +269,7 @@ fn test_open_github_url() {
     let dir = format!("/tmp/{}", proj);
     let file = format!("{}/src/main.rs", dir);
 
+    init_git_repo(&dir);
     std::fs::create_dir_all(format!("{}/src", dir)).unwrap();
     std::fs::write(&file, "fn main() {}").unwrap();
 
@@ -310,11 +286,11 @@ fn test_open_github_url() {
 fn test_open_file() {
     let test = harness::WormholeTest::new(8931);
 
-    let proj = format!("{}file-proj", TEST_PREFIX);
+    let proj = format!("{}file-proj2", TEST_PREFIX);
     let dir = format!("/tmp/{}", proj);
     let file = format!("{}/test.rs", dir);
 
-    std::fs::create_dir_all(&dir).unwrap();
+    init_git_repo(&dir);
     std::fs::write(&file, "fn main() {}").unwrap();
 
     test.create_project(&dir, &proj);
@@ -334,7 +310,7 @@ fn test_pin() {
     let proj = format!("{}pin-proj", TEST_PREFIX);
     let dir = format!("/tmp/{}", proj);
 
-    std::fs::create_dir_all(&dir).unwrap();
+    init_git_repo(&dir);
 
     test.create_project(&dir, &proj);
 
@@ -372,19 +348,7 @@ fn test_task_switching() {
     let task_1 = format!("{}TASK-1", TEST_PREFIX);
     let task_2 = format!("{}TASK-2", TEST_PREFIX);
 
-    // Create home project as a git repo
-    let _ = std::fs::remove_dir_all(&home_dir);
-    std::fs::create_dir_all(&home_dir).unwrap();
-    Command::new("git")
-        .args(["init"])
-        .current_dir(&home_dir)
-        .output()
-        .unwrap();
-    Command::new("git")
-        .args(["commit", "--allow-empty", "-m", "initial"])
-        .current_dir(&home_dir)
-        .output()
-        .unwrap();
+    init_git_repo(&home_dir);
 
     // Register home project with wormhole
     test.create_project(&home_dir, &home_proj);
@@ -447,35 +411,11 @@ fn test_task_in_submodule() {
     let submodule_dir = format!("{}/{}", parent_dir, submodule_dirname);
     let task_id = format!("{}SUB-TASK", TEST_PREFIX);
 
-    // Clean up
-    let _ = std::fs::remove_dir_all(&parent_dir);
-    let _ = std::fs::remove_dir_all(&child_src);
-
     // Create source repo (will become submodule)
-    std::fs::create_dir_all(&child_src).unwrap();
-    Command::new("git")
-        .args(["init"])
-        .current_dir(&child_src)
-        .output()
-        .unwrap();
-    Command::new("git")
-        .args(["commit", "--allow-empty", "-m", "initial"])
-        .current_dir(&child_src)
-        .output()
-        .unwrap();
+    init_git_repo(&child_src);
 
     // Create parent repo
-    std::fs::create_dir_all(&parent_dir).unwrap();
-    Command::new("git")
-        .args(["init"])
-        .current_dir(&parent_dir)
-        .output()
-        .unwrap();
-    Command::new("git")
-        .args(["commit", "--allow-empty", "-m", "initial"])
-        .current_dir(&parent_dir)
-        .output()
-        .unwrap();
+    init_git_repo(&parent_dir);
 
     // Add as submodule with name matching our project name
     Command::new("git")
@@ -524,18 +464,7 @@ fn test_task_home_project_not_self() {
     let home_dir = format!("/tmp/{}", home_proj);
     let task_id = format!("{}TASK-SELF", TEST_PREFIX);
 
-    let _ = std::fs::remove_dir_all(&home_dir);
-    std::fs::create_dir_all(&home_dir).unwrap();
-    Command::new("git")
-        .args(["init"])
-        .current_dir(&home_dir)
-        .output()
-        .unwrap();
-    Command::new("git")
-        .args(["commit", "--allow-empty", "-m", "initial"])
-        .current_dir(&home_dir)
-        .output()
-        .unwrap();
+    init_git_repo(&home_dir);
 
     test.create_project(&home_dir, &home_proj);
     test.create_task(&task_id, &home_proj);
@@ -580,18 +509,7 @@ fn test_task_switching_updates_ring_order() {
     let home_dir = format!("/tmp/{}", home_proj);
     let task_id = format!("{}RING-TASK", TEST_PREFIX);
 
-    let _ = std::fs::remove_dir_all(&home_dir);
-    std::fs::create_dir_all(&home_dir).unwrap();
-    Command::new("git")
-        .args(["init"])
-        .current_dir(&home_dir)
-        .output()
-        .unwrap();
-    Command::new("git")
-        .args(["commit", "--allow-empty", "-m", "initial"])
-        .current_dir(&home_dir)
-        .output()
-        .unwrap();
+    init_git_repo(&home_dir);
 
     test.create_project(&home_dir, &home_proj);
     test.create_task(&task_id, &home_proj);
@@ -642,6 +560,7 @@ fn test_project_status() {
     let proj = format!("{}status-proj", TEST_PREFIX);
     let dir = format!("/tmp/{}", proj);
 
+    init_git_repo(&dir);
     std::fs::create_dir_all(format!("{}/.task", dir)).unwrap();
     std::fs::write(format!("{}/.task/plan.md", dir), "# Plan").unwrap();
 
@@ -681,18 +600,7 @@ fn test_task_respects_land_in_kv() {
     let home_dir = format!("/tmp/{}", home_proj);
     let task_id = format!("{}KV-TASK", TEST_PREFIX);
 
-    let _ = std::fs::remove_dir_all(&home_dir);
-    std::fs::create_dir_all(&home_dir).unwrap();
-    Command::new("git")
-        .args(["init"])
-        .current_dir(&home_dir)
-        .output()
-        .unwrap();
-    Command::new("git")
-        .args(["commit", "--allow-empty", "-m", "initial"])
-        .current_dir(&home_dir)
-        .output()
-        .unwrap();
+    init_git_repo(&home_dir);
 
     test.create_project(&home_dir, &home_proj);
     test.create_task(&task_id, &home_proj);
@@ -726,18 +634,7 @@ fn test_tasks_persist_after_tmux_window_closed() {
     let task_1 = format!("{}LIST-T1", TEST_PREFIX);
     let task_2 = format!("{}LIST-T2", TEST_PREFIX);
 
-    let _ = std::fs::remove_dir_all(&home_dir);
-    std::fs::create_dir_all(&home_dir).unwrap();
-    Command::new("git")
-        .args(["init"])
-        .current_dir(&home_dir)
-        .output()
-        .unwrap();
-    Command::new("git")
-        .args(["commit", "--allow-empty", "-m", "initial"])
-        .current_dir(&home_dir)
-        .output()
-        .unwrap();
+    init_git_repo(&home_dir);
 
     // Create home project and two tasks
     test.create_project(&home_dir, &home_proj);
@@ -815,18 +712,7 @@ fn test_neighbors_returns_branch_for_tasks() {
     let task_1 = format!("{}NBR-T1", TEST_PREFIX);
     let task_2 = format!("{}NBR-T2", TEST_PREFIX);
 
-    let _ = std::fs::remove_dir_all(&home_dir);
-    std::fs::create_dir_all(&home_dir).unwrap();
-    Command::new("git")
-        .args(["init"])
-        .current_dir(&home_dir)
-        .output()
-        .unwrap();
-    Command::new("git")
-        .args(["commit", "--allow-empty", "-m", "initial"])
-        .current_dir(&home_dir)
-        .output()
-        .unwrap();
+    init_git_repo(&home_dir);
 
     // Create home project and two tasks from the same repo
     test.create_project(&home_dir, &home_proj);
@@ -909,20 +795,7 @@ fn test_tasks_appear_without_terminal_windows() {
     let task_branch = format!("{}task-branch", TEST_PREFIX);
 
     // Clean up and create home directory
-    let _ = std::fs::remove_dir_all(&home_dir);
-    std::fs::create_dir_all(&home_dir).unwrap();
-
-    // Initialize git repo
-    Command::new("git")
-        .args(["init"])
-        .current_dir(&home_dir)
-        .output()
-        .unwrap();
-    Command::new("git")
-        .args(["commit", "--allow-empty", "-m", "initial"])
-        .current_dir(&home_dir)
-        .output()
-        .unwrap();
+    init_git_repo(&home_dir);
 
     // Register home project (this creates a terminal window for the project)
     test.create_project(&home_dir, &home_proj);
@@ -1000,20 +873,7 @@ fn test_switch_to_project_when_task_exists() {
     let task_branch = format!("{}task-exists", TEST_PREFIX);
 
     // Clean up and create home directory
-    let _ = std::fs::remove_dir_all(&home_dir);
-    std::fs::create_dir_all(&home_dir).unwrap();
-
-    // Initialize git repo
-    Command::new("git")
-        .args(["init"])
-        .current_dir(&home_dir)
-        .output()
-        .unwrap();
-    Command::new("git")
-        .args(["commit", "--allow-empty", "-m", "initial"])
-        .current_dir(&home_dir)
-        .output()
-        .unwrap();
+    init_git_repo(&home_dir);
 
     // Register the project first (so wormhole knows about this repo)
     test.create_project(&home_dir, &home_proj);
@@ -1093,8 +953,6 @@ fn test_switch_to_project_when_task_exists() {
 #[test]
 fn test_switch_creates_task_from_colon_syntax() {
     // `w project switch repo:branch` should create the task if it doesn't exist
-    use std::process::Command;
-
     let test = harness::WormholeTest::new(8952);
 
     let home_proj = format!("{}colon-create", TEST_PREFIX);
@@ -1102,20 +960,7 @@ fn test_switch_creates_task_from_colon_syntax() {
     let task_branch = format!("{}new-task", TEST_PREFIX);
 
     // Clean up and create home directory
-    let _ = std::fs::remove_dir_all(&home_dir);
-    std::fs::create_dir_all(&home_dir).unwrap();
-
-    // Initialize git repo
-    Command::new("git")
-        .args(["init"])
-        .current_dir(&home_dir)
-        .output()
-        .unwrap();
-    Command::new("git")
-        .args(["commit", "--allow-empty", "-m", "initial"])
-        .current_dir(&home_dir)
-        .output()
-        .unwrap();
+    init_git_repo(&home_dir);
 
     // Register home project
     test.create_project(&home_dir, &home_proj);

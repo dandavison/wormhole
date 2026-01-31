@@ -1,5 +1,7 @@
 mod harness;
 
+use harness::init_git_repo;
+
 #[test]
 fn test_close_cursor_window() {
     if std::env::var("WORMHOLE_EDITOR").ok().as_deref() == Some("none") {
@@ -10,10 +12,10 @@ fn test_close_cursor_window() {
 
     let proj = format!("{}close-test", harness::TEST_PREFIX);
     let dir = format!("/tmp/{}", proj);
-    std::fs::create_dir_all(&dir).unwrap();
+    init_git_repo(&dir);
 
     // Create and switch to project using unified /project/switch/ endpoint
-    test.http_get(&format!("/project/switch/{}?name={}", dir, proj))
+    test.http_get(&format!("/project/switch/{}?name={}&sync=true", dir, proj))
         .unwrap();
     std::thread::sleep(std::time::Duration::from_millis(500));
 

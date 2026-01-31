@@ -256,7 +256,13 @@ mod tests {
         // Create a worktree using git
         let worktree = dir.join("my-branch");
         Command::new("git")
-            .args(["worktree", "add", "-b", "my-branch", worktree.to_str().unwrap()])
+            .args([
+                "worktree",
+                "add",
+                "-b",
+                "my-branch",
+                worktree.to_str().unwrap(),
+            ])
             .current_dir(&repo)
             .output()
             .unwrap();
@@ -289,13 +295,21 @@ mod tests {
         let repos_dir = parent.join("repos");
         std::fs::create_dir_all(&repos_dir).unwrap();
         Command::new("git")
-            .args(["submodule", "add", child_src.to_str().unwrap(), "repos/temporal"])
+            .args([
+                "submodule",
+                "add",
+                child_src.to_str().unwrap(),
+                "repos/temporal",
+            ])
             .current_dir(&parent)
             .output()
             .unwrap();
 
         let submodule = repos_dir.join("temporal");
-        assert!(submodule.join(".git").is_file(), "Submodule should have .git file");
+        assert!(
+            submodule.join(".git").is_file(),
+            "Submodule should have .git file"
+        );
 
         let paths = vec![repos_dir.clone()];
         let projects = available_projects_from_paths(&paths);

@@ -905,7 +905,10 @@ fn task_create_from_sprint(client: &Client) -> Result<(), String> {
             let jira_key = v.get("kv")?.get("jira_key")?.as_str()?;
             let path = v.get("path")?.as_str()?;
             let branch = v.get("branch")?.as_str()?;
-            Some((jira_key.to_string(), (PathBuf::from(path), branch.to_string())))
+            Some((
+                jira_key.to_string(),
+                (PathBuf::from(path), branch.to_string()),
+            ))
         })
         .collect();
 

@@ -155,7 +155,12 @@ pub fn dashboard() -> Response<Body> {
 
     let tasks: Vec<Project> = {
         let projects = projects::lock();
-        projects.all().into_iter().filter(|p| p.is_task()).cloned().collect()
+        projects
+            .all()
+            .into_iter()
+            .filter(|p| p.is_task())
+            .cloned()
+            .collect()
     };
     let jira_instance = std::env::var("JIRA_INSTANCE").ok();
 
@@ -254,7 +259,8 @@ fn render_task_card(task: &crate::project::Project, jira_instance: Option<&str>)
         r#"<span class="meta-item">Plan: <span class="cross">✗</span></span>"#.to_string()
     };
 
-    let iframe_html = match crate::serve_web::manager().get_or_start(task.repo_name.as_str(), &path) {
+    let iframe_html = match crate::serve_web::manager().get_or_start(task.repo_name.as_str(), &path)
+    {
         Ok(port) => {
             let folder_encoded = url_encode(&path.to_string_lossy());
             format!(

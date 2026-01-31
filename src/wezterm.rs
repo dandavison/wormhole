@@ -38,8 +38,12 @@ struct Pane {
 }
 
 pub fn open(project: &Project) -> Result<(), String> {
-    let pane = Pane::get_first_by_tab_title(project.repo_name.as_str())
-        .unwrap_or_else(|| new_tab(project.repo_name.as_str(), project.repo_path.to_str().unwrap()));
+    let pane = Pane::get_first_by_tab_title(project.repo_name.as_str()).unwrap_or_else(|| {
+        new_tab(
+            project.repo_name.as_str(),
+            project.repo_path.to_str().unwrap(),
+        )
+    });
     execute_command(
         "wezterm",
         ["cli", "activate-tab", "--tab-id", &pane.tab_id.to_string()],

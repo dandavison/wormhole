@@ -222,29 +222,12 @@ impl WormholeTest {
         if editor_is_none() {
             return;
         }
-        // Try multiple times as macOS focus can be flaky
-        for attempt in 0..3 {
-            let lua = r#"
-                local app = hs.application.find("Alacritty")
-                if app then
-                    app:activate()
-                    local win = app:mainWindow()
-                    if win then win:focus() end
-                else
-                    hs.application.launchOrFocus("/Applications/Alacritty.app")
-                end
-            "#;
-            let _ = self.run_hs(lua);
-            thread::sleep(Duration::from_millis(300));
-            if self.get_focused_app() == "Alacritty" {
-                return;
-            }
-            if attempt < 2 {
-                thread::sleep(Duration::from_millis(500));
-            }
-        }
-        panic!(
-            "Failed to focus terminal after 3 attempts, got '{}'",
+        let lua = r#"hs.application.launchOrFocus("/Applications/Alacritty.app")"#;
+        self.run_hs(lua)
+            .expect("Failed to run Hammerspoon focus command");
+        assert!(
+            self.wait_for_app_focus("Alacritty", 5),
+            "Failed to focus terminal, got '{}'",
             self.get_focused_app()
         );
     }

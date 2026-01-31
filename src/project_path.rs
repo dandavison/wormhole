@@ -99,9 +99,8 @@ impl ProjectPath {
                 let editor_thread = thread::spawn(open_editor);
                 terminal_thread.join().unwrap();
                 editor_thread.join().unwrap();
-                thread::spawn(move || {
-                    hammerspoon::launch_or_focus(config::editor().application_name())
-                });
+                thread::sleep(std::time::Duration::from_millis(100));
+                config::editor().focus();
             }
         }
     }

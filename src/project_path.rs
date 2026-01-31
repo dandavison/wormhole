@@ -86,8 +86,8 @@ impl ProjectPath {
         match &land_in {
             Some(Application::Terminal) => {
                 open_terminal();
-                config::TERMINAL.focus();
                 open_editor();
+                config::TERMINAL.focus();
             }
             Some(Application::Editor) => {
                 open_editor();

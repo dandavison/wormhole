@@ -1,3 +1,4 @@
+use std::fs;
 use std::path::Path;
 
 use crate::hammerspoon;
@@ -103,7 +104,8 @@ impl Editor {
         if self.is_none() {
             return;
         }
-        hammerspoon::close_window(self.application_name(), project.repo_name.as_str());
+        let store_key = project.store_key().to_string();
+        hammerspoon::close_window(self.application_name(), &store_key);
     }
 
     pub fn focus(&self) {
@@ -112,6 +114,29 @@ impl Editor {
         }
         hammerspoon::launch_or_focus(self.application_name())
     }
+}
+
+fn workspace_file_path(project: &Project) -> std::path::PathBuf {
+    let store_key = project.store_key().to_string();
+    let filename = format!("{}.code-workspace", store_key);
+    let gitdir = crate::git::git_common_dir(&project.repo_path);
+    gitdir.join("wormhole/workspaces").join(filename)
+}
+
+fn ensure_workspace_file(project: &Project) -> std::path::PathBuf {
+    let workspace_path = workspace_file_path(project);
+    if !workspace_path.exists() {
+        let project_dir = project.working_dir();
+        let content = format!(
+            r#"{{"folders": [{{"path": "{}"}}]}}"#,
+            project_dir.display()
+        );
+        if let Some(parent) = workspace_path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        let _ = fs::write(&workspace_path, content);
+    }
+    workspace_path
 }
 
 pub fn open_workspace(project: &Project) {
@@ -124,9 +149,10 @@ pub fn open_workspace(project: &Project) {
     match editor {
         None => {}
         Cursor | VSCode | VSCodeInsiders => {
+            let workspace_path = ensure_workspace_file(project);
             execute_command(
                 editor.cli_executable_name(),
-                ["--new-window", "."],
+                ["--new-window", workspace_path.to_str().unwrap()],
                 project_dir,
             );
         }
@@ -180,9 +206,10 @@ pub fn open_path(path: &ProjectPath) -> Result<(), String> {
         return Ok(());
     }
 
-    // This is fast. But it can hijack windows.
-    if let Some(dir_uri) = editor.open_directory_uri(&root_abspath) {
-        execute_command("open", ["-g", dir_uri.as_str()], &root_abspath);
+    // Open workspace file (fast via URI, sets correct window title)
+    let workspace_path = ensure_workspace_file(&path.project);
+    if let Some(uri) = editor.open_directory_uri(&workspace_path) {
+        execute_command("open", ["-g", uri.as_str()], &root_abspath);
     }
 
     let file_line_uri = if path.absolute_path().is_dir() {

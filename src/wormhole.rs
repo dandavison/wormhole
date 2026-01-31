@@ -90,6 +90,10 @@ async fn route(
             endpoints::refresh_all();
             Response::new(Body::from(""))
         }),
+        "/project/refresh-tasks" => require_post(method, || {
+            projects::refresh_tasks();
+            Response::new(Body::from(""))
+        }),
         "/kv" => crate::kv::list_all_kv_fresh(),
         _ => route_with_params(req, method, path, params).await,
     }

@@ -982,6 +982,100 @@ fn test_tasks_appear_without_terminal_windows() {
 }
 
 #[test]
+fn test_switch_to_project_when_task_exists() {
+    // Regression test: switching to a project by name should open the PROJECT
+    // directory, not a task directory, even when both exist for the same repo.
+    //
+    // Bug: resolve_project() added the project correctly but then called
+    // by_exact_path() to retrieve it. Since project and task share the same
+    // repo_path, by_exact_path()'s find() could return the task instead.
+    //
+    // Fix: use by_key() to retrieve the project by its key after adding it.
+    use std::process::Command;
+
+    let test = harness::WormholeTest::new(8953);
+
+    let home_proj = format!("{}switch-proj", TEST_PREFIX);
+    let home_dir = format!("/tmp/{}", home_proj);
+    let task_branch = format!("{}task-exists", TEST_PREFIX);
+
+    // Clean up and create home directory
+    let _ = std::fs::remove_dir_all(&home_dir);
+    std::fs::create_dir_all(&home_dir).unwrap();
+
+    // Initialize git repo
+    Command::new("git")
+        .args(["init"])
+        .current_dir(&home_dir)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["commit", "--allow-empty", "-m", "initial"])
+        .current_dir(&home_dir)
+        .output()
+        .unwrap();
+
+    // Register the project first (so wormhole knows about this repo)
+    test.create_project(&home_dir, &home_proj);
+
+    // Create worktree directly with git (not via create_task)
+    let worktrees_dir = format!("{}/.git/wormhole/worktrees", home_dir);
+    std::fs::create_dir_all(&worktrees_dir).unwrap();
+    Command::new("git")
+        .args([
+            "worktree",
+            "add",
+            "-b",
+            &task_branch,
+            &format!("{}/{}", worktrees_dir, task_branch),
+        ])
+        .current_dir(&home_dir)
+        .output()
+        .unwrap();
+
+    // Refresh to discover the task (use refresh-tasks to skip slow JIRA/GitHub cache)
+    test.http_post("/project/refresh-tasks").unwrap();
+
+    // Verify task is discovered
+    let response = test.http_get("/project/list").unwrap();
+    let data: Value = serde_json::from_str(&response).unwrap();
+    let current = data["current"].as_array().expect("current should be array");
+    let has_task = current.iter().any(|e| {
+        e["name"].as_str() == Some(home_proj.as_str())
+            && e["branch"].as_str() == Some(task_branch.as_str())
+    });
+    assert!(has_task, "Task should be discovered after refresh");
+
+    // Switch to the task first (so it's the most recent)
+    let task_key = test.task_store_key(&task_branch, &home_proj);
+    test.http_get(&format!("/project/switch/{}?sync=1", task_key))
+        .unwrap();
+    let task_dir = format!("{}/{}", worktrees_dir, task_branch);
+    test.assert_tmux_cwd(&task_dir);
+
+    // Now switch to the PROJECT by name (not the task)
+    // The bug would cause this to stay in task dir or return wrong project
+    test.http_get(&format!("/project/switch/{}?sync=1", home_proj))
+        .unwrap();
+
+    // Verify we're in the PROJECT directory, not the task worktree
+    test.assert_tmux_cwd(&home_dir);
+
+    // Also verify the project (not task) is in the list
+    let response = test.http_get("/project/list").unwrap();
+    let data: Value = serde_json::from_str(&response).unwrap();
+    let current = data["current"].as_array().expect("current should be array");
+    let has_project = current
+        .iter()
+        .any(|e| e["name"].as_str() == Some(home_proj.as_str()) && e["branch"].is_null());
+    assert!(
+        has_project,
+        "Project '{}' (without branch) should be in list after switching to it",
+        home_proj
+    );
+}
+
+#[test]
 fn test_switch_creates_task_from_colon_syntax() {
     // `w project switch repo:branch` should create the task if it doesn't exist
     use std::process::Command;

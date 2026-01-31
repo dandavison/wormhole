@@ -9,6 +9,22 @@ pub const TEST_PREFIX: &str = "wh-test-";
 
 const NOTIFICATION_GROUP: &str = "wormhole-test";
 
+/// Initialize a git repo at the given directory, removing any existing content.
+pub fn init_git_repo(dir: &str) {
+    let _ = std::fs::remove_dir_all(dir);
+    std::fs::create_dir_all(dir).unwrap();
+    Command::new("git")
+        .args(["init"])
+        .current_dir(dir)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["commit", "--allow-empty", "-m", "init"])
+        .current_dir(dir)
+        .output()
+        .unwrap();
+}
+
 fn editor_is_none() -> bool {
     std::env::var("WORMHOLE_EDITOR").ok().as_deref() == Some("none")
 }

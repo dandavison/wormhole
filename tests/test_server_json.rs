@@ -1,7 +1,7 @@
 mod harness;
 
+use harness::init_git_repo;
 use serde_json::Value;
-use std::process::Command;
 
 /// Tests for server JSON responses.
 /// These use the existing test harness which handles tmux setup.
@@ -49,19 +49,7 @@ fn test_task_remove_deletes_kv_file() {
     let home_dir = format!("/tmp/{}", home_proj);
     let task_branch = format!("{}cleanup-task", harness::TEST_PREFIX);
 
-    // Setup: create git repo
-    let _ = std::fs::remove_dir_all(&home_dir);
-    std::fs::create_dir_all(&home_dir).unwrap();
-    Command::new("git")
-        .args(["init"])
-        .current_dir(&home_dir)
-        .output()
-        .unwrap();
-    Command::new("git")
-        .args(["commit", "--allow-empty", "-m", "init"])
-        .current_dir(&home_dir)
-        .output()
-        .unwrap();
+    init_git_repo(&home_dir);
 
     // Create project and task
     test.create_project(&home_dir, &home_proj);

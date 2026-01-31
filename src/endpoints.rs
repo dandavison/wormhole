@@ -1,6 +1,10 @@
-use hyper::{Body, Response, StatusCode};
+use hyper::{Body, Request, Response, StatusCode};
+use std::thread;
 
 use crate::project::ProjectKey;
+use crate::project_path::ProjectPath;
+use crate::projects::Mutation;
+use crate::wormhole::QueryParams;
 use crate::{config, hammerspoon, projects, util::debug};
 
 /// Return JSON with current and available projects (including tasks)
@@ -315,3 +319,266 @@ fn status_data_attr(status: &str) -> String {
 pub fn url_encode(s: &str) -> String {
     url::form_urlencoded::byte_serialize(s.as_bytes()).collect()
 }
+
+pub fn neighbors() -> Response<Body> {
+    let projects = projects::lock();
+    let ring: Vec<serde_json::Value> = projects
+        .all()
+        .iter()
+        .map(|p| {
+            let mut obj = serde_json::json!({ "name": p.repo_name });
+            if let Some(branch) = &p.branch {
+                obj["branch"] = serde_json::json!(branch);
+            }
+            obj
+        })
+        .collect();
+    let json = serde_json::json!({ "ring": ring });
+    Response::new(Body::from(json.to_string()))
+}
+
+pub fn shell_env(pwd: Option<&str>) -> Response<Body> {
+    let shell_code = pwd
+        .map(|pwd| {
+            let path = std::path::Path::new(pwd);
+            let projects = projects::lock();
+            projects
+                .by_path(path)
+                .map(|p| crate::terminal::shell_env_code(&p))
+                .unwrap_or_default()
+        })
+        .unwrap_or_default();
+    Response::new(Body::from(shell_code))
+}
+
+pub fn navigate(direction: Direction, params: &QueryParams) {
+    let p = {
+        let mut projects = projects::lock();
+        let (pp, mutation) = match direction {
+            Direction::Previous => (projects.previous(), Mutation::RotateLeft),
+            Direction::Next => (projects.next(), Mutation::RotateRight),
+        };
+        let pp = pp.map(|p| p.as_project_path());
+        if let Some(ref pp) = pp {
+            projects.apply(mutation, &pp.project.store_key());
+        }
+        pp
+    };
+    if let Some(project_path) = p {
+        let land_in = params.land_in.clone();
+        let skip_editor = params.skip_editor;
+        thread::spawn(move || project_path.open_with_options(Mutation::None, land_in, skip_editor));
+    }
+}
+
+pub enum Direction {
+    Previous,
+    Next,
+}
+
+pub fn remove(name: &str) -> Response<Body> {
+    let name = name.trim();
+    if let Some((repo, branch)) = name.split_once(':') {
+        if let Some(task) = crate::task::get_task_by_branch(repo, branch) {
+            if task.is_task() {
+                return match crate::task::remove_task(repo, branch) {
+                    Ok(()) => Response::new(Body::from(format!("Removed task: {}", name))),
+                    Err(e) => Response::builder()
+                        .status(StatusCode::BAD_REQUEST)
+                        .body(Body::from(e))
+                        .unwrap(),
+                };
+            }
+        }
+    }
+    remove_project(name)
+}
+
+pub fn close(name: &str) {
+    let name = name.trim().to_string();
+    thread::spawn(move || close_project(&name));
+}
+
+pub fn show(name: Option<&str>) -> Response<Body> {
+    let status = match name.filter(|s| !s.is_empty()) {
+        Some(n) => crate::status::get_status_by_name(n),
+        None => crate::status::get_current_status(),
+    };
+    match status {
+        Some(s) => {
+            let json = serde_json::to_string_pretty(&s).unwrap_or_default();
+            Response::builder()
+                .header("Content-Type", "application/json")
+                .body(Body::from(json))
+                .unwrap()
+        }
+        None => Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(Body::from("Project not found"))
+            .unwrap(),
+    }
+}
+
+pub async fn describe(req: Request<Body>) -> Response<Body> {
+    let body_bytes = hyper::body::to_bytes(req.into_body()).await.unwrap();
+    let request: Result<crate::describe::DescribeRequest, _> = serde_json::from_slice(&body_bytes);
+    match request {
+        Ok(req) => {
+            let response = crate::describe::describe(&req);
+            let json = serde_json::to_string_pretty(&response).unwrap_or_default();
+            Response::builder()
+                .header("Content-Type", "application/json")
+                .body(Body::from(json))
+                .unwrap()
+        }
+        Err(e) => Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body(Body::from(format!("Invalid JSON: {}", e)))
+            .unwrap(),
+    }
+}
+
+pub fn refresh_project(name: &str) -> Response<Body> {
+    let key = ProjectKey::parse(name.trim());
+    let mut projects = projects::lock();
+    if let Some(project) = projects.get_mut(&key) {
+        crate::github::refresh_github_info(project);
+        let json = serde_json::json!({
+            "name": project.repo_name,
+            "github_pr": project.github_pr,
+            "github_repo": project.github_repo,
+        });
+        Response::builder()
+            .header("Content-Type", "application/json")
+            .body(Body::from(serde_json::to_string_pretty(&json).unwrap()))
+            .unwrap()
+    } else {
+        Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(Body::from(format!("Project '{}' not found", key)))
+            .unwrap()
+    }
+}
+
+pub fn create_task(branch: &str, home_project: Option<&str>) -> Response<Body> {
+    let branch = branch.trim();
+    let repo = match home_project {
+        Some(r) => r,
+        None => {
+            return Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body(Body::from("home-project query param required"))
+                .unwrap()
+        }
+    };
+    match crate::task::create_task(repo, branch) {
+        Ok(task) => Response::new(Body::from(format!("Created task: {}", task.store_key()))),
+        Err(e) => Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body(Body::from(e))
+            .unwrap(),
+    }
+}
+
+pub fn switch(name_or_path: &str, params: &QueryParams, sync: bool) -> Response<Body> {
+    let name_or_path = name_or_path.trim().to_string();
+    let repo = params.home_project.clone();
+    let branch = params.branch.clone();
+    let land_in = params.land_in.clone();
+    let skip_editor = params.skip_editor;
+    let focus_terminal = params.focus_terminal;
+
+    let do_switch = move || -> Result<(), String> {
+        if let (Some(repo), Some(branch)) = (repo.as_ref(), branch.as_ref()) {
+            return crate::task::open_task(repo, branch, land_in, skip_editor, focus_terminal);
+        }
+        if let Some((repo, branch)) = name_or_path.split_once(':') {
+            return crate::task::open_task(repo, branch, land_in, skip_editor, focus_terminal);
+        }
+        let project_path = {
+            let mut projects = projects::lock();
+            resolve_project(&mut projects, &name_or_path)
+        };
+        if let Some(pp) = project_path {
+            pp.open(Mutation::Insert, land_in);
+        }
+        Ok(())
+    };
+
+    if sync {
+        match do_switch() {
+            Ok(()) => Response::new(Body::from("ok")),
+            Err(e) => Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body(Body::from(e))
+                .unwrap(),
+        }
+    } else {
+        thread::spawn(move || {
+            if let Err(e) = do_switch() {
+                crate::util::error(&e);
+            }
+        });
+        Response::builder()
+            .header("Content-Type", "text/html")
+            .body(Body::from(WORMHOLE_RESPONSE_HTML))
+            .unwrap()
+    }
+}
+
+pub fn vscode_url(name: &str) -> Response<Body> {
+    let key = ProjectKey::parse(name.trim());
+    let result = {
+        let projects = projects::lock();
+        projects
+            .by_key(&key)
+            .map(|p| (p.repo_name.to_string(), p.repo_path.clone()))
+    };
+
+    match result {
+        Some((project_name, project_path)) => {
+            match crate::serve_web::manager().get_or_start(&project_name, &project_path) {
+                Ok(port) => {
+                    let folder_encoded = url_encode(&project_path.to_string_lossy());
+                    let url = format!("http://localhost:{}/?folder={}", port, folder_encoded);
+                    Response::builder()
+                        .header("Content-Type", "application/json")
+                        .body(Body::from(serde_json::json!({ "url": url }).to_string()))
+                        .unwrap()
+                }
+                Err(e) => Response::builder()
+                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                    .body(Body::from(format!("Failed to start VSCode server: {}", e)))
+                    .unwrap(),
+            }
+        }
+        None => Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(Body::from(format!("Project '{}' not found", key)))
+            .unwrap(),
+    }
+}
+
+fn resolve_project(projects: &mut projects::Projects, name_or_path: &str) -> Option<ProjectPath> {
+    let key = ProjectKey::parse(name_or_path);
+    if let Some(project) = projects.by_key(&key) {
+        Some(project.as_project_path())
+    } else if name_or_path.starts_with('/') {
+        let path = std::path::PathBuf::from(name_or_path);
+        if let Some(project) = projects.by_exact_path(&path) {
+            Some(project.as_project_path())
+        } else {
+            projects.add(name_or_path, None);
+            projects.by_exact_path(&path).map(|p| p.as_project_path())
+        }
+    } else if let Some(path) = config::resolve_project_name(name_or_path) {
+        let path_str = path.to_string_lossy().to_string();
+        projects.add(&path_str, Some(name_or_path));
+        projects.by_exact_path(&path).map(|p| p.as_project_path())
+    } else {
+        None
+    }
+}
+
+pub const WORMHOLE_RESPONSE_HTML: &str =
+    "<html><body><script>window.close()</script>Sent into wormhole.</body></html>";

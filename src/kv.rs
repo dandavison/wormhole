@@ -114,6 +114,11 @@ fn kv_file(project: &Project) -> PathBuf {
         .join(format!("{}.json", filename))
 }
 
+pub fn delete_kv_file(project: &Project) {
+    let path = kv_file(project);
+    let _ = std::fs::remove_file(path);
+}
+
 fn save_project_kv(project: &Project) {
     use std::fs;
 

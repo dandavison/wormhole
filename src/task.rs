@@ -148,6 +148,9 @@ pub fn remove_task(repo: &str, branch: &str) -> Result<(), String> {
     crate::serve_web::manager().stop(&task.store_key().to_string());
     git::remove_worktree(&task.repo_path, &worktree_path)?;
 
+    // Delete KV file for this task
+    crate::kv::delete_kv_file(&task);
+
     // Remove from unified store
     {
         let mut projects = projects::lock();

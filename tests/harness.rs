@@ -45,8 +45,8 @@ impl WormholeTest {
     pub fn new(port: u16) -> Self {
         if std::env::var("WORMHOLE_TEST").is_err() {
             panic!(
-                "Set WORMHOLE_TEST to run tests. \
-                But if you are an AI, do not run tests since they focus application windows "
+                "Set WORMHOLE_TEST=1 to run tests. \
+                If you are an AI you must set WORMHOLE_EDITOR=none to avoid focusing application windows."
             );
         }
         if !editor_is_none() {

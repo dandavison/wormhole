@@ -225,16 +225,9 @@ fn test_close_task_removes_from_list() {
     test.assert_focus(Editor(&task_id));
 
     // Verify task is in project list (check name == repo AND branch == task_id)
-    let list_json = test.http_get("/project/list").unwrap();
-    let list: Value = serde_json::from_str(&list_json).unwrap();
-    let current = list["current"].as_array().unwrap();
     assert!(
-        current.iter().any(|e| {
-            e["name"].as_str() == Some(home_proj.as_str())
-                && e["branch"].as_str() == Some(task_id.as_str())
-        }),
-        "Task should be in list before close, got: {:?}",
-        current
+        test.task_in_list(&home_proj, &task_id),
+        "Task should be in list before close"
     );
 
     // Close the task using store_key format
@@ -248,16 +241,9 @@ fn test_close_task_removes_from_list() {
     );
 
     // Verify task is NOT in project list
-    let list_json = test.http_get("/project/list").unwrap();
-    let list: Value = serde_json::from_str(&list_json).unwrap();
-    let current = list["current"].as_array().unwrap();
     assert!(
-        !current.iter().any(|e| {
-            e["name"].as_str() == Some(home_proj.as_str())
-                && e["branch"].as_str() == Some(task_id.as_str())
-        }),
-        "Task should NOT be in list after close, got: {:?}",
-        current
+        !test.task_in_list(&home_proj, &task_id),
+        "Task should NOT be in list after close"
     );
 }
 
@@ -476,26 +462,12 @@ fn test_task_home_project_not_self() {
     // Cursor window title shows the folder name (branch), not the store_key
     test.assert_focus(Editor(&task_id));
 
-    // Get project list and verify task has correct name and branch
-    let list_json = test.http_get("/project/list").unwrap();
-    let list: Value = serde_json::from_str(&list_json).unwrap();
-    let current = list["current"].as_array().unwrap();
-
-    // Task has name=repo and branch=task_id
-    let task_entry = current
-        .iter()
-        .find(|e| {
-            e["name"].as_str() == Some(home_proj.as_str())
-                && e["branch"].as_str() == Some(task_id.as_str())
-        })
-        .expect("Task should be in current list with correct name and branch");
-
-    // Verify the name field is the repo, not the task_id
-    assert_eq!(
-        task_entry["name"].as_str().unwrap(),
-        &home_proj,
-        "Task's name should be the repo '{}', not the branch",
-        home_proj
+    // Verify task appears with name=repo and branch=task_id
+    assert!(
+        test.task_in_list(&home_proj, &task_id),
+        "Task should be in current list with name={} and branch={}",
+        home_proj,
+        task_id
     );
 }
 
@@ -529,20 +501,8 @@ fn test_task_switching_updates_ring_order() {
     test.assert_focus(Editor(&task_id));
 
     // Verify both are in the list
-    let list_json = test.http_get("/project/list").unwrap();
-    let list: Value = serde_json::from_str(&list_json).unwrap();
-    let current = list["current"].as_array().unwrap();
-
-    // Project entry has just name, task entry has name and branch
-    let has_project = current
-        .iter()
-        .any(|e| e["name"].as_str() == Some(home_proj.as_str()) && e["branch"].is_null());
-    let has_task = current.iter().any(|e| {
-        e["name"].as_str() == Some(home_proj.as_str())
-            && e["branch"].as_str() == Some(task_id.as_str())
-    });
-    assert!(has_project, "Home project should be in list");
-    assert!(has_task, "Task should be in list");
+    assert!(test.project_in_list(&home_proj), "Home project should be in list");
+    assert!(test.task_in_list(&home_proj, &task_id), "Task should be in list");
 
     // Toggle back via previous - should go to home project
     test.http_get("/project/previous").unwrap();
@@ -651,20 +611,8 @@ fn test_tasks_persist_after_tmux_window_closed() {
         .unwrap();
 
     // Verify both tasks are in the project list
-    let list_json = test.http_get("/project/list").unwrap();
-    let list: Value = serde_json::from_str(&list_json).unwrap();
-    let current = list["current"].as_array().unwrap();
-
-    let has_task_1 = current.iter().any(|e| {
-        e["name"].as_str() == Some(home_proj.as_str())
-            && e["branch"].as_str() == Some(task_1.as_str())
-    });
-    let has_task_2 = current.iter().any(|e| {
-        e["name"].as_str() == Some(home_proj.as_str())
-            && e["branch"].as_str() == Some(task_2.as_str())
-    });
-    assert!(has_task_1, "Task 1 should be in list initially");
-    assert!(has_task_2, "Task 2 should be in list initially");
+    assert!(test.task_in_list(&home_proj, &task_1), "Task 1 should be in list initially");
+    assert!(test.task_in_list(&home_proj, &task_2), "Task 2 should be in list initially");
 
     // Kill task 1's tmux window directly (bypassing wormhole's close_project)
     test.kill_tmux_window(&task_1_key);
@@ -676,24 +624,11 @@ fn test_tasks_persist_after_tmux_window_closed() {
     );
 
     // Both tasks should STILL be in the list (tasks persist regardless of tmux windows)
-    let list_json = test.http_get("/project/list").unwrap();
-    let list: Value = serde_json::from_str(&list_json).unwrap();
-    let current = list["current"].as_array().unwrap();
-
-    let has_task_1_after = current.iter().any(|e| {
-        e["name"].as_str() == Some(home_proj.as_str())
-            && e["branch"].as_str() == Some(task_1.as_str())
-    });
-    let has_task_2_after = current.iter().any(|e| {
-        e["name"].as_str() == Some(home_proj.as_str())
-            && e["branch"].as_str() == Some(task_2.as_str())
-    });
-
     assert!(
-        has_task_1_after,
+        test.task_in_list(&home_proj, &task_1),
         "Task 1 should STILL be in list after tmux window closed"
     );
-    assert!(has_task_2_after, "Task 2 should still be in list");
+    assert!(test.task_in_list(&home_proj, &task_2), "Task 2 should still be in list");
 }
 
 #[test]
@@ -834,23 +769,12 @@ fn test_tasks_appear_without_terminal_windows() {
     // Give a moment for refresh to complete
     std::thread::sleep(std::time::Duration::from_millis(500));
 
-    // Get project list
-    let response = test.http_get("/project/list").unwrap();
-    let data: Value = serde_json::from_str(&response).unwrap();
-    let current = data["current"].as_array().expect("current should be array");
-
     // The task should appear in the list even though it has no terminal window
-    let task_store_key = format!("{}:{}", home_proj, task_branch);
-    let task_entry = current.iter().find(|e| {
-        e["name"].as_str() == Some(home_proj.as_str())
-            && e["branch"].as_str() == Some(task_branch.as_str())
-    });
-
     assert!(
-        task_entry.is_some(),
-        "Task '{}' should appear in project list even without terminal window. Got: {:?}",
-        task_store_key,
-        current
+        test.task_in_list(&home_proj, &task_branch),
+        "Task '{}:{}' should appear in project list even without terminal window",
+        home_proj,
+        task_branch
     );
 }
 
@@ -897,14 +821,10 @@ fn test_switch_to_project_when_task_exists() {
     test.http_post("/project/refresh-tasks").unwrap();
 
     // Verify task is discovered
-    let response = test.http_get("/project/list").unwrap();
-    let data: Value = serde_json::from_str(&response).unwrap();
-    let current = data["current"].as_array().expect("current should be array");
-    let has_task = current.iter().any(|e| {
-        e["name"].as_str() == Some(home_proj.as_str())
-            && e["branch"].as_str() == Some(task_branch.as_str())
-    });
-    assert!(has_task, "Task should be discovered after refresh");
+    assert!(
+        test.task_in_list(&home_proj, &task_branch),
+        "Task should be discovered after refresh"
+    );
 
     // Switch to the task first (so it's the most recent)
     let task_key = test.task_store_key(&task_branch, &home_proj);
@@ -922,14 +842,8 @@ fn test_switch_to_project_when_task_exists() {
     test.assert_tmux_cwd(&home_dir);
 
     // Also verify the project (not task) is in the list
-    let response = test.http_get("/project/list").unwrap();
-    let data: Value = serde_json::from_str(&response).unwrap();
-    let current = data["current"].as_array().expect("current should be array");
-    let has_project = current
-        .iter()
-        .any(|e| e["name"].as_str() == Some(home_proj.as_str()) && e["branch"].is_null());
     assert!(
-        has_project,
+        test.project_in_list(&home_proj),
         "Project '{}' (without branch) should be in list after switching to it",
         home_proj
     );
@@ -991,19 +905,9 @@ fn test_switch_creates_task_from_colon_syntax() {
     test.http_post("/project/refresh").unwrap();
     std::thread::sleep(std::time::Duration::from_millis(300));
 
-    let response = test.http_get("/project/list").unwrap();
-    let data: Value = serde_json::from_str(&response).unwrap();
-    let current = data["current"].as_array().expect("current should be array");
-
-    let task_entry = current.iter().find(|e| {
-        e["name"].as_str() == Some(home_proj.as_str())
-            && e["branch"].as_str() == Some(task_branch.as_str())
-    });
-
     assert!(
-        task_entry.is_some(),
-        "Task '{}' should be created via colon syntax. Got: {:?}",
-        task_key,
-        current
+        test.task_in_list(&home_proj, &task_branch),
+        "Task '{}' should be created via colon syntax",
+        task_key
     );
 }

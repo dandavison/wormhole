@@ -79,7 +79,8 @@ impl WormholeTest {
         let uid = String::from_utf8_lossy(&uid.stdout).trim().to_string();
         let socket_path = format!("/private/tmp/tmux-{}/{}", uid, socket_name);
 
-        let mut env_vars: Vec<(&str, &str)> = vec![("WORMHOLE_TMUX", &socket_path)];
+        let mut env_vars: Vec<(&str, &str)> =
+            vec![("WORMHOLE_TMUX", &socket_path), ("WORMHOLE_OFFLINE", "1")];
         let wormhole_editor = std::env::var("WORMHOLE_EDITOR").ok();
         if let Some(ref editor) = wormhole_editor {
             env_vars.push(("WORMHOLE_EDITOR", editor));

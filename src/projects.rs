@@ -199,11 +199,6 @@ impl<'a> Projects<'a> {
             .cloned()
     }
 
-    pub fn by_exact_path(&self, path: &Path) -> Option<Project> {
-        let path = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-        self.0.all.values().find(|p| p.repo_path == path).cloned()
-    }
-
     pub fn by_key(&self, key: &ProjectKey) -> Option<Project> {
         self.0.all.get(key).cloned()
     }

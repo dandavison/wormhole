@@ -565,12 +565,15 @@ fn resolve_project(projects: &mut projects::Projects, name_or_path: &str) -> Opt
         Some(project.as_project_path())
     } else if name_or_path.starts_with('/') {
         let path = std::path::PathBuf::from(name_or_path);
-        if let Some(project) = projects.by_exact_path(&path) {
-            Some(project.as_project_path())
-        } else {
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(name_or_path);
+        let key = ProjectKey::project(name);
+        if projects.by_key(&key).is_none() {
             projects.add(name_or_path, None);
-            projects.by_exact_path(&path).map(|p| p.as_project_path())
         }
+        projects.by_key(&key).map(|p| p.as_project_path())
     } else if let Some(path) = config::resolve_project_name(name_or_path) {
         let path_str = path.to_string_lossy().to_string();
         projects.add(&path_str, Some(name_or_path));

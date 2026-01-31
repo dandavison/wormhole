@@ -48,11 +48,6 @@ pub enum JiraCommand {
         #[command(subcommand)]
         command: Option<SprintCommand>,
     },
-    /// Task operations
-    Task {
-        #[command(subcommand)]
-        command: TaskCommand,
-    },
 }
 
 #[derive(Subcommand)]
@@ -201,6 +196,12 @@ pub enum Command {
     Jira {
         #[command(subcommand)]
         command: JiraCommand,
+    },
+
+    /// Task operations (create from JIRA URL or sprint)
+    Task {
+        #[command(subcommand)]
+        command: TaskCommand,
     },
 
     /// Generate shell completions
@@ -687,12 +688,13 @@ pub fn run(command: Command) -> Result<(), String> {
                 Some(SprintCommand::List { output }) => sprint_list(&client, &output),
                 Some(SprintCommand::Show { output }) => sprint_show(&output),
             },
-            JiraCommand::Task { command } => match command {
-                TaskCommand::Create { url, home_project } => {
-                    task_create_from_url(&client, &url, home_project)
-                }
-                TaskCommand::CreateFromSprint => task_create_from_sprint(&client),
-            },
+        },
+
+        Command::Task { command } => match command {
+            TaskCommand::Create { url, home_project } => {
+                task_create_from_url(&client, &url, home_project)
+            }
+            TaskCommand::CreateFromSprint => task_create_from_sprint(&client),
         },
 
         Command::Completion {

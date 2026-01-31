@@ -26,7 +26,9 @@ local neighborCurrentIdx = nil    -- current position in neighborDisplayOrder
 local neighborEditorWindows = nil -- cached set of projects with editor windows
 local refreshNeighborOverlay      -- forward declaration
 
--- Get set of project names that have editor windows open (Cursor/Code)
+-- Get set of project keys that have editor windows open (Cursor/Code)
+-- Window titles are "filename - projectkey" or just "projectkey"
+-- where projectkey is "repo" or "repo:branch"
 local function getEditorWindows()
     local projects = {}
     for _, appName in ipairs({ "Cursor", "Code" }) do
@@ -34,10 +36,13 @@ local function getEditorWindows()
         if app then
             for _, win in ipairs(app:allWindows()) do
                 local title = win:title() or ""
-                -- Extract project name from window title (typically "filename - projectname")
-                local project = title:match(" %- ([^%-]+)$")
+                -- Try "filename - projectkey" format (handles both hyphen and em-dash)
+                local project = title:match(" [%-–—] ([^%-–—]+)$")
                 if project then
                     projects[project] = true
+                else
+                    -- Window might just show the workspace name
+                    projects[title] = true
                 end
             end
         end
@@ -123,14 +128,8 @@ end
 -- Check if target project has an editor window (using cached data if available)
 local function hasEditorWindow(item)
     if not neighborEditorWindows then return true end -- assume yes if not cached
-    if item.branch then
-        -- For tasks, check both "repo:branch" and just the branch
-        return neighborEditorWindows[item.name .. ":" .. item.branch]
-            or neighborEditorWindows[item.branch]
-            or neighborEditorWindows[item.name]
-    else
-        return neighborEditorWindows[item.name]
-    end
+    local key = item.branch and (item.name .. ":" .. item.branch) or item.name
+    return neighborEditorWindows[key]
 end
 
 function M.previous()

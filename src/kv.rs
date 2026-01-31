@@ -1,7 +1,7 @@
 use hyper::{Body, Response, StatusCode};
 use rayon::prelude::*;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::config;
 use crate::git;
@@ -99,8 +99,16 @@ fn wormhole_dir(project: &Project) -> PathBuf {
 
 fn kv_file(project: &Project) -> PathBuf {
     // Use store_key for filename to differentiate tasks from same repo
-    // Replace : with _ in filename since : is not valid in filenames on some systems
-    let filename = project.store_key().to_string().replace(':', "_");
+    // Encode branch to handle / and other special characters
+    let key = &project.store_key();
+    let filename = match &key.branch {
+        Some(branch) => format!(
+            "{}_{}",
+            key.repo,
+            crate::git::encode_branch_for_path(branch.as_str())
+        ),
+        None => key.repo.to_string(),
+    };
     wormhole_dir(project)
         .join("kv")
         .join(format!("{}.json", filename))
@@ -197,8 +205,16 @@ pub fn list_all_kv_fresh() -> Response<Body> {
     Response::new(Body::from(json))
 }
 
-fn kv_file_for_key(key: &ProjectKey, repo_path: &PathBuf) -> PathBuf {
-    let filename = key.to_string().replace(':', "_");
+fn kv_file_for_key(key: &ProjectKey, repo_path: &Path) -> PathBuf {
+    // Encode branch to handle / and other special characters
+    let filename = match &key.branch {
+        Some(branch) => format!(
+            "{}_{}",
+            key.repo,
+            crate::git::encode_branch_for_path(branch.as_str())
+        ),
+        None => key.repo.to_string(),
+    };
     git::git_common_dir(repo_path)
         .join("wormhole")
         .join("kv")

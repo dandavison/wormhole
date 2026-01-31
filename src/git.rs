@@ -189,6 +189,10 @@ pub fn worktree_base_path(repo_path: &Path) -> PathBuf {
     git_common_dir(repo_path).join("wormhole/worktrees")
 }
 
+pub fn encode_branch_for_path(branch: &str) -> String {
+    url::form_urlencoded::byte_serialize(branch.as_bytes()).collect()
+}
+
 pub fn remove_worktree(repo_path: &Path, worktree_path: &Path) -> Result<(), String> {
     let output = Command::new("git")
         .args([
@@ -384,4 +388,22 @@ detached
         assert!(result.is_ok(), "create_worktree failed: {:?}", result);
         assert!(worktree_path.exists());
     }
+
+    #[test]
+    fn test_encode_branch_for_path() {
+        // Simple branch names pass through unchanged
+        assert_eq!(encode_branch_for_path("main"), "main");
+        assert_eq!(encode_branch_for_path("ACT-123"), "ACT-123");
+
+        // Branch names with / are URL-encoded to stay flat
+        assert_eq!(encode_branch_for_path("feature/auth"), "feature%2Fauth");
+        assert_eq!(
+            encode_branch_for_path("feature/nested/deep"),
+            "feature%2Fnested%2Fdeep"
+        );
+
+        // Other special characters that might appear in branch names
+        assert_eq!(encode_branch_for_path("fix-bug#123"), "fix-bug%23123");
+    }
+
 }

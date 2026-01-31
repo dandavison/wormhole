@@ -1073,6 +1073,21 @@ fn test_switch_to_project_when_task_exists() {
         "Project '{}' (without branch) should be in list after switching to it",
         home_proj
     );
+
+    // PART 2: Test switching by absolute PATH (not name)
+    // This exercises a different code path in resolve_project that also had the bug.
+
+    // Switch to task first
+    test.http_get(&format!("/project/switch/{}?sync=1", task_key))
+        .unwrap();
+    test.assert_tmux_cwd(&task_dir);
+
+    // Now switch by absolute path to the project directory
+    test.http_get(&format!("/project/switch/{}?sync=1", home_dir))
+        .unwrap();
+
+    // Should be in project dir, not task dir
+    test.assert_tmux_cwd(&home_dir);
 }
 
 #[test]

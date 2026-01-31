@@ -574,7 +574,7 @@ fn resolve_project(projects: &mut projects::Projects, name_or_path: &str) -> Opt
     } else if let Some(path) = config::resolve_project_name(name_or_path) {
         let path_str = path.to_string_lossy().to_string();
         projects.add(&path_str, Some(name_or_path));
-        projects.by_exact_path(&path).map(|p| p.as_project_path())
+        projects.by_key(&key).map(|p| p.as_project_path())
     } else {
         None
     }

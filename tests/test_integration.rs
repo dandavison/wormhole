@@ -349,6 +349,9 @@ fn test_pin() {
         "Expected land-in=editor after pinning in editor"
     );
 
+    // Wait for the pin alert animation to finish (0.5s) before changing focus
+    std::thread::sleep(std::time::Duration::from_millis(600));
+
     // Focus terminal and pin again
     test.focus_terminal();
     test.assert_focus(Terminal(&proj));

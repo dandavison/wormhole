@@ -1106,16 +1106,15 @@ fn render_project_item(item: &serde_json::Value) -> String {
     let task_display = crate::format_osc8_hyperlink(&task_url, &store_key);
 
     let jira_instance = std::env::var("JIRA_INSTANCE").ok();
-    let (jira_key, status, summary) = item
+    let (jira_key, status) = item
         .get("jira")
         .map(|j| {
             (
                 j.get("key").and_then(|k| k.as_str()).unwrap_or(""),
                 j.get("status").and_then(|s| s.as_str()).unwrap_or(""),
-                j.get("summary").and_then(|s| s.as_str()).unwrap_or(""),
             )
         })
-        .unwrap_or(("", "", ""));
+        .unwrap_or(("", ""));
 
     let pr_display = item
         .get("pr")
@@ -1148,12 +1147,11 @@ fn render_project_item(item: &serde_json::Value) -> String {
     let pad = 40_usize.saturating_sub(store_key.len());
 
     format!(
-        "{} {}{} {}  {}{}",
+        "{} {}{} {}{}",
         emoji,
         task_display,
         " ".repeat(pad),
         jira_display,
-        summary,
         pr_display
     )
 }
@@ -1410,7 +1408,7 @@ mod tests {
 
     #[test]
     fn test_render_project_item_task_with_jira() {
-        // Task with JIRA info - shows emoji, task, JIRA key, summary
+        // Task with JIRA info - shows emoji, task, JIRA key (no summary)
         let item = serde_json::json!({
             "name": "cli",
             "branch": "standalone-activity",
@@ -1432,8 +1430,8 @@ mod tests {
         );
         assert!(rendered.contains("ACT-107"), "Should contain JIRA key");
         assert!(
-            rendered.contains("Standalone activity CLI integration"),
-            "Should contain summary"
+            !rendered.contains("Standalone activity CLI integration"),
+            "Should not contain summary"
         );
     }
 

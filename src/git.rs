@@ -189,6 +189,18 @@ pub fn worktree_base_path(repo_path: &Path) -> PathBuf {
     git_common_dir(repo_path).join("wormhole/worktrees")
 }
 
+pub fn encode_branch_for_path(branch: &str) -> String {
+    url::form_urlencoded::byte_serialize(branch.as_bytes()).collect()
+}
+
+#[allow(dead_code)]
+pub fn decode_branch_from_path(encoded: &str) -> String {
+    url::form_urlencoded::parse(encoded.as_bytes())
+        .map(|(k, _)| k.into_owned())
+        .next()
+        .unwrap_or_else(|| encoded.to_string())
+}
+
 pub fn remove_worktree(repo_path: &Path, worktree_path: &Path) -> Result<(), String> {
     let output = Command::new("git")
         .args([
@@ -383,5 +395,33 @@ detached
         let result = create_worktree(&repo, &worktree_path, "ACT-123");
         assert!(result.is_ok(), "create_worktree failed: {:?}", result);
         assert!(worktree_path.exists());
+    }
+
+    #[test]
+    fn test_encode_branch_for_path() {
+        // Simple branch names pass through unchanged
+        assert_eq!(encode_branch_for_path("main"), "main");
+        assert_eq!(encode_branch_for_path("ACT-123"), "ACT-123");
+
+        // Branch names with / are URL-encoded to stay flat
+        assert_eq!(encode_branch_for_path("feature/auth"), "feature%2Fauth");
+        assert_eq!(
+            encode_branch_for_path("feature/nested/deep"),
+            "feature%2Fnested%2Fdeep"
+        );
+
+        // Other special characters that might appear in branch names
+        assert_eq!(encode_branch_for_path("fix-bug#123"), "fix-bug%23123");
+    }
+
+    #[test]
+    fn test_decode_branch_from_path() {
+        // Round-trip encoding
+        assert_eq!(decode_branch_from_path("main"), "main");
+        assert_eq!(decode_branch_from_path("feature%2Fauth"), "feature/auth");
+        assert_eq!(
+            decode_branch_from_path("feature%2Fnested%2Fdeep"),
+            "feature/nested/deep"
+        );
     }
 }

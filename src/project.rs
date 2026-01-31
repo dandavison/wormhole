@@ -110,9 +110,10 @@ impl Project {
     }
 
     pub fn worktree_path(&self) -> Option<PathBuf> {
-        self.branch
-            .as_ref()
-            .map(|branch| git::worktree_base_path(&self.repo_path).join(branch.as_str()))
+        self.branch.as_ref().map(|branch| {
+            git::worktree_base_path(&self.repo_path)
+                .join(git::encode_branch_for_path(branch.as_str()))
+        })
     }
 
     pub fn working_dir(&self) -> PathBuf {

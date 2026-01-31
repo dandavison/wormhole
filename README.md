@@ -1,66 +1,76 @@
-Wormhole manages a collection of 'projects'.
+Wormhole is a tool for working on software projects.
 
-Each project is a git repo: it has a tmux window with that repo as the CWD, and it has an IDE workspace in that repo.
+- A set of directories is specified in `WORMHOLE_PATH`. The set of _available repos_ is the union of
+  the git repo directories that are located at the top level in one of those directories. These may
+  be submodules, or top-level git repos.
 
-`wormhole project switch my-project` communicates with tmux and your OS window manager so that the tmux window and IDE workspace are selected. You have control over which of the two applications is focused.
+- A _task_ is a `(repo, branch)` pair: a branch in some git repository. The branch has a short
+  descriptive name that acts as the name of the task.
 
-Some projects are 'tasks'. A task is a project for which the CWD is a git worktree directory, rather than the "real" project directory.
+- Wormhole will ensure that a git worktree for the task exists. The worktree always has `$branch`
+  checked out. You always work on the task in the worktree: never in the main repo dir. Wormhole can
+  thus determine all known tasks by enumerating worktrees of available repos.
+
+-  In practive, wormhole stores its worktrees at `$gitdir/wormhole/worktrees/$branch`. If the repo
+  directory is not a submodule then `$gitdir` is `$dir/.git`; if it is a submodule then `$gitdir` is
+  the gitdir entry specified in the `$dir/.git` file.
+
+- A _task_ is a type of _project_. Each repo is a non-task _project_. A non-task project has no
+  associated branch. Thus the set of projects is the union of the _available repos_ and the
+  worktrees of those repos. We assume that all repo worktrees are wormhole worktrees.
+
+- The point of truth for what projects and tasks exist is this filesystem state. The only data
+  persisted by wormhole itself is associated with the `wormhole kv` interface. It is stored in JSON
+  files named `$gitdir/wormhole/kv/$branch.json`, where `$gitdir` is as defined above for the
+  submodule and non-submodule cases. For example, if a task has an associated JIRA ticket, then
+  wormhole stores the JIRA identifier in kv. (A task may also have an associated GitHub PR but that
+  does not need to be stored in kv since the `gh` CLI can discover it using the repo remote that is
+  stored by git on disk.)
+
+- Wormhole is a process exposing an HTTP API, with a CLI client that is a thin wrapper over the HTTP
+  API. The CLI API includes `wormhole project list`, `wormhole task list`, `wormhole task create`,
+  `wormhole project switch`, etc.
+
+- On server start, `wormhole project list` lists all tasks discovered on disk.
+
+- After switching to a project via `wormhole project switch`, wormhole ensures that the following
+  things are true: (1) a terminal tmux window for the project exists, (2) an editor workspace for
+  the project exists, (3) one or the other of these applications is given focus (the user can
+  control which by using `wormhole project pin` to store the preference in kv).
+
+- The following sorts of hyperlinks can thus be created:
+  - Go to the terminal tmux window for a specified project or task
+  - Go to the editor worskpace for a specified project or task
+  - Go to the editor worskpace for a specified project or task and open a specified line in a
+    specified file.
+
+- Wormhole has a browser extension. It re-routes GitHub format URLs to wormhole. On JIRA issue pages
+  or GitHub PR pages that match a wormhole task it adds buttons linking to the tmux window and the
+  editor workspace. A third button brings up an embedded vscode session in an iframe, on the same
+  task workspace.
+
+- Wormhole serves a dashboard with a card for each task. Each card has the same 3 buttons linking to
+  terminal, editor, and embedded vscode.
+
+- The server-side handlers for wormhole API operations typically do no network or disk I/O, instead
+  using in-memory data about projects. `wormhole refresh` causes this data to be refreshed by
+  discovering and querying git worktrees, performing JIRA API calls to fetch latest JIRA ticket
+  data, using `gh` to discover PRs and fetch latest PR data, etc.
+
+- Wormhole has some hammerspoon lua code binding keys to wormhole client actions.
+
+- Wormhole has a GUI application written in Swift exposing a project selector interface for
+  switching to projects.
+
+- Wormhole has some shell code (1) creating a prompt in zsh that displays the repo and branch with
+  OSC8 hyperlinks, and (2) exposing a `cd` utility that `cd`s to the project root dir.
 
 
-A task should evolve through a state machine to reach a terminal state. Wormhole reports on what stage the task is at (`wormhole project show`) by reading relevant state from JIRA, GitHub, and local files (e.g. does a plan.md exist? Is there a JIRA ticket and what state is it in? Is there a PR and is it draft or open for review?).
+_This is a personal project under development, implemented only for MacOS (e.g. it uses hammerspoon
+in places, and the `open` command). The terminal emulator must either be Alacritty+Tmux or Wezterm.
+VSCode/Cursor is the only editor tested. It could be made to work with other editors (e.g. JetBrains
+products)._
 
-
-## Task modeling
-
-I'm wondering about changing to the following scheme:
-
-Fundamentally, the important thing is that there may be, on my laptop, branches with valuable in-progress work in them. Those branches may be checked out in a worktree.
-
-I think that a "task" is really a (repo, branch). When we work on a task, we'll always do that in a worktree. But the worktree location is not fundamental to the task's identity: the branch is.
-
-I'm not sure we need to worry about "migration". wormhole has no database; it acquires its state from reading the state on disk; that state on disk is our point of truth.
-
-What do you think the right data model is? Perhaps
-
-struct Project {
-  path: PathBuf
-  branch: Option<String> // it's a task iff this is set
-  ...
-}
-
-If a task's worktree is always at a location that can be computed from (repo_root, task_name) then why does the task struct need a path distict from the repo root path?
-
-If a shell prompt shows MY_TASK_NAME(my-branch) then how do I even know what repo I'm in?
-
-My usual shell prompt (before we introduced "tasks") was my-repo(my-branch). Maybe a task should just be my-repo(my-branch*) ?
-
-Why do I even want to see task names such as ACT-108 at all? I don't remember jira numbers.
-
-So maybe a task worktree should be stored at .git/wormhole/worktrees/my-branch? Giving worktrees names independent of their branch is based on the idea of the worktree being a long-lived "work area" in which one may work on many branches, I think. But that's not our model: in wormhole the lifetime of a worktree is the lifetime of the task. And the branch of the task is an immutable slug that, when interpreted in combination with the repo, describes what the task is.
-
-That does raise questions about whether we might want tasks that comprise multiple branches in multiple repos. But, I wonder whether we should cross that bridge when we come to it.
-
-
-## Switching projects
-
-When you switch between projects, two things should happen:
-
-1. Your editor should switch to the new project workspace.
-2. Your terminal emulator should switch to a window with a shell process in the new project directory.
-
-In addition, when you click on a terminal hyperlink to a file, it should open the file in the correct project workspace, with the correct terminal window focused.
-Links to files in GitHub should do the same, if you don't want them to open in a web browser.
-
-The aim of Wormhole is to make the above things happen.
-
-Wormhole is for people who:
-- work on multiple projects/repositories concurrently
-- use an editor that does not run in the terminal
-- use a terminal application that is separate from their editor
-- use MacOS (it uses hammerspoon)
-
-
-_This is a personal project under development, implemented only for MacOS (e.g. it uses hammerspoon in places, and the `open` command). The terminal emulator must either be Alacritty+Tmux or Wezterm. VSCode/Cursor is the only editor tested. It could be made to work with other editors (e.g. JetBrains products)._
 
 ## Installation
 

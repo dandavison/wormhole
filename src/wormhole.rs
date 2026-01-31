@@ -1,9 +1,7 @@
 use std::convert::Infallible;
 use std::thread;
 
-use crate::config;
 use crate::endpoints;
-use crate::project::ProjectKey;
 use crate::project_path::ProjectPath;
 use crate::projects;
 use crate::projects::Mutation;
@@ -40,385 +38,120 @@ pub struct QueryParams {
 
 pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
     let method = req.method().clone();
-    let uri = req.uri();
+    let uri = req.uri().clone();
     let path = uri.path().to_string();
 
-    // Handle CORS preflight
     if method == Method::OPTIONS {
         return Ok(cors_response(Response::new(Body::from(""))));
     }
 
-    if &path == "/favicon.ico" {
+    if path == "/favicon.ico" {
         return Ok(Response::new(Body::from("")));
     }
+
     let params = QueryParams::from_query(uri.query());
-    if &path != "/project/list" {
+    if path != "/project/list" {
         ps!("{} {} {:?}", method, uri, params);
     }
-    if &path == "/project/list" {
-        Ok(endpoints::list_projects())
-    } else if &path == "/project/neighbors" {
-        let projects = projects::lock();
-        let ring: Vec<serde_json::Value> = projects
-            .all()
-            .iter()
-            .map(|p| {
-                let mut obj = serde_json::json!({ "name": p.repo_name });
-                if let Some(branch) = &p.branch {
-                    obj["branch"] = serde_json::json!(branch);
-                }
-                obj
-            })
-            .collect();
-        let json = serde_json::json!({ "ring": ring });
-        Ok(Response::new(Body::from(json.to_string())))
-    } else if &path == "/project/debug" {
-        Ok(endpoints::debug_projects())
-    } else if &path == "/dashboard" {
-        Ok(endpoints::dashboard())
-    } else if &path == "/shell" {
-        let shell_code = if let Some(pwd) = &params.pwd {
-            let path = std::path::Path::new(pwd);
-            let projects = projects::lock();
-            if let Some(project) = projects.by_path(path) {
-                crate::terminal::shell_env_code(&project)
-            } else {
-                String::new()
-            }
-        } else {
-            String::new()
-        };
-        Ok(Response::new(Body::from(shell_code)))
-    } else if &path == "/project/previous" {
-        let p = {
-            let mut projects = projects::lock();
-            let pp = projects.previous().map(|p| p.as_project_path());
-            if let Some(ref pp) = pp {
-                projects.apply(Mutation::RotateLeft, &pp.project.store_key());
-            }
-            pp
-        };
-        if let Some(project_path) = p {
-            let land_in = params.land_in.clone();
-            let skip_editor = params.skip_editor;
-            thread::spawn(move || {
-                project_path.open_with_options(Mutation::None, land_in, skip_editor)
-            });
-        }
-        Ok(Response::new(Body::from("")))
-    } else if &path == "/project/next" {
-        let p = {
-            let mut projects = projects::lock();
-            let pp = projects.next().map(|p| p.as_project_path());
-            if let Some(ref pp) = pp {
-                projects.apply(Mutation::RotateRight, &pp.project.store_key());
-            }
-            pp
-        };
-        if let Some(project_path) = p {
-            let land_in = params.land_in.clone();
-            let skip_editor = params.skip_editor;
-            thread::spawn(move || {
-                project_path.open_with_options(Mutation::None, land_in, skip_editor)
-            });
-        }
-        Ok(Response::new(Body::from("")))
-    } else if let Some(name) = path.strip_prefix("/project/remove/") {
-        if method != Method::POST {
-            return Ok(Response::builder()
-                .status(StatusCode::METHOD_NOT_ALLOWED)
-                .body(Body::from(
-                    "Method not allowed. Use POST for /project/remove/",
-                ))
-                .unwrap());
-        }
-        let name = name.trim();
-        // Check if it's a task (store_key format "repo:branch")
-        if let Some((repo, branch)) = name.split_once(':') {
-            if let Some(task) = crate::task::get_task_by_branch(repo, branch) {
-                if task.is_task() {
-                    match crate::task::remove_task(repo, branch) {
-                        Ok(()) => {
-                            return Ok(Response::new(Body::from(format!("Removed task: {}", name))))
-                        }
-                        Err(e) => {
-                            return Ok(Response::builder()
-                                .status(StatusCode::BAD_REQUEST)
-                                .body(Body::from(e))
-                                .unwrap())
-                        }
-                    }
-                }
-            }
-        }
-        Ok(endpoints::remove_project(name))
-    } else if let Some(name) = path.strip_prefix("/project/close/") {
-        if method != Method::POST {
-            return Ok(Response::builder()
-                .status(StatusCode::METHOD_NOT_ALLOWED)
-                .body(Body::from(
-                    "Method not allowed. Use POST for /project/close/",
-                ))
-                .unwrap());
-        }
-        let name = name.trim().to_string();
-        thread::spawn(move || endpoints::close_project(&name));
-        Ok(Response::new(Body::from("")))
-    } else if path == "/project/pin" {
-        if method != Method::POST {
-            return Ok(Response::builder()
-                .status(StatusCode::METHOD_NOT_ALLOWED)
-                .body(Body::from("Method not allowed. Use POST for /project/pin"))
-                .unwrap());
-        }
-        thread::spawn(endpoints::pin_current);
-        Ok(Response::new(Body::from("Pinning current state...")))
-    } else if path == "/project/show" || path.starts_with("/project/show/") {
-        let name = path.strip_prefix("/project/show/").map(|s| s.trim());
-        let status = if let Some(n) = name.filter(|s| !s.is_empty()) {
-            crate::status::get_status_by_name(n)
-        } else {
-            crate::status::get_current_status()
-        };
-        match status {
-            Some(s) => {
-                let json = serde_json::to_string_pretty(&s).unwrap_or_default();
-                Ok(Response::builder()
-                    .header("Content-Type", "application/json")
-                    .body(Body::from(json))
-                    .unwrap())
-            }
-            None => Ok(Response::builder()
-                .status(StatusCode::NOT_FOUND)
-                .body(Body::from("Project not found"))
-                .unwrap()),
-        }
-    } else if path == "/project/describe" {
-        if method != Method::POST {
-            return Ok(cors_response(
-                Response::builder()
-                    .status(StatusCode::METHOD_NOT_ALLOWED)
-                    .body(Body::from("Use POST"))
-                    .unwrap(),
-            ));
-        }
-        let body_bytes = hyper::body::to_bytes(req.into_body()).await.unwrap();
-        let request: Result<crate::describe::DescribeRequest, _> =
-            serde_json::from_slice(&body_bytes);
-        match request {
-            Ok(req) => {
-                let response = crate::describe::describe(&req);
-                let json = serde_json::to_string_pretty(&response).unwrap_or_default();
-                Ok(cors_response(
-                    Response::builder()
-                        .header("Content-Type", "application/json")
-                        .body(Body::from(json))
-                        .unwrap(),
-                ))
-            }
-            Err(e) => Ok(cors_response(
-                Response::builder()
-                    .status(StatusCode::BAD_REQUEST)
-                    .body(Body::from(format!("Invalid JSON: {}", e)))
-                    .unwrap(),
-            )),
-        }
-    } else if path == "/project/refresh" {
-        if method != Method::POST {
-            return Ok(Response::builder()
-                .status(StatusCode::METHOD_NOT_ALLOWED)
-                .body(Body::from("Use POST"))
-                .unwrap());
-        }
-        endpoints::refresh_all();
-        Ok(Response::new(Body::from("")))
-    } else if let Some(name) = path.strip_prefix("/project/refresh/") {
-        if method != Method::POST {
-            return Ok(Response::builder()
-                .status(StatusCode::METHOD_NOT_ALLOWED)
-                .body(Body::from("Use POST"))
-                .unwrap());
-        }
-        let key = ProjectKey::parse(name.trim());
-        let mut projects = projects::lock();
-        if let Some(project) = projects.get_mut(&key) {
-            crate::github::refresh_github_info(project);
-            let json = serde_json::json!({
-                "name": project.repo_name,
-                "github_pr": project.github_pr,
-                "github_repo": project.github_repo,
-            });
-            Ok(Response::builder()
-                .header("Content-Type", "application/json")
-                .body(Body::from(serde_json::to_string_pretty(&json).unwrap()))
-                .unwrap())
-        } else {
-            Ok(Response::builder()
-                .status(StatusCode::NOT_FOUND)
-                .body(Body::from(format!("Project '{}' not found", key)))
-                .unwrap())
-        }
-    } else if let Some(branch) = path.strip_prefix("/project/create/") {
-        let branch = branch.trim();
-        let repo = match params.home_project.as_deref() {
-            Some(r) => r,
-            None => {
-                return Ok(Response::builder()
-                    .status(StatusCode::BAD_REQUEST)
-                    .body(Body::from("home-project query param required"))
-                    .unwrap())
-            }
-        };
-        match crate::task::create_task(repo, branch) {
-            Ok(task) => Ok(Response::new(Body::from(format!(
-                "Created task: {}",
-                task.store_key()
-            )))),
-            Err(e) => Ok(Response::builder()
-                .status(StatusCode::BAD_REQUEST)
-                .body(Body::from(e))
-                .unwrap()),
-        }
-    } else if let Some(name_or_path) = path.strip_prefix("/project/switch/") {
-        let name_or_path = name_or_path.trim().to_string();
-        let repo = params.home_project.clone();
-        let branch = params.branch.clone();
-        let land_in = params.land_in.clone();
-        let skip_editor = params.skip_editor;
-        let focus_terminal = params.focus_terminal;
-        let do_switch = move || -> Result<(), String> {
-            // If both repo and branch provided, open as task
-            if let (Some(repo), Some(branch)) = (repo.as_ref(), branch.as_ref()) {
-                return crate::task::open_task(repo, branch, land_in, skip_editor, focus_terminal);
-            }
-            // Check if name_or_path is a store_key format "repo:branch"
-            if let Some((repo, branch)) = name_or_path.split_once(':') {
-                // Create task if it doesn't exist, then open it
-                return crate::task::open_task(repo, branch, land_in, skip_editor, focus_terminal);
-            }
-            // Otherwise, treat as regular project
-            let project_path = {
-                let mut projects = projects::lock();
-                resolve_project(&mut projects, &name_or_path)
-            };
-            if let Some(pp) = project_path {
-                pp.open(Mutation::Insert, land_in);
-            }
-            Ok(())
-        };
-        if params.sync {
-            match do_switch() {
-                Ok(()) => Ok(cors_response(Response::new(Body::from("ok")))),
-                Err(e) => Ok(cors_response(
-                    Response::builder()
-                        .status(StatusCode::BAD_REQUEST)
-                        .body(Body::from(e))
-                        .unwrap(),
-                )),
-            }
-        } else {
-            thread::spawn(move || {
-                if let Err(e) = do_switch() {
-                    crate::util::error(&e);
-                }
-            });
-            Ok(cors_response(
-                Response::builder()
-                    .header("Content-Type", "text/html")
-                    .body(Body::from(
-                        "<html><body><script>window.close()</script>Sent into wormhole.</body></html>",
-                    ))
-                    .unwrap(),
-            ))
-        }
-    } else if let Some(name) = path.strip_prefix("/project/vscode/") {
-        let key = ProjectKey::parse(name.trim());
-        let result = {
-            let projects = projects::lock();
-            projects
-                .by_key(&key)
-                .map(|p| (p.repo_name.to_string(), p.repo_path.clone()))
-        };
 
-        match result {
-            Some((project_name, project_path)) => {
-                match crate::serve_web::manager().get_or_start(&project_name, &project_path) {
-                    Ok(port) => {
-                        let folder_encoded =
-                            crate::endpoints::url_encode(&project_path.to_string_lossy());
-                        let url = format!("http://localhost:{}/?folder={}", port, folder_encoded);
-                        Ok(cors_response(
-                            Response::builder()
-                                .header("Content-Type", "application/json")
-                                .body(Body::from(serde_json::json!({ "url": url }).to_string()))
-                                .unwrap(),
-                        ))
-                    }
-                    Err(e) => Ok(cors_response(
-                        Response::builder()
-                            .status(StatusCode::INTERNAL_SERVER_ERROR)
-                            .body(Body::from(format!("Failed to start VSCode server: {}", e)))
-                            .unwrap(),
-                    )),
-                }
-            }
-            None => Ok(cors_response(
-                Response::builder()
-                    .status(StatusCode::NOT_FOUND)
-                    .body(Body::from(format!("Project '{}' not found", key)))
-                    .unwrap(),
-            )),
+    let response = route(req, &method, &path, &params).await;
+    Ok(response)
+}
+
+async fn route(
+    req: Request<Body>,
+    method: &Method,
+    path: &str,
+    params: &QueryParams,
+) -> Response<Body> {
+    match path {
+        "/project/list" => endpoints::list_projects(),
+        "/project/neighbors" => endpoints::neighbors(),
+        "/project/debug" => endpoints::debug_projects(),
+        "/dashboard" => endpoints::dashboard(),
+        "/shell" => endpoints::shell_env(params.pwd.as_deref()),
+        "/project/previous" => {
+            endpoints::navigate(endpoints::Direction::Previous, params);
+            Response::new(Body::from(""))
         }
-    } else if path == "/kv" {
-        Ok(crate::kv::list_all_kv_fresh())
-    } else if let Some(kv_path) = path.strip_prefix("/kv/") {
-        handle_kv_request(&method, kv_path, req).await
-    } else {
-        // Handle /file/ and GitHub blob URLs
-        if let Some((Some(project_path), mutation, land_in)) =
-            determine_requested_operation(&path, params.line, params.land_in)
-        {
-            thread::spawn(move || project_path.open(mutation, land_in));
-            Ok(Response::builder()
-                .header("Content-Type", "text/html")
-                .body(Body::from(
-                    "<html><body><script>window.close()</script>Sent into wormhole.</body></html>",
-                ))
-                .unwrap())
-        } else {
-            let redirect_to = format!(
-                "https://github.com{path}#L{}?wormhole=false",
-                params.line.unwrap_or(1)
-            );
-            ps!("Redirecting to: {}", redirect_to);
-            let response = Response::builder()
-                .status(StatusCode::FOUND)
-                .header(header::LOCATION, redirect_to)
-                .body(Body::empty())
-                .unwrap();
-            Ok(response)
+        "/project/next" => {
+            endpoints::navigate(endpoints::Direction::Next, params);
+            Response::new(Body::from(""))
         }
+        "/project/pin" => require_post(method, || {
+            thread::spawn(endpoints::pin_current);
+            Response::new(Body::from("Pinning current state..."))
+        }),
+        "/project/show" => endpoints::show(None),
+        "/project/describe" => {
+            require_post_async(method, || async { endpoints::describe(req).await }).await
+        }
+        "/project/refresh" => require_post(method, || {
+            endpoints::refresh_all();
+            Response::new(Body::from(""))
+        }),
+        "/kv" => crate::kv::list_all_kv_fresh(),
+        _ => route_with_params(req, method, path, params).await,
     }
 }
 
-fn resolve_project(projects: &mut projects::Projects, name_or_path: &str) -> Option<ProjectPath> {
-    let key = ProjectKey::parse(name_or_path);
-    if let Some(project) = projects.by_key(&key) {
-        Some(project.as_project_path())
-    } else if name_or_path.starts_with('/') {
-        let path = std::path::PathBuf::from(name_or_path);
-        if let Some(project) = projects.by_exact_path(&path) {
-            Some(project.as_project_path())
-        } else {
-            projects.add(name_or_path, None);
-            projects.by_exact_path(&path).map(|p| p.as_project_path())
-        }
-    } else if let Some(path) = config::resolve_project_name(name_or_path) {
-        let path_str = path.to_string_lossy().to_string();
-        projects.add(&path_str, Some(name_or_path));
-        projects.by_exact_path(&path).map(|p| p.as_project_path())
+async fn route_with_params(
+    req: Request<Body>,
+    method: &Method,
+    path: &str,
+    params: &QueryParams,
+) -> Response<Body> {
+    if let Some(name) = path.strip_prefix("/project/remove/") {
+        return require_post(method, || endpoints::remove(name));
+    }
+    if let Some(name) = path.strip_prefix("/project/close/") {
+        return require_post(method, || {
+            endpoints::close(name);
+            Response::new(Body::from(""))
+        });
+    }
+    if let Some(name) = path.strip_prefix("/project/show/") {
+        return endpoints::show(Some(name.trim()));
+    }
+    if let Some(name) = path.strip_prefix("/project/refresh/") {
+        return require_post(method, || endpoints::refresh_project(name));
+    }
+    if let Some(branch) = path.strip_prefix("/project/create/") {
+        return endpoints::create_task(branch, params.home_project.as_deref());
+    }
+    if let Some(name) = path.strip_prefix("/project/switch/") {
+        return cors_response(endpoints::switch(name, params, params.sync));
+    }
+    if let Some(name) = path.strip_prefix("/project/vscode/") {
+        return cors_response(endpoints::vscode_url(name));
+    }
+    if let Some(kv_path) = path.strip_prefix("/kv/") {
+        return handle_kv_request(method, kv_path, req).await;
+    }
+
+    route_file_or_github(path, params)
+}
+
+fn route_file_or_github(path: &str, params: &QueryParams) -> Response<Body> {
+    if let Some((Some(project_path), mutation, land_in)) =
+        determine_requested_operation(path, params.line, params.land_in.clone())
+    {
+        thread::spawn(move || project_path.open(mutation, land_in));
+        Response::builder()
+            .header("Content-Type", "text/html")
+            .body(Body::from(endpoints::WORMHOLE_RESPONSE_HTML))
+            .unwrap()
     } else {
-        None
+        let redirect_to = format!(
+            "https://github.com{path}#L{}?wormhole=false",
+            params.line.unwrap_or(1)
+        );
+        ps!("Redirecting to: {}", redirect_to);
+        Response::builder()
+            .status(StatusCode::FOUND)
+            .header(header::LOCATION, redirect_to)
+            .body(Body::empty())
+            .unwrap()
     }
 }
 
@@ -446,50 +179,75 @@ fn determine_requested_operation(
     }
 }
 
-async fn handle_kv_request(
-    method: &Method,
-    kv_path: &str,
-    req: Request<Body>,
-) -> Result<Response<Body>, Infallible> {
+fn require_post<F>(method: &Method, handler: F) -> Response<Body>
+where
+    F: FnOnce() -> Response<Body>,
+{
+    if *method == Method::POST {
+        handler()
+    } else {
+        Response::builder()
+            .status(StatusCode::METHOD_NOT_ALLOWED)
+            .body(Body::from("Method not allowed. Use POST."))
+            .unwrap()
+    }
+}
+
+async fn require_post_async<F, Fut>(method: &Method, handler: F) -> Response<Body>
+where
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = Response<Body>>,
+{
+    if *method == Method::POST {
+        cors_response(handler().await)
+    } else {
+        cors_response(
+            Response::builder()
+                .status(StatusCode::METHOD_NOT_ALLOWED)
+                .body(Body::from("Use POST"))
+                .unwrap(),
+        )
+    }
+}
+
+async fn handle_kv_request(method: &Method, kv_path: &str, req: Request<Body>) -> Response<Body> {
+    use crate::kv;
+    use crate::project::ProjectKey;
+
     let parts: Vec<&str> = kv_path.split('/').collect();
 
     match parts.as_slice() {
-        [""] => {
-            // /kv/ - same as /kv
-            Ok(crate::kv::list_all_kv_fresh())
-        }
+        [""] => kv::list_all_kv_fresh(),
         [project] => {
-            // /kv/<project> - get all KV for project
             if method == Method::GET {
                 let key = ProjectKey::parse(project);
-                Ok(crate::kv::get_project_kv(&key))
+                kv::get_project_kv(&key)
             } else {
-                Ok(Response::builder()
+                Response::builder()
                     .status(StatusCode::METHOD_NOT_ALLOWED)
                     .body(Body::from("Method not allowed. Use GET for /kv/<project>"))
-                    .unwrap())
+                    .unwrap()
             }
         }
         [project, kv_key] => {
-            // /kv/<project>/<key>
             let key = ProjectKey::parse(project);
             match *method {
-                Method::GET => Ok(crate::kv::get_value(&key, kv_key)),
+                Method::GET => kv::get_value(&key, kv_key),
                 Method::PUT => {
                     let (_, body) = req.into_parts();
-                    Ok(crate::kv::set_value(&key, kv_key, body).await)
+                    kv::set_value(&key, kv_key, body).await
                 }
-                Method::DELETE => Ok(crate::kv::delete_value(&key, kv_key)),
-                _ => Ok(Response::builder()
+                Method::DELETE => kv::delete_value(&key, kv_key),
+                _ => Response::builder()
                     .status(StatusCode::METHOD_NOT_ALLOWED)
                     .body(Body::from("Method not allowed. Use GET, PUT, or DELETE"))
-                    .unwrap()),
+                    .unwrap(),
             }
         }
-        _ => Ok(Response::builder()
+        _ => Response::builder()
             .status(StatusCode::BAD_REQUEST)
             .body(Body::from("Invalid KV path format"))
-            .unwrap()),
+            .unwrap(),
     }
 }
 
@@ -506,29 +264,23 @@ impl QueryParams {
             pwd: None,
         };
         if let Some(query) = query {
-            for (key, val) in form_urlencoded::parse(query.as_bytes()).collect::<Vec<(_, _)>>() {
-                let key_lower = key.to_lowercase();
-                if key_lower == "land-in" {
-                    let val_lower = val.to_lowercase();
-                    if val_lower == "terminal" {
-                        params.land_in = Some(Application::Terminal);
-                    } else if val_lower == "editor" {
-                        params.land_in = Some(Application::Editor);
+            for (key, val) in form_urlencoded::parse(query.as_bytes()) {
+                match key.to_lowercase().as_str() {
+                    "land-in" => {
+                        params.land_in = match val.to_lowercase().as_str() {
+                            "terminal" => Some(Application::Terminal),
+                            "editor" => Some(Application::Editor),
+                            _ => None,
+                        }
                     }
-                } else if key_lower == "line" {
-                    params.line = val.parse::<usize>().ok();
-                } else if key_lower == "home-project" {
-                    params.home_project = Some(val.to_string());
-                } else if key_lower == "branch" {
-                    params.branch = Some(val.to_string());
-                } else if key_lower == "skip-editor" {
-                    params.skip_editor = val.to_lowercase() == "true";
-                } else if key_lower == "focus-terminal" {
-                    params.focus_terminal = val.to_lowercase() == "true";
-                } else if key_lower == "sync" {
-                    params.sync = val == "true" || val == "1";
-                } else if key_lower == "pwd" {
-                    params.pwd = Some(val.to_string());
+                    "line" => params.line = val.parse().ok(),
+                    "home-project" => params.home_project = Some(val.to_string()),
+                    "branch" => params.branch = Some(val.to_string()),
+                    "skip-editor" => params.skip_editor = val.to_lowercase() == "true",
+                    "focus-terminal" => params.focus_terminal = val.to_lowercase() == "true",
+                    "sync" => params.sync = val == "true" || val == "1",
+                    "pwd" => params.pwd = Some(val.to_string()),
+                    _ => {}
                 }
             }
         }

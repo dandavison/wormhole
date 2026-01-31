@@ -422,6 +422,9 @@ pub fn refresh_cache() {
 }
 
 pub fn cache_needs_refresh() -> bool {
+    if std::env::var("WORMHOLE_OFFLINE").is_ok() {
+        return false;
+    }
     let projects = lock();
     projects
         .0

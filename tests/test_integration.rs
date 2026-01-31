@@ -246,8 +246,8 @@ fn test_close_task_removes_from_list() {
     let store_key = test.task_store_key(&task_id, &home_proj);
 
     // Switch to task so it appears in project list (already switched in create_task)
-    // Window name is now the store_key for tasks
-    test.assert_focus(Editor(&store_key));
+    // Cursor window title shows the folder name (branch), not the store_key
+    test.assert_focus(Editor(&task_id));
 
     // Verify task is in project list (check name == repo AND branch == task_id)
     let list_json = test.http_get("/project/list").unwrap();
@@ -404,15 +404,16 @@ fn test_task_switching() {
     test.assert_tmux_cwd(&home_dir);
 
     // Switch to task 1 using store_key
+    // Cursor window title shows the folder name (branch), not the store_key
     test.http_get(&format!("/project/switch/{}", task_1_key))
         .unwrap();
-    test.assert_focus(Editor(&task_1_key));
+    test.assert_focus(Editor(&task_1));
     test.assert_tmux_cwd(&task_1_dir);
 
     // Switch to task 2 using store_key
     test.http_get(&format!("/project/switch/{}", task_2_key))
         .unwrap();
-    test.assert_focus(Editor(&task_2_key));
+    test.assert_focus(Editor(&task_2));
     test.assert_tmux_cwd(&task_2_dir);
 
     // Switch back to home project
@@ -424,7 +425,7 @@ fn test_task_switching() {
     // Switch to task 1 again
     test.http_get(&format!("/project/switch/{}", task_1_key))
         .unwrap();
-    test.assert_focus(Editor(&task_1_key));
+    test.assert_focus(Editor(&task_1));
     test.assert_tmux_cwd(&task_1_dir);
 }
 
@@ -504,11 +505,11 @@ fn test_task_in_submodule() {
     test.assert_tmux_cwd(&submodule_dir);
 
     // Switch to task using store_key format
+    // Cursor window title shows the folder name (branch), not the store_key
     let store_key = test.task_store_key(&task_id, &submodule_name);
     test.http_get(&format!("/project/switch/{}", store_key))
         .unwrap();
-    // Window name is now the store_key for tasks
-    test.assert_focus(Editor(&store_key));
+    test.assert_focus(Editor(&task_id));
     test.assert_tmux_cwd(&task_dir);
 }
 
@@ -540,8 +541,8 @@ fn test_task_home_project_not_self() {
     let store_key = test.task_store_key(&task_id, &home_proj);
     test.http_get(&format!("/project/switch/{}", store_key))
         .unwrap();
-    // Window name is now the store_key for tasks
-    test.assert_focus(Editor(&store_key));
+    // Cursor window title shows the folder name (branch), not the store_key
+    test.assert_focus(Editor(&task_id));
 
     // Get project list and verify task has correct name and branch
     let list_json = test.http_get("/project/list").unwrap();
@@ -601,10 +602,10 @@ fn test_task_switching_updates_ring_order() {
     test.assert_focus(Editor(&home_proj));
 
     // Switch to task using store_key
+    // Cursor window title shows the folder name (branch), not the store_key
     test.http_get(&format!("/project/switch/{}", store_key))
         .unwrap();
-    // Window name is the store_key for tasks
-    test.assert_focus(Editor(&store_key));
+    test.assert_focus(Editor(&task_id));
 
     // Verify both are in the list
     let list_json = test.http_get("/project/list").unwrap();
@@ -628,7 +629,7 @@ fn test_task_switching_updates_ring_order() {
 
     // Toggle forward via next - should go to task
     test.http_get("/project/next").unwrap();
-    test.assert_focus(Editor(&store_key));
+    test.assert_focus(Editor(&task_id));
 }
 
 #[test]

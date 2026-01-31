@@ -336,50 +336,30 @@ fn test_task_switching() {
 
     init_git_repo(&home_dir);
 
-    // Register home project with wormhole
     test.create_project(&home_dir, &home_proj);
-
-    // Create two tasks based on the home project
     test.create_task(&task_1, &home_proj);
     test.create_task(&task_2, &home_proj);
 
-    // Store keys for tasks
     let task_1_key = test.task_store_key(&task_1, &home_proj);
     let task_2_key = test.task_store_key(&task_2, &home_proj);
-
     let task_1_dir = format!("{}/.git/wormhole/worktrees/{}", home_dir, task_1);
     let task_2_dir = format!("{}/.git/wormhole/worktrees/{}", home_dir, task_2);
 
-    // Switch to home project
-    test.http_get(&format!("/project/switch/{}", home_proj))
-        .unwrap();
-    test.assert_focus(Editor(&home_proj));
-    test.assert_tmux_cwd(&home_dir);
+    // Table-driven: (switch_key, window_title, expected_cwd)
+    let cases = [
+        (&home_proj, &home_proj, &home_dir),
+        (&task_1_key, &task_1, &task_1_dir),
+        (&task_2_key, &task_2, &task_2_dir),
+        (&home_proj, &home_proj, &home_dir),
+        (&task_1_key, &task_1, &task_1_dir),
+    ];
 
-    // Switch to task 1 using store_key
-    // Cursor window title shows the folder name (branch), not the store_key
-    test.http_get(&format!("/project/switch/{}", task_1_key))
-        .unwrap();
-    test.assert_focus(Editor(&task_1));
-    test.assert_tmux_cwd(&task_1_dir);
-
-    // Switch to task 2 using store_key
-    test.http_get(&format!("/project/switch/{}", task_2_key))
-        .unwrap();
-    test.assert_focus(Editor(&task_2));
-    test.assert_tmux_cwd(&task_2_dir);
-
-    // Switch back to home project
-    test.http_get(&format!("/project/switch/{}", home_proj))
-        .unwrap();
-    test.assert_focus(Editor(&home_proj));
-    test.assert_tmux_cwd(&home_dir);
-
-    // Switch to task 1 again
-    test.http_get(&format!("/project/switch/{}", task_1_key))
-        .unwrap();
-    test.assert_focus(Editor(&task_1));
-    test.assert_tmux_cwd(&task_1_dir);
+    for (switch_key, window_title, expected_cwd) in cases {
+        test.http_get(&format!("/project/switch/{}", switch_key))
+            .unwrap();
+        test.assert_focus(Editor(window_title));
+        test.assert_tmux_cwd(expected_cwd);
+    }
 }
 
 #[test]
@@ -501,8 +481,14 @@ fn test_task_switching_updates_ring_order() {
     test.assert_focus(Editor(&task_id));
 
     // Verify both are in the list
-    assert!(test.project_in_list(&home_proj), "Home project should be in list");
-    assert!(test.task_in_list(&home_proj, &task_id), "Task should be in list");
+    assert!(
+        test.project_in_list(&home_proj),
+        "Home project should be in list"
+    );
+    assert!(
+        test.task_in_list(&home_proj, &task_id),
+        "Task should be in list"
+    );
 
     // Toggle back via previous - should go to home project
     test.http_get("/project/previous").unwrap();
@@ -611,8 +597,14 @@ fn test_tasks_persist_after_tmux_window_closed() {
         .unwrap();
 
     // Verify both tasks are in the project list
-    assert!(test.task_in_list(&home_proj, &task_1), "Task 1 should be in list initially");
-    assert!(test.task_in_list(&home_proj, &task_2), "Task 2 should be in list initially");
+    assert!(
+        test.task_in_list(&home_proj, &task_1),
+        "Task 1 should be in list initially"
+    );
+    assert!(
+        test.task_in_list(&home_proj, &task_2),
+        "Task 2 should be in list initially"
+    );
 
     // Kill task 1's tmux window directly (bypassing wormhole's close_project)
     test.kill_tmux_window(&task_1_key);
@@ -628,7 +620,10 @@ fn test_tasks_persist_after_tmux_window_closed() {
         test.task_in_list(&home_proj, &task_1),
         "Task 1 should STILL be in list after tmux window closed"
     );
-    assert!(test.task_in_list(&home_proj, &task_2), "Task 2 should still be in list");
+    assert!(
+        test.task_in_list(&home_proj, &task_2),
+        "Task 2 should still be in list"
+    );
 }
 
 #[test]

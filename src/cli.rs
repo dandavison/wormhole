@@ -939,16 +939,15 @@ fn task_create_from_sprint(client: &Client) -> Result<(), String> {
             })
             .unwrap_or(false);
 
+        let emoji = jira::status_emoji(&issue.status);
+
         if let Some(reason) = should_skip_issue(has_pr) {
-            println!("{} {} [{}]", issue.key, issue.summary, reason);
+            println!("{} {} {} [{}]", emoji, issue.key, issue.summary, reason);
             skipped_count += 1;
             continue;
         }
 
-        println!(
-            "\n{} {} [{}]",
-            issue.key, issue.summary, issue.status
-        );
+        println!("\n{} {} {}", emoji, issue.key, issue.summary);
 
         // If task exists locally, show it and offer to confirm/skip
         if let Some((existing_repo, existing_branch)) = existing {

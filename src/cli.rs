@@ -1,11 +1,46 @@
 use clap::builder::ValueHint;
 use clap::{CommandFactory, Parser, Subcommand};
+use clap_complete::engine::{ArgValueCompleter, CompletionCandidate, PathCompleter, ValueCompleter};
 use clap_complete::{generate, Shell};
 use serde::Serialize;
 use std::io;
 
 use crate::config;
 use crate::jira;
+
+fn complete_projects(current: &std::ffi::OsStr) -> Vec<CompletionCandidate> {
+    let mut candidates = PathCompleter::any().complete(current);
+
+    let url = format!("http://127.0.0.1:{}/project/list", config::wormhole_port());
+    let response = match ureq::get(&url).call() {
+        Ok(r) => match r.into_string() {
+            Ok(s) => s,
+            Err(_) => return candidates,
+        },
+        Err(_) => return candidates,
+    };
+    let json: serde_json::Value = match serde_json::from_str(&response) {
+        Ok(v) => v,
+        Err(_) => return candidates,
+    };
+    if let Some(current) = json.get("current").and_then(|v| v.as_array()) {
+        for item in current {
+            if let Some(key) = item.get("project_key").and_then(|k| k.as_str()) {
+                candidates.push(CompletionCandidate::new(key));
+            }
+        }
+    }
+    if let Some(available) = json.get("available").and_then(|v| v.as_array()) {
+        for item in available {
+            if let Some(name) = item.as_str() {
+                if !candidates.iter().any(|c| c.get_value().to_str() == Some(name)) {
+                    candidates.push(CompletionCandidate::new(name));
+                }
+            }
+        }
+    }
+    candidates
+}
 
 #[derive(Serialize, serde::Deserialize)]
 struct ProjectDebug {
@@ -167,7 +202,7 @@ pub enum Command {
     /// Open a file, directory, project, or task
     Open {
         /// Path to file/directory, project name, or task (project:branch)
-        #[arg(value_hint = ValueHint::AnyPath)]
+        #[arg(value_hint = ValueHint::AnyPath, add = ArgValueCompleter::new(complete_projects))]
         target: String,
         /// Which application to focus (only for project/task, not file/directory)
         #[arg(long, value_name = "APP")]

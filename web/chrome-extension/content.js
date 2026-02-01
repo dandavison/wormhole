@@ -125,7 +125,7 @@ async function toggleVSCode(projectName, vscodeBtn) {
         vscodeBtn.disabled = true;
 
         try {
-            const resp = await fetch(`${WORMHOLE_BASE}/project/vscode/${encodeURIComponent(projectName)}`);
+            const resp = await fetch(`${WORMHOLE_BASE}/project/vscode/${projectName}`);
             if (!resp.ok) {
                 console.warn('[Wormhole] VSCode server failed:', await resp.text());
                 vscodeBtn.style.opacity = '';
@@ -148,7 +148,7 @@ async function toggleVSCode(projectName, vscodeBtn) {
             vscodeExpanded = true;
 
             // Also switch to the project (skip editor since we're showing embedded)
-            fetch(`${WORMHOLE_BASE}/project/switch/${encodeURIComponent(projectName)}?skip-editor=true`);
+            fetch(`${WORMHOLE_BASE}/project/switch/${projectName}?skip-editor=true`);
         } catch (err) {
             console.warn('[Wormhole] VSCode error:', err.message);
             vscodeBtn.style.opacity = '';
@@ -252,7 +252,7 @@ async function switchProject(landIn) {
         }
 
         const switchResp = await fetch(
-            `${WORMHOLE_BASE}/project/switch/${encodeURIComponent(info.name)}?${params}`
+            `${WORMHOLE_BASE}/project/switch/${info.name}?${params}`
         );
 
         if (!switchResp.ok) {

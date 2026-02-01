@@ -860,6 +860,75 @@ fn test_switch_to_project_when_task_exists() {
 }
 
 #[test]
+fn test_file_opens_in_project_not_task() {
+    // Regression test: /file/ endpoint should open files in the correct project.
+    // When both a project and task exist for the same repo, a file in the main
+    // repo directory should open in the project, not the task.
+    //
+    // Bug: by_path() used max_by_key with worktree_path length to pick the
+    // "most specific" match. Since project and task share the same repo_path,
+    // both matched. The task's worktree_path was longer, so it incorrectly won.
+    //
+    // Fix: Use the length of the path that actually matched the query, not
+    // the theoretical working directory.
+    use std::process::Command;
+
+    let test = harness::WormholeTest::new(8954);
+
+    let home_proj = format!("{}file-proj", TEST_PREFIX);
+    let home_dir = format!("/tmp/{}", home_proj);
+    let task_branch = format!("{}file-task", TEST_PREFIX);
+
+    init_git_repo(&home_dir);
+
+    let test_file = format!("{}/src/main.rs", home_dir);
+    std::fs::create_dir_all(format!("{}/src", home_dir)).unwrap();
+    std::fs::write(&test_file, "fn main() {}").unwrap();
+
+    test.create_project(&home_dir, &home_proj);
+
+    let worktrees_dir = format!("{}/.git/wormhole/worktrees", home_dir);
+    std::fs::create_dir_all(&worktrees_dir).unwrap();
+    Command::new("git")
+        .args(["add", "."])
+        .current_dir(&home_dir)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["commit", "-m", "add src"])
+        .current_dir(&home_dir)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args([
+            "worktree",
+            "add",
+            "-b",
+            &task_branch,
+            &format!("{}/{}", worktrees_dir, task_branch),
+        ])
+        .current_dir(&home_dir)
+        .output()
+        .unwrap();
+
+    test.http_post("/project/refresh-tasks").unwrap();
+
+    assert!(
+        test.task_in_list(&home_proj, &task_branch),
+        "Task should be discovered"
+    );
+
+    let task_key = test.task_store_key(&task_branch, &home_proj);
+    test.http_get(&format!("/project/switch/{}?sync=1", task_key))
+        .unwrap();
+
+    test.http_get(&format!("/file/{}", test_file)).unwrap();
+
+    test.assert_focus(Editor(&home_proj));
+    test.assert_tmux_cwd(&home_dir);
+}
+
+#[test]
 fn test_switch_creates_task_from_colon_syntax() {
     // `w project switch repo:branch` should create the task if it doesn't exist
     let test = harness::WormholeTest::new(8952);

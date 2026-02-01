@@ -242,7 +242,7 @@ fn render_task_card(task: &crate::project::Project, jira_instance: Option<&str>)
         })
         .unwrap_or_default();
 
-    let path = task.working_dir();
+    let path = task.working_tree();
     let plan_exists = path.join(".task/plan.md").exists();
     let plan_url = if plan_exists {
         crate::git::github_file_url(&path, ".task/plan.md")

@@ -116,7 +116,7 @@ impl Project {
         })
     }
 
-    pub fn working_dir(&self) -> PathBuf {
+    pub fn working_tree(&self) -> PathBuf {
         self.worktree_path()
             .unwrap_or_else(|| self.repo_path.clone())
     }

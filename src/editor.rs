@@ -126,7 +126,7 @@ fn workspace_file_path(project: &Project) -> std::path::PathBuf {
 fn ensure_workspace_file(project: &Project) -> std::path::PathBuf {
     let workspace_path = workspace_file_path(project);
     if !workspace_path.exists() {
-        let project_dir = project.working_dir();
+        let project_dir = project.working_tree();
         let content = format!(
             r#"{{"folders": [{{"path": "{}"}}]}}"#,
             project_dir.display()

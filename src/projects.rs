@@ -185,17 +185,15 @@ impl<'a> Projects<'a> {
             .all
             .values()
             .filter(|p| {
-                query_path.starts_with(&p.repo_path)
-                    || p.worktree_path()
-                        .map(|wt| query_path.starts_with(&wt))
-                        .unwrap_or(false)
+                // For tasks, only match if path is inside the worktree.
+                // For non-tasks, match if path is inside repo_path.
+                if let Some(wt) = p.worktree_path() {
+                    query_path.starts_with(&wt)
+                } else {
+                    query_path.starts_with(&p.repo_path)
+                }
             })
-            .max_by_key(|p| {
-                p.worktree_path()
-                    .unwrap_or_else(|| p.repo_path.clone())
-                    .as_os_str()
-                    .len()
-            })
+            .max_by_key(|p| p.working_tree().as_os_str().len())
             .cloned()
     }
 
@@ -395,7 +393,7 @@ pub fn refresh_cache() {
             .filter(|(_, p)| p.is_task())
             .map(|(key, p)| {
                 let jira_key = p.kv.get("jira_key").cloned();
-                let path = p.worktree_path().unwrap_or_else(|| p.repo_path.clone());
+                let path = p.working_tree();
                 (key.clone(), jira_key, path)
             })
             .collect()

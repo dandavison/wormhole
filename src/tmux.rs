@@ -66,7 +66,7 @@ pub fn open(project: &Project) -> Result<(), String> {
             "-n".to_string(),
             window_name,
             "-c".to_string(),
-            project.working_dir().to_string_lossy().to_string(),
+            project.working_tree().to_string_lossy().to_string(),
             "-e".to_string(),
             format!("WORMHOLE_PROJECT_NAME={}", vars.project_name),
             "-e".to_string(),

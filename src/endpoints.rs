@@ -370,17 +370,40 @@ pub fn shell_env(pwd: Option<&str>) -> Response<Body> {
 }
 
 pub fn navigate(direction: Direction, params: &QueryParams) {
+    let active_keys: Option<std::collections::HashSet<String>> = if params.active {
+        Some(crate::tmux::window_names().into_iter().collect())
+    } else {
+        None
+    };
+
     let p = {
         let mut projects = projects::lock();
-        let (pp, mutation) = match direction {
-            Direction::Previous => (projects.previous(), Mutation::RotateLeft),
-            Direction::Next => (projects.next(), Mutation::RotateRight),
+        let ring_len = projects.keys().len();
+        let mutation = match direction {
+            Direction::Previous => Mutation::RotateLeft,
+            Direction::Next => Mutation::RotateRight,
         };
-        let pp = pp.map(|p| p.as_project_path());
-        if let Some(ref pp) = pp {
-            projects.apply(mutation, &pp.project.store_key());
+
+        let mut result = None;
+        for _ in 0..ring_len {
+            let candidate = match direction {
+                Direction::Previous => projects.previous(),
+                Direction::Next => projects.next(),
+            };
+            if let Some(ref p) = candidate {
+                projects.apply(mutation.clone(), &p.store_key());
+                let excluded = active_keys
+                    .as_ref()
+                    .is_some_and(|active| !active.contains(&p.store_key().to_string()));
+                if !excluded {
+                    result = Some(p.as_project_path());
+                    break;
+                }
+            } else {
+                break;
+            }
         }
-        pp
+        result
     };
     if let Some(project_path) = p {
         let land_in = params.land_in.clone();

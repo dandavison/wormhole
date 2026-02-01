@@ -40,7 +40,7 @@ pub fn lock<'a>() -> Projects<'a> {
     Projects(PROJECTS_STORE.lock().unwrap())
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Mutation {
     None,
     RotateLeft,

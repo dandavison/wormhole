@@ -917,8 +917,6 @@ fn doctor_persisted_data(output: &str) -> Result<(), String> {
 fn task_create_from_sprint(client: &Client) -> Result<(), String> {
     use std::collections::HashMap;
 
-    let default_home = std::env::var("WORMHOLE_DEFAULT_HOME_PROJECT").ok();
-
     // Refresh to discover all existing worktrees before checking
     let _ = client.post("/project/refresh-tasks");
 
@@ -969,7 +967,6 @@ fn task_create_from_sprint(client: &Client) -> Result<(), String> {
     let issues = jira::get_sprint_issues()?;
 
     let mut rl = create_project_editor(available_projects)?;
-    let mut last_home = default_home;
     let mut created_count = 0;
     let mut skipped_count = 0;
 
@@ -1011,7 +1008,6 @@ fn task_create_from_sprint(client: &Client) -> Result<(), String> {
                 "" | "y" | "yes" => {
                     println!("  Keeping {}:{}", existing_repo, existing_branch);
                     skipped_count += 1;
-                    last_home = Some(existing_repo.clone());
                     continue;
                 }
                 "q" | "quit" => break,
@@ -1022,23 +1018,14 @@ fn task_create_from_sprint(client: &Client) -> Result<(), String> {
         }
 
         // Prompt for home project
-        let default_h = existing
-            .map(|(repo, _)| repo.clone())
-            .or_else(|| last_home.clone())
-            .unwrap_or_default();
-
-        let home = match rl.readline_with_initial("  home: ", (&default_h, "")) {
+        let home = match rl.readline("  home: ") {
             Ok(line) => {
                 let trimmed = line.trim();
                 if trimmed.is_empty() {
-                    if default_h.is_empty() {
-                        eprintln!("  Skipping (no home)");
-                        continue;
-                    }
-                    default_h
-                } else {
-                    trimmed.to_string()
+                    eprintln!("  Skipping (no home)");
+                    continue;
                 }
+                trimmed.to_string()
             }
             Err(rustyline::error::ReadlineError::Interrupted) => {
                 eprintln!("  Skipping");
@@ -1047,7 +1034,6 @@ fn task_create_from_sprint(client: &Client) -> Result<(), String> {
             Err(rustyline::error::ReadlineError::Eof) => break,
             Err(e) => return Err(format!("Input error: {}", e)),
         };
-        last_home = Some(home.clone());
 
         // Get branches from the selected repo for completion
         let branches = config::resolve_project_name(&home)

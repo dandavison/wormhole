@@ -147,7 +147,10 @@ impl WormholeTest {
     }
 
     pub fn cli(&self, cmd: &str) -> Result<String, String> {
-        let full_cmd = format!("WORMHOLE_PORT={} ./target/debug/{}", self.port, cmd);
+        let full_cmd = format!(
+            "timeout 30 sh -c 'WORMHOLE_PORT={} ./target/debug/{}'",
+            self.port, cmd
+        );
         let output = Command::new("sh")
             .args(["-c", &full_cmd])
             .output()
@@ -155,10 +158,12 @@ impl WormholeTest {
         if output.status.success() {
             Ok(String::from_utf8_lossy(&output.stdout).to_string())
         } else {
-            Err(format!(
-                "cli error: {}",
-                String::from_utf8_lossy(&output.stderr)
-            ))
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            if output.status.code() == Some(124) {
+                Err(format!("cli timed out after 30s: {}", cmd))
+            } else {
+                Err(format!("cli error: {}", stderr))
+            }
         }
     }
 

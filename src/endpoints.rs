@@ -1,3 +1,7 @@
+// Handlers in this module must do no I/O (no subprocess calls, no filesystem access).
+// All data should come from in-memory caches populated by refresh_* functions.
+// This ensures fast response times for the HTTP API.
+
 use hyper::{Body, Request, Response, StatusCode};
 use std::thread;
 
@@ -27,10 +31,10 @@ pub fn list_projects() -> Response<Body> {
             if !project.kv.is_empty() {
                 obj["kv"] = serde_json::json!(project.kv);
             }
-            if let Some(ref jira) = project.cached_jira {
+            if let Some(ref jira) = project.cached.jira {
                 obj["jira"] = serde_json::json!(jira);
             }
-            if let Some(ref pr) = project.cached_pr {
+            if let Some(ref pr) = project.cached.pr {
                 obj["pr"] = serde_json::json!(pr);
             }
             obj
@@ -195,13 +199,15 @@ fn render_task_card(task: &crate::project::Project, jira_instance: Option<&str>)
     );
 
     let summary = task
-        .cached_jira
+        .cached
+        .jira
         .as_ref()
         .map(|j| html_escape(&j.summary))
         .unwrap_or_default();
 
     let status_html = task
-        .cached_jira
+        .cached
+        .jira
         .as_ref()
         .map(|j| {
             format!(
@@ -212,7 +218,7 @@ fn render_task_card(task: &crate::project::Project, jira_instance: Option<&str>)
         })
         .unwrap_or_default();
 
-    let pr_html = if let Some(ref pr) = task.cached_pr {
+    let pr_html = if let Some(ref pr) = task.cached.pr {
         let comments = pr
             .comments_display()
             .map(|c| format!(" [{}]", html_escape(&c)))
@@ -228,7 +234,8 @@ fn render_task_card(task: &crate::project::Project, jira_instance: Option<&str>)
     };
 
     let jira_html = task
-        .cached_jira
+        .cached
+        .jira
         .as_ref()
         .and_then(|j| {
             jira_instance.map(|i| {
@@ -277,7 +284,8 @@ fn render_task_card(task: &crate::project::Project, jira_instance: Option<&str>)
     };
 
     let status_attr = task
-        .cached_jira
+        .cached
+        .jira
         .as_ref()
         .map(|j| status_data_attr(&j.status))
         .unwrap_or_default();
@@ -445,8 +453,8 @@ pub fn refresh_project(name: &str) -> Response<Body> {
         crate::github::refresh_github_info(project);
         let json = serde_json::json!({
             "name": project.repo_name,
-            "github_pr": project.github_pr,
-            "github_repo": project.github_repo,
+            "github_pr": project.cached.github_pr,
+            "github_repo": project.cached.github_repo,
         });
         Response::builder()
             .header("Content-Type", "application/json")

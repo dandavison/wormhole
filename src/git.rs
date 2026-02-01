@@ -405,5 +405,4 @@ detached
         // Other special characters that might appear in branch names
         assert_eq!(encode_branch_for_path("fix-bug#123"), "fix-bug%23123");
     }
-
 }

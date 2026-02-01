@@ -141,7 +141,7 @@ use crate::project::Project;
 
 /// Get the PR number for a project, checking cached value first
 pub fn get_open_pr_number(project: &Project) -> Option<u64> {
-    if let Some(pr) = project.github_pr {
+    if let Some(pr) = project.cached.github_pr {
         return Some(pr);
     }
     fetch_pr_number(&project.working_tree())
@@ -149,7 +149,7 @@ pub fn get_open_pr_number(project: &Project) -> Option<u64> {
 
 /// Get the repo name for a project, checking cached value first
 pub fn get_repo_name(project: &Project) -> Option<String> {
-    if let Some(ref repo) = project.github_repo {
+    if let Some(ref repo) = project.cached.github_repo {
         return Some(repo.clone());
     }
     fetch_repo_name(&project.working_tree())
@@ -157,8 +157,8 @@ pub fn get_repo_name(project: &Project) -> Option<String> {
 
 /// Refresh GitHub info by fetching from gh CLI
 pub fn refresh_github_info(project: &mut Project) {
-    project.github_pr = fetch_pr_number(&project.working_tree());
-    project.github_repo = fetch_repo_name(&project.working_tree());
+    project.cached.github_pr = fetch_pr_number(&project.working_tree());
+    project.cached.github_repo = fetch_repo_name(&project.working_tree());
 }
 
 fn fetch_pr_number(project_path: &Path) -> Option<u64> {

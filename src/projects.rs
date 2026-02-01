@@ -1,4 +1,4 @@
-use crate::project::{BranchName, Project, ProjectKey, RepoName};
+use crate::project::{BranchName, Cached, Project, ProjectKey, RepoName};
 use crate::util::execute_command;
 use crate::wormhole::Application;
 use crate::{config, git, ps};
@@ -118,18 +118,19 @@ impl<'a> Projects<'a> {
         let key = ProjectKey::project(&name);
         if !self.0.all.contains_key(&key) {
             ps!("projects::add");
+            let git_common_dir = git::git_common_dir(&path);
             self.0.all.insert(
                 key.clone(),
                 Project {
                     repo_name: RepoName::new(name),
                     repo_path: path,
+                    branch: None,
                     kv: HashMap::new(),
                     last_application: None,
-                    branch: None,
-                    github_pr: None,
-                    github_repo: None,
-                    cached_jira: None,
-                    cached_pr: None,
+                    cached: Cached {
+                        git_common_dir: Some(git_common_dir),
+                        ..Default::default()
+                    },
                 },
             );
             self.0.ring.push_front(key);
@@ -285,18 +286,19 @@ pub fn load() {
 
         // Add to all if not already present
         if !projects.0.all.contains_key(&key) {
+            let git_common_dir = git::git_common_dir(&canonical);
             projects.0.all.insert(
                 key.clone(),
                 Project {
                     repo_name: RepoName::new(name),
                     repo_path: canonical,
+                    branch: None,
                     kv: HashMap::new(),
                     last_application: None,
-                    branch: None,
-                    github_pr: None,
-                    github_repo: None,
-                    cached_jira: None,
-                    cached_pr: None,
+                    cached: Cached {
+                        git_common_dir: Some(git_common_dir),
+                        ..Default::default()
+                    },
                 },
             );
         }
@@ -327,7 +329,8 @@ fn discover_tasks(additional_paths: HashMap<String, PathBuf>) -> HashMap<Project
             if !git::is_git_repo(&project_path) {
                 return vec![];
             }
-            let worktrees_dir = git::worktree_base_path(&project_path);
+            let git_common_dir = git::git_common_dir(&project_path);
+            let worktrees_dir = git_common_dir.join("wormhole/worktrees");
             git::list_worktrees(&project_path)
                 .into_iter()
                 .filter(|wt| wt.path.starts_with(&worktrees_dir))
@@ -336,13 +339,13 @@ fn discover_tasks(additional_paths: HashMap<String, PathBuf>) -> HashMap<Project
                     let task = Project {
                         repo_name: RepoName::new(project_name.clone()),
                         repo_path: project_path.clone(),
+                        branch: Some(BranchName::new(branch.clone())),
                         kv: HashMap::new(),
                         last_application: None,
-                        branch: Some(BranchName::new(branch.clone())),
-                        github_pr: None,
-                        github_repo: None,
-                        cached_jira: None,
-                        cached_pr: None,
+                        cached: Cached {
+                            git_common_dir: Some(git_common_dir.clone()),
+                            ..Default::default()
+                        },
                     };
                     Some((task.store_key(), task))
                 })
@@ -417,8 +420,8 @@ pub fn refresh_cache() {
     let mut projects = lock();
     for (key, jira, pr) in results {
         if let Some(project) = projects.0.all.get_mut(&key) {
-            project.cached_jira = jira;
-            project.cached_pr = pr;
+            project.cached.jira = jira;
+            project.cached.pr = pr;
         }
     }
 }
@@ -435,8 +438,8 @@ pub fn cache_needs_refresh() -> bool {
         .filter(|(_, p)| p.is_task())
         .any(|(_, p)| {
             let has_jira_key = p.kv.contains_key("jira_key");
-            let jira_missing = has_jira_key && p.cached_jira.is_none();
-            let pr_missing = p.cached_pr.is_none();
+            let jira_missing = has_jira_key && p.cached.jira.is_none();
+            let pr_missing = p.cached.pr.is_none();
             jira_missing || pr_missing
         })
 }

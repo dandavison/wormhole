@@ -34,6 +34,7 @@ pub struct QueryParams {
     pub focus_terminal: bool,
     pub sync: bool,
     pub pwd: Option<String>,
+    pub active: bool,
 }
 
 pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
@@ -70,7 +71,7 @@ async fn route(
     params: &QueryParams,
 ) -> Response<Body> {
     match path {
-        "/project/list" => endpoints::list_projects(),
+        "/project/list" => endpoints::list_projects(params.active),
         "/project/neighbors" => endpoints::neighbors(),
         "/project/debug" => endpoints::debug_projects(),
         "/dashboard" => endpoints::dashboard(),
@@ -271,6 +272,7 @@ impl QueryParams {
             focus_terminal: false,
             sync: false,
             pwd: None,
+            active: false,
         };
         if let Some(query) = query {
             for (key, val) in form_urlencoded::parse(query.as_bytes()) {
@@ -289,6 +291,7 @@ impl QueryParams {
                     "focus-terminal" => params.focus_terminal = val.to_lowercase() == "true",
                     "sync" => params.sync = val == "true" || val == "1",
                     "pwd" => params.pwd = Some(val.to_string()),
+                    "active" => params.active = val == "true" || val == "1",
                     _ => {}
                 }
             }

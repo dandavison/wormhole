@@ -898,7 +898,7 @@ fn task_create_from_sprint(client: &Client) -> Result<(), String> {
 
         // Track PR status
         let pr_is_non_draft = item.get("pr").is_some_and(|pr| {
-            !pr.get("draft").and_then(|d| d.as_bool()).unwrap_or(false)
+            !pr.get("isDraft").and_then(|d| d.as_bool()).unwrap_or(false)
         });
         has_non_draft_pr.insert(project_key.to_string(), pr_is_non_draft);
 

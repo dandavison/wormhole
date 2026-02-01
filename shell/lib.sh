@@ -6,7 +6,13 @@ wormhole-cd() {
     fi
 }
 
-wormhole-switch() {
+wormhole-open() {
+    wormhole open "${1:-.}"
+}
+
+# A hack to make a shell session switch to a different project, without altering other shell
+# sessions (tmux panes) in the same tmux window.
+wormhole-shell-switch() {
     dir="${1:-$PWD}"
     dir=$(readlink -f "$dir")
     WORMHOLE_PROJECT_DIR="$dir"

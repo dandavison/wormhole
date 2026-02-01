@@ -82,24 +82,6 @@ pub enum SprintCommand {
 
 #[derive(Subcommand)]
 pub enum ProjectCommand {
-    /// Switch to a project by name, or open/create a project at a path
-    Switch {
-        /// Project name or absolute path
-        #[arg(value_hint = ValueHint::DirPath)]
-        name_or_path: String,
-        /// Optional project name (when creating from path)
-        #[arg(long)]
-        name: Option<String>,
-        /// Which application to focus: editor or terminal
-        #[arg(long, value_name = "APP")]
-        land_in: Option<String>,
-        /// Home project for creating a task (git worktree)
-        #[arg(long)]
-        home_project: Option<String>,
-        /// Branch name for new task (prompted if not provided)
-        #[arg(long)]
-        branch: Option<String>,
-    },
     /// List projects (current and available)
     List {
         /// Output format: text (default) or json
@@ -176,14 +158,20 @@ pub enum Command {
         command: ProjectCommand,
     },
 
-    /// Open a file in the appropriate project
-    File {
-        /// Absolute file path (optionally with :line suffix)
-        #[arg(value_hint = ValueHint::FilePath)]
-        path: String,
+    /// Open a file, directory, project, or task
+    Open {
+        /// Path to file/directory, project name, or task (project:branch)
+        #[arg(value_hint = ValueHint::AnyPath)]
+        target: String,
         /// Which application to focus: editor or terminal
         #[arg(long, value_name = "APP")]
         land_in: Option<String>,
+        /// Home project for creating a new task
+        #[arg(long)]
+        home_project: Option<String>,
+        /// Branch name for new task
+        #[arg(long)]
+        branch: Option<String>,
     },
 
     /// Key-value storage operations
@@ -525,20 +513,6 @@ pub fn run(command: Command) -> Result<(), String> {
         },
 
         Command::Project { command } => match command {
-            ProjectCommand::Switch {
-                name_or_path,
-                name,
-                land_in,
-                home_project,
-                branch,
-            } => {
-                let branch =
-                    prompt_for_branch_if_needed(&client, &name_or_path, &home_project, branch)?;
-                let query = build_switch_query(&land_in, &name, &home_project, &branch);
-                let path = format!("/project/switch/{}{}", name_or_path, query);
-                client.get(&path)?;
-                Ok(())
-            }
             ProjectCommand::List { output, available } => {
                 let response = client.get("/project/list")?;
                 if output == "json" {
@@ -617,10 +591,42 @@ pub fn run(command: Command) -> Result<(), String> {
             }
         },
 
-        Command::File { path, land_in } => {
-            let query = build_query(&land_in, &None);
-            let url_path = format!("/file/{}{}", path, query);
-            client.get(&url_path)?;
+        Command::Open {
+            target,
+            land_in,
+            home_project,
+            branch,
+        } => {
+            let target_path = std::path::Path::new(&target);
+            let is_file = target_path.is_file();
+            let is_dir = target_path.is_dir();
+
+            if is_file {
+                // It's a file - use /file/ endpoint, default to landing in editor
+                let abs_path = std::fs::canonicalize(target_path)
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or(target.clone());
+                let land_in = land_in.or_else(|| Some("editor".to_string()));
+                let query = build_query(&land_in, &None);
+                let url_path = format!("/file/{}{}", abs_path, query);
+                client.get(&url_path)?;
+            } else if is_dir {
+                // It's a directory - switch to it as a project
+                let abs_path = std::fs::canonicalize(target_path)
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or(target.clone());
+                let branch =
+                    prompt_for_branch_if_needed(&client, &abs_path, &home_project, branch)?;
+                let query = build_switch_query(&land_in, &None, &home_project, &branch);
+                let path = format!("/project/switch/{}{}", abs_path, query);
+                client.get(&path)?;
+            } else {
+                // It's a project name or task identifier
+                let branch = prompt_for_branch_if_needed(&client, &target, &home_project, branch)?;
+                let query = build_switch_query(&land_in, &None, &home_project, &branch);
+                let path = format!("/project/switch/{}{}", target, query);
+                client.get(&path)?;
+            }
             Ok(())
         }
 

@@ -334,13 +334,23 @@ pub fn url_encode(s: &str) -> String {
     url::form_urlencoded::byte_serialize(s.as_bytes()).collect()
 }
 
-pub fn neighbors() -> Response<Body> {
+pub fn neighbors(active: bool) -> Response<Body> {
     let projects = projects::lock();
-    let ring: Vec<serde_json::Value> = projects
-        .all()
-        .iter()
-        .map(|p| serde_json::json!({ "project_key": p.store_key().to_string() }))
-        .collect();
+    let ring: Vec<serde_json::Value> = if active {
+        let window_names = crate::tmux::window_names();
+        projects
+            .open()
+            .into_iter()
+            .filter(|p| window_names.contains(&p.store_key().to_string()))
+            .map(|p| serde_json::json!({ "project_key": p.store_key().to_string() }))
+            .collect()
+    } else {
+        projects
+            .all()
+            .iter()
+            .map(|p| serde_json::json!({ "project_key": p.store_key().to_string() }))
+            .collect()
+    };
     let json = serde_json::json!({ "ring": ring });
     Response::new(Body::from(json.to_string()))
 }

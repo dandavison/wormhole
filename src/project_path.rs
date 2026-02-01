@@ -27,11 +27,11 @@ impl ProjectPath {
         skip_editor: bool,
     ) {
         let mut projects = projects::lock();
-        let current_app = projects.current().map(|current| {
-            let app = hammerspoon::current_application();
-            projects.set_last_application(&current.store_key(), app.clone());
-            app
-        });
+        let current_app = if projects.current().is_some() {
+            Some(hammerspoon::current_application())
+        } else {
+            None
+        };
         let project = self.project.clone();
         let is_already_open = project.is_open();
         if !is_already_open && !skip_editor {
@@ -40,18 +40,9 @@ impl ProjectPath {
         let land_in = if skip_editor {
             Some(Application::Terminal)
         } else {
-            land_in.or_else(|| match mutation {
-                Mutation::None | Mutation::RotateLeft | Mutation::RotateRight => {
-                    self.project.last_application.clone()
-                }
-                _ => parse_application(self.project.kv.get("land-in")).or({
-                    if is_already_open {
-                        current_app
-                    } else {
-                        None
-                    }
-                }),
-            })
+            land_in
+                .or_else(|| parse_application(self.project.kv.get("land-in")))
+                .or_else(|| if is_already_open { current_app } else { None })
         };
         projects.apply(mutation, &self.project.store_key());
         if util::debug() {

@@ -113,17 +113,21 @@ fn test_previous_project_and_next_project() {
         test.assert_focus(Editor(&proj_b));
     }
 
-    // Transition to (b, terminal)
-    test.focus_terminal();
-    test.assert_focus(Terminal(&proj_b));
-
-    // Set land-in in kv to check that previous disregards it
+    // Set land-in=terminal for proj_a via KV
     test.cli(&format!("wormhole kv set {} land-in terminal", proj_a))
         .unwrap();
 
-    // Previous should transition to (a, editor)
+    // Previous should respect land-in KV and transition to (a, terminal)
     test.cli("wormhole project previous").unwrap();
-    test.assert_focus(Editor(&proj_a));
+    test.assert_focus(Terminal(&proj_a));
+
+    // Next should go back to (b, editor) - no KV set, so stays in editor
+    test.cli("wormhole project next").unwrap();
+    test.assert_focus(Editor(&proj_b));
+
+    // And back to (a, terminal) - KV respected
+    test.cli("wormhole project previous").unwrap();
+    test.assert_focus(Terminal(&proj_a));
 }
 
 #[test]

@@ -1,6 +1,5 @@
 use crate::project::{BranchName, Cached, Project, ProjectKey, RepoName};
 use crate::util::execute_command;
-use crate::wormhole::Application;
 use crate::{config, git, ps};
 use lazy_static::lazy_static;
 use rayon::prelude::*;
@@ -126,7 +125,6 @@ impl<'a> Projects<'a> {
                     repo_path: path,
                     branch: None,
                     kv: HashMap::new(),
-                    last_application: None,
                     cached: Cached {
                         git_common_dir: Some(git_common_dir),
                         ..Default::default()
@@ -174,12 +172,6 @@ impl<'a> Projects<'a> {
             if let Some(k) = self.0.ring.remove(i) {
                 self.0.ring.push_back(k);
             }
-        }
-    }
-
-    pub fn set_last_application(&mut self, key: &ProjectKey, application: Application) {
-        if let Some(p) = self.0.all.get_mut(key) {
-            p.last_application = Some(application);
         }
     }
 
@@ -294,7 +286,6 @@ pub fn load() {
                     repo_path: canonical,
                     branch: None,
                     kv: HashMap::new(),
-                    last_application: None,
                     cached: Cached {
                         git_common_dir: Some(git_common_dir),
                         ..Default::default()
@@ -341,7 +332,6 @@ fn discover_tasks(additional_paths: HashMap<String, PathBuf>) -> HashMap<Project
                         repo_path: project_path.clone(),
                         branch: Some(BranchName::new(branch.clone())),
                         kv: HashMap::new(),
-                        last_application: None,
                         cached: Cached {
                             git_common_dir: Some(git_common_dir.clone()),
                             ..Default::default()

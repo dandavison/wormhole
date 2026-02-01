@@ -2,7 +2,6 @@ use crate::config;
 use crate::editor::Editor;
 use crate::git;
 use crate::project_path::ProjectPath;
-use crate::wormhole::Application;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
@@ -102,9 +101,6 @@ pub struct Project {
 
     // User-persisted preferences (from .git/wormhole/kv/)
     pub kv: HashMap<String, String>,
-
-    // Session state (not persisted)
-    pub last_application: Option<Application>,
 
     // Derived data (refreshed by `wormhole refresh`)
     pub cached: Cached,

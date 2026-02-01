@@ -37,15 +37,13 @@ use util::warn;
 fn fallback_to_open() -> Option<Command> {
     let args: Vec<String> = std::env::args().collect();
     let first_arg = args.get(1)?;
-    let path = std::path::Path::new(first_arg);
-    if path.exists() {
-        Some(Command::Open {
-            target: first_arg.clone(),
-            land_in: None,
-        })
-    } else {
-        None
+    if first_arg.starts_with('-') {
+        return None;
     }
+    Some(Command::Open {
+        target: first_arg.clone(),
+        land_in: None,
+    })
 }
 
 #[tokio::main]

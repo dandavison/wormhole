@@ -93,6 +93,9 @@ pub enum ProjectCommand {
         /// Output only project names (for shell completion)
         #[arg(long)]
         name_only: bool,
+        /// List only projects with a tmux window
+        #[arg(long)]
+        active: bool,
     },
     /// Switch to the previous project
     Previous {
@@ -481,8 +484,14 @@ pub fn run(command: Command) -> Result<(), String> {
                 output,
                 available,
                 name_only,
+                active,
             } => {
-                let response = client.get("/project/list")?;
+                let path = if active {
+                    "/project/list?active=true"
+                } else {
+                    "/project/list"
+                };
+                let response = client.get(path)?;
                 if output == "json" {
                     println!("{}", response);
                 } else if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response) {
@@ -497,10 +506,9 @@ pub fn run(command: Command) -> Result<(), String> {
                     } else if let Some(current) = json.get("current").and_then(|v| v.as_array()) {
                         for item in current {
                             if name_only {
-                                if let Some(project_key) =
-                                    item.get("project_key").and_then(|k| k.as_str())
+                                if let Some(key) = item.get("project_key").and_then(|k| k.as_str())
                                 {
-                                    println!("{}", project_key);
+                                    println!("{}", key);
                                 }
                             } else {
                                 println!("{}", render_project_item(item));

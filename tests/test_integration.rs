@@ -900,6 +900,97 @@ fn test_file_opens_in_project_not_task() {
 }
 
 #[test]
+fn test_project_list_active_flag() {
+    // `wormhole project list --active` should only show projects with tmux windows.
+    // Tasks without terminal windows should be excluded.
+    use std::process::Command;
+
+    let test = harness::WormholeTest::new(8956);
+
+    let home_proj = format!("{}active-home", TEST_PREFIX);
+    let home_dir = format!("/tmp/{}", home_proj);
+    let task_with_window = format!("{}ACTIVE-WIN", TEST_PREFIX);
+    let task_no_window = format!("{}ACTIVE-NOWIN", TEST_PREFIX);
+
+    init_git_repo(&home_dir);
+
+    // Create home project (has tmux window)
+    test.create_project(&home_dir, &home_proj);
+
+    // Create a task via wormhole (will have tmux window)
+    test.create_task(&task_with_window, &home_proj);
+
+    // Create a worktree directly with git (no tmux window)
+    let worktrees_dir = format!("{}/.git/wormhole/worktrees", home_dir);
+    std::fs::create_dir_all(&worktrees_dir).unwrap();
+    let output = Command::new("git")
+        .args([
+            "worktree",
+            "add",
+            "-b",
+            &task_no_window,
+            &format!("{}/{}", worktrees_dir, task_no_window),
+        ])
+        .current_dir(&home_dir)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "Failed to create worktree: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Refresh to discover the new task
+    test.cli("wormhole refresh").unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+
+    // Verify both tasks are in the regular list
+    assert!(
+        test.task_in_list(&home_proj, &task_with_window),
+        "Task with window should be in regular list"
+    );
+    assert!(
+        test.task_in_list(&home_proj, &task_no_window),
+        "Task without window should be in regular list"
+    );
+
+    // Get project list with --active flag
+    let active_output = test
+        .cli("wormhole project list --active --name-only")
+        .unwrap();
+    let active_lines: Vec<&str> = active_output.lines().collect();
+
+    let task_with_window_key = test.task_store_key(&task_with_window, &home_proj);
+    let task_no_window_key = test.task_store_key(&task_no_window, &home_proj);
+
+    // Task with window should appear in --active list
+    assert!(
+        active_lines
+            .iter()
+            .any(|l| l.contains(&task_with_window_key)),
+        "Task with tmux window '{}' should appear in --active list, got: {:?}",
+        task_with_window_key,
+        active_lines
+    );
+
+    // Task without window should NOT appear in --active list
+    assert!(
+        !active_lines.iter().any(|l| l.contains(&task_no_window_key)),
+        "Task without tmux window '{}' should NOT appear in --active list, got: {:?}",
+        task_no_window_key,
+        active_lines
+    );
+
+    // Home project should appear (it has a tmux window)
+    assert!(
+        active_lines.iter().any(|l| *l == home_proj),
+        "Home project '{}' should appear in --active list, got: {:?}",
+        home_proj,
+        active_lines
+    );
+}
+
+#[test]
 fn test_switch_creates_task_from_colon_syntax() {
     // `w project switch repo:branch` should create the task if it doesn't exist
     let test = harness::WormholeTest::new(8952);

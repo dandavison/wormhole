@@ -6,6 +6,7 @@
 --   etc.
 
 local M = {}
+local ring = require("ring")
 
 M.host = "http://wormhole:7117"
 M.selectRepeatInterval = 0.08 -- seconds between cycles when holding key
@@ -16,39 +17,6 @@ local selectTap = nil
 local selectActive = false
 local selectReverse = false
 local lastMoveTime = 0
-
--- Neighbor overlay state (must be declared before M.previous/M.next)
-local neighborAlertId = nil
-local neighborTap = nil
-local neighborOverlayActive = false
-local neighborDisplayOrder = nil  -- locked display order while overlay is shown
-local neighborCurrentIdx = nil    -- current position in neighborDisplayOrder
-local neighborEditorWindows = nil -- cached set of projects with editor windows
-local refreshNeighborOverlay      -- forward declaration
-
--- Get set of project keys that have editor windows open (Cursor/Code)
--- Window titles are "filename - projectkey" or just "projectkey"
--- where projectkey is "repo" or "repo:branch"
-local function getEditorWindows()
-    local projects = {}
-    for _, appName in ipairs({ "Cursor", "Code" }) do
-        local app = hs.application.find(appName)
-        if app then
-            for _, win in ipairs(app:allWindows()) do
-                local title = win:title() or ""
-                -- Try "filename - projectkey" format (handles both hyphen and em-dash)
-                local project = title:match(" [%-–—] ([^%-–—]+)$")
-                if project then
-                    projects[project] = true
-                else
-                    -- Window might just show the workspace name
-                    projects[title] = true
-                end
-            end
-        end
-    end
-    return projects
-end
 
 local function sendMove()
     local now = hs.timer.secondsSinceEpoch()
@@ -125,49 +93,8 @@ function M.select()
     end
 end
 
--- Check if target project has an editor window (using cached data if available)
-local function hasEditorWindow(item)
-    if not neighborEditorWindows then return true end -- assume yes if not cached
-    return neighborEditorWindows[item.project_key]
-end
-
-function M.previous()
-    local url = M.host .. "/project/previous?active=true"
-    -- During overlay with cached state, check target without extra HTTP call
-    if neighborOverlayActive and neighborDisplayOrder and neighborCurrentIdx and neighborEditorWindows then
-        local n = #neighborDisplayOrder
-        -- Moving left in display = previous
-        local targetIdx = neighborCurrentIdx - 1
-        if targetIdx < 1 then targetIdx = n end
-        local target = neighborDisplayOrder[targetIdx]
-        if target and not hasEditorWindow(target) then
-            url = url .. "&skip-editor=true"
-        end
-        neighborCurrentIdx = targetIdx
-    end
-    hs.http.asyncGet(url, nil, function()
-        if neighborOverlayActive then refreshNeighborOverlay() end
-    end)
-end
-
-function M.next()
-    local url = M.host .. "/project/next?active=true"
-    -- During overlay with cached state, check target without extra HTTP call
-    if neighborOverlayActive and neighborDisplayOrder and neighborCurrentIdx and neighborEditorWindows then
-        local n = #neighborDisplayOrder
-        -- Moving right in display = next
-        local targetIdx = neighborCurrentIdx + 1
-        if targetIdx > n then targetIdx = 1 end
-        local target = neighborDisplayOrder[targetIdx]
-        if target and not hasEditorWindow(target) then
-            url = url .. "&skip-editor=true"
-        end
-        neighborCurrentIdx = targetIdx
-    end
-    hs.http.asyncGet(url, nil, function()
-        if neighborOverlayActive then refreshNeighborOverlay() end
-    end)
-end
+M.previous = ring.previous
+M.next = ring.next
 
 function M.pin()
     hs.http.asyncPost(M.host .. "/project/pin", "", nil, function() end)
@@ -255,134 +182,6 @@ function M.bindProjectHotkeys(keymap)
             end
         end)
     end
-end
-
--- Helper to get unique identifier for a project/task
-local function itemKey(item)
-    return item.project_key
-end
-
--- Parse project_key into name and branch components
-local function parseProjectKey(project_key)
-    local name, branch = project_key:match("^([^:]+):(.+)$")
-    if name then
-        return name, branch
-    else
-        return project_key, nil
-    end
-end
-
--- Neighbor overlay (shows prev/next when ctrl+cmd held)
-local function renderNeighborOverlay()
-    hs.http.asyncGet(M.host .. "/project/neighbors?active=true", nil, function(status, body)
-        if status ~= 200 or not neighborOverlayActive then return end
-        local ok, data = pcall(hs.json.decode, body)
-        if not ok or not data.ring then return end
-
-        local ring = data.ring
-        local n = #ring
-        if n == 0 then return end
-
-        local currentKey = ring[1] and itemKey(ring[1])
-
-        -- Lock display order on first show, keep it fixed while overlay is visible
-        -- Center current item, with "previous" items to the left
-        if not neighborDisplayOrder then
-            neighborDisplayOrder = {}
-            local offset = n - math.floor(n / 2)
-            for i = n, 1, -1 do
-                local srcIdx = ((i - 1 + offset) % n) + 1
-                table.insert(neighborDisplayOrder, ring[srcIdx])
-            end
-            -- Current is at center position
-            neighborCurrentIdx = math.ceil(n / 2)
-            -- Cache editor windows (fast local query, no network)
-            neighborEditorWindows = getEditorWindows()
-        end
-
-        hs.timer.doAfter(0, function()
-            if not neighborOverlayActive then return end
-
-            local styledText = hs.styledtext.new("")
-            for i, item in ipairs(neighborDisplayOrder) do
-                if i > 1 then
-                    styledText = styledText .. hs.styledtext.new("    ", { font = { size = 14 } })
-                end
-
-                local isCurrent = (itemKey(item) == currentKey)
-                local dimColor = { white = 0.5, alpha = 0.8 }
-                local brightColor = { white = 1, alpha = 1 }
-
-                local name, branch = parseProjectKey(item.project_key)
-                if branch then
-                    -- Task: name(branch) format, horizontal
-                    local nameColor = isCurrent and { white = 0.7, alpha = 1 } or { white = 0.4, alpha = 0.7 }
-                    local branchColor = isCurrent and brightColor or dimColor
-                    local nameFont = { size = 12 }
-                    local branchFont = isCurrent and { size = 14, name = "Menlo-Bold" } or { size = 12 }
-
-                    styledText = styledText .. hs.styledtext.new(name, { font = nameFont, color = nameColor })
-                    styledText = styledText .. hs.styledtext.new("(", { font = nameFont, color = nameColor })
-                    styledText = styledText .. hs.styledtext.new(branch, { font = branchFont, color = branchColor })
-                    styledText = styledText .. hs.styledtext.new(")", { font = nameFont, color = nameColor })
-                else
-                    -- Single name for regular projects
-                    local color = isCurrent and brightColor or dimColor
-                    local font = isCurrent and { size = 14, name = "Menlo-Bold" } or { size = 12 }
-                    styledText = styledText .. hs.styledtext.new(name, { font = font, color = color })
-                end
-            end
-
-            if neighborAlertId then
-                hs.alert.closeSpecific(neighborAlertId)
-            end
-            neighborAlertId = hs.alert.show(styledText, {
-                fillColor = { white = 0.1, alpha = 0.9 },
-                strokeColor = { white = 0.3, alpha = 1 },
-                strokeWidth = 2,
-                radius = 10,
-                fadeInDuration = 0,
-                fadeOutDuration = 0,
-                atScreenEdge = 0
-            }, "♾️")
-        end)
-    end)
-end
-
-local function showNeighborOverlay()
-    if neighborOverlayActive then return end
-    neighborOverlayActive = true
-    renderNeighborOverlay()
-end
-
-refreshNeighborOverlay = function()
-    if neighborOverlayActive then
-        renderNeighborOverlay()
-    end
-end
-
-local function hideNeighborOverlay()
-    neighborOverlayActive = false
-    neighborDisplayOrder = nil -- reset for next show
-    neighborCurrentIdx = nil
-    neighborEditorWindows = nil
-    if neighborAlertId then
-        hs.alert.closeSpecific(neighborAlertId)
-        neighborAlertId = nil
-    end
-end
-
-function M.bindNeighborOverlay()
-    neighborTap = hs.eventtap.new({ hs.eventtap.event.types.flagsChanged }, function(event)
-        local flags = event:getFlags()
-        if flags.ctrl and flags.cmd and not flags.alt and not flags.shift then
-            showNeighborOverlay()
-        else
-            hideNeighborOverlay()
-        end
-        return false
-    end)
-    neighborTap:start()
 end
 
 local dashboardPreviousApp = nil
@@ -473,7 +272,7 @@ function M.bindKeys(keymap)
     hs.hotkey.bind({ "cmd", "control" }, ".", M.pin)
     hs.hotkey.bind({ "cmd", "alt" }, "k", M.createHotkeyOverlay(keymap))
     M.bindProjectHotkeys(keymap)
-    M.bindNeighborOverlay()
+    ring.bind()
     M.bindDashboardKey()
 end
 

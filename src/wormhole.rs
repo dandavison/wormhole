@@ -72,7 +72,7 @@ async fn route(
 ) -> Response<Body> {
     match path {
         "/project/list" => endpoints::list_projects(params.active),
-        "/project/neighbors" => endpoints::neighbors(),
+        "/project/neighbors" => endpoints::neighbors(params.active),
         "/project/debug" => endpoints::debug_projects(),
         "/dashboard" => endpoints::dashboard(),
         "/shell" => endpoints::shell_env(params.pwd.as_deref()),

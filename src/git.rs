@@ -140,6 +140,14 @@ pub fn create_worktree(
     }
 
     let args = if branch_exists(repo_path, branch_name) {
+        if let Some(existing_path) = branch_checked_out_at(repo_path, branch_name) {
+            return Err(format!(
+                "Branch '{}' is already checked out at {}. \
+                 Switch to a different branch there first, or use that location directly.",
+                branch_name,
+                existing_path.display()
+            ));
+        }
         vec![
             "worktree",
             "add",
@@ -183,6 +191,15 @@ fn branch_exists(repo_path: &Path, branch_name: &str) -> bool {
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false)
+}
+
+fn branch_checked_out_at(repo_path: &Path, branch_name: &str) -> Option<PathBuf> {
+    for wt in list_worktrees(repo_path) {
+        if wt.branch.as_deref() == Some(branch_name) {
+            return Some(wt.path);
+        }
+    }
+    None
 }
 
 pub fn worktree_base_path(repo_path: &Path) -> PathBuf {

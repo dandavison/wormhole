@@ -172,7 +172,7 @@ pub fn dashboard() -> Response<Body> {
         projects
             .all()
             .into_iter()
-            .filter(|p| p.is_task())
+            .filter(|p| p.is_task() && p.kv.contains_key("jira_key"))
             .cloned()
             .collect()
     };

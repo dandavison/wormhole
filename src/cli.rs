@@ -989,7 +989,8 @@ fn task_create_from_sprint(client: &Client) -> Result<(), String> {
             continue;
         }
 
-        println!("\n{} {} {} [{}]", emoji, issue.key, issue.summary, issue.status);
+        println!("\n─────────────────────────────────────────────────────────────────────────────────");
+        println!("{} {} {} [{}]", emoji, issue.key, issue.summary, issue.status);
 
         // If task exists locally, show it and offer to confirm/skip
         if let Some((existing_repo, existing_branch)) = existing {

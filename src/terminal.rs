@@ -72,12 +72,14 @@ pub struct ShellEnvVars {
 pub fn shell_env_vars(project: &Project) -> ShellEnvVars {
     let jira_url = jira_url_for_name(project.repo_name.as_str()).unwrap_or_default();
     let github_repo = project
+        .cached
         .github_repo
         .clone()
         .or_else(|| git::github_repo_from_remote(&project.repo_path))
         .unwrap_or_default();
     let github_pr_url = if !github_repo.is_empty() {
         project
+            .cached
             .github_pr
             .or_else(|| crate::github::get_open_pr_number(project))
             .map(|pr| format!("https://github.com/{}/pull/{}", github_repo, pr))

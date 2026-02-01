@@ -84,17 +84,30 @@ impl fmt::Display for ProjectKey {
     }
 }
 
+#[derive(Clone, Debug, Default)]
+pub struct Cached {
+    pub git_common_dir: Option<PathBuf>,
+    pub github_repo: Option<String>,
+    pub github_pr: Option<u64>,
+    pub jira: Option<crate::jira::IssueStatus>,
+    pub pr: Option<crate::github::PrStatus>,
+}
+
 #[derive(Clone, Debug)]
 pub struct Project {
+    // Identity
     pub repo_name: RepoName,
     pub repo_path: PathBuf,
-    pub kv: HashMap<String, String>,
-    pub last_application: Option<Application>,
     pub branch: Option<BranchName>,
-    pub github_pr: Option<u64>,
-    pub github_repo: Option<String>,
-    pub cached_jira: Option<crate::jira::IssueStatus>,
-    pub cached_pr: Option<crate::github::PrStatus>,
+
+    // User-persisted preferences (from .git/wormhole/kv/)
+    pub kv: HashMap<String, String>,
+
+    // Session state (not persisted)
+    pub last_application: Option<Application>,
+
+    // Derived data (refreshed by `wormhole refresh`)
+    pub cached: Cached,
 }
 
 impl Project {
@@ -110,10 +123,13 @@ impl Project {
     }
 
     pub fn worktree_path(&self) -> Option<PathBuf> {
-        self.branch.as_ref().map(|branch| {
-            git::worktree_base_path(&self.repo_path)
-                .join(git::encode_branch_for_path(branch.as_str()))
-        })
+        let branch = self.branch.as_ref()?;
+        let common_dir = self.cached.git_common_dir.as_ref()?;
+        Some(
+            common_dir
+                .join("wormhole/worktrees")
+                .join(git::encode_branch_for_path(branch.as_str())),
+        )
     }
 
     pub fn working_tree(&self) -> PathBuf {

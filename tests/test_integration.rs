@@ -25,12 +25,12 @@ fn test_open_project() {
     test.create_project(&dir_b, &proj_b);
 
     // Initially, editor gains focus.
-    test.cli(&["open", &proj_a]).unwrap();
+    test.cli(&format!("wormhole open {}", proj_a)).unwrap();
     test.assert_focus(Editor(&proj_a));
     test.assert_tmux_cwd(&dir_a);
 
     // Switching stays with editor.
-    test.cli(&["open", &proj_b]).unwrap();
+    test.cli(&format!("wormhole open {}", proj_b)).unwrap();
     test.assert_focus(Editor(&proj_b));
     test.assert_tmux_cwd(&dir_b);
 
@@ -38,23 +38,24 @@ fn test_open_project() {
     test.focus_terminal();
 
     // Switching now stays with terminal.
-    test.cli(&["open", &proj_a]).unwrap();
+    test.cli(&format!("wormhole open {}", proj_a)).unwrap();
     test.assert_focus(Terminal(&proj_a));
     test.assert_tmux_cwd(&dir_a);
 
     // land-in=editor overrides: even though we're in terminal, we land in editor
-    test.cli(&["open", &proj_b, "--land-in", "editor"]).unwrap();
+    test.cli(&format!("wormhole open {} --land-in editor", proj_b))
+        .unwrap();
     test.assert_focus(Editor(&proj_b));
 
     // land-in=terminal overrides: even though we're now in editor, we land in terminal
-    test.cli(&["open", &proj_a, "--land-in", "terminal"])
+    test.cli(&format!("wormhole open {} --land-in terminal", proj_a))
         .unwrap();
     test.assert_focus(Terminal(&proj_a));
 
     // land-in is also respected from project kv store.
-    test.cli(&["kv", "set", &proj_b, "land-in", "editor"])
+    test.cli(&format!("wormhole kv set {} land-in editor", proj_b))
         .unwrap();
-    test.cli(&["open", &proj_b]).unwrap();
+    test.cli(&format!("wormhole open {}", proj_b)).unwrap();
     test.assert_focus(Editor(&proj_b));
 }
 
@@ -74,20 +75,20 @@ fn test_previous_project_and_next_project() {
     test.create_project(&dir_b, &proj_b);
 
     // Start in (a, editor)
-    test.cli(&["open", &proj_a]).unwrap();
+    test.cli(&format!("wormhole open {}", proj_a)).unwrap();
     test.assert_focus(Editor(&proj_a));
 
     // Transition to (b, editor)
-    test.cli(&["open", &proj_b]).unwrap();
+    test.cli(&format!("wormhole open {}", proj_b)).unwrap();
     test.assert_focus(Editor(&proj_b));
 
     for _ in 0..2 {
         // Previous should transition to (a, editor)
-        test.cli(&["project", "previous"]).unwrap();
+        test.cli("wormhole project previous").unwrap();
         test.assert_focus(Editor(&proj_a));
 
         // Next should transition to (b, editor)
-        test.cli(&["project", "next"]).unwrap();
+        test.cli("wormhole project next").unwrap();
         test.assert_focus(Editor(&proj_b));
     }
 
@@ -96,11 +97,11 @@ fn test_previous_project_and_next_project() {
     test.assert_focus(Terminal(&proj_b));
 
     // Set land-in in kv to check that previous disregards it
-    test.cli(&["kv", "set", &proj_a, "land-in", "terminal"])
+    test.cli(&format!("wormhole kv set {} land-in terminal", proj_a))
         .unwrap();
 
     // Previous should transition to (a, editor)
-    test.cli(&["project", "previous"]).unwrap();
+    test.cli("wormhole project previous").unwrap();
     test.assert_focus(Editor(&proj_a));
 }
 
@@ -114,10 +115,11 @@ fn test_close_project() {
     init_git_repo(&dir);
 
     test.create_project(&dir, &proj);
-    test.cli(&["open", &proj]).unwrap();
+    test.cli(&format!("wormhole open {}", proj)).unwrap();
     test.assert_focus(Editor(&proj));
 
-    test.cli(&["project", "close", &proj]).unwrap();
+    test.cli(&format!("wormhole project close {}", proj))
+        .unwrap();
 
     assert!(
         test.wait_until(|| !test.window_exists(&proj), 5),
@@ -149,10 +151,10 @@ fn test_project_list_sorted() {
     // Open all in reverse alphabetical order using store_key format for tasks
     let task_b1_key = test.task_store_key(&task_b1, &proj_b);
     let task_a1_key = test.task_store_key(&task_a1, &proj_a);
-    test.cli(&["open", &task_b1_key]).unwrap();
-    test.cli(&["open", &proj_b]).unwrap();
-    test.cli(&["open", &task_a1_key]).unwrap();
-    test.cli(&["open", &proj_a]).unwrap();
+    test.cli(&format!("wormhole open {}", task_b1_key)).unwrap();
+    test.cli(&format!("wormhole open {}", proj_b)).unwrap();
+    test.cli(&format!("wormhole open {}", task_a1_key)).unwrap();
+    test.cli(&format!("wormhole open {}", proj_a)).unwrap();
 
     // Get project list via curl (Hammerspoon can timeout with many rapid calls)
     let output = Command::new("curl")
@@ -220,7 +222,8 @@ fn test_close_task_removes_from_list() {
     );
 
     // Close the task using store_key format
-    test.cli(&["project", "close", &store_key]).unwrap();
+    test.cli(&format!("wormhole project close '{}'", store_key))
+        .unwrap();
 
     // Wait for window to close (window name is store_key)
     assert!(
@@ -268,7 +271,7 @@ fn test_open_file() {
     std::fs::write(&file, "fn main() {}").unwrap();
 
     test.create_project(&dir, &proj);
-    test.cli(&["open", &file]).unwrap();
+    test.cli(&format!("wormhole open {}", file)).unwrap();
     test.assert_focus(Editor(&proj));
 }
 
@@ -285,7 +288,7 @@ fn test_open_file_with_line_number() {
 
     test.create_project(&dir, &proj);
     // Open file with line number using CLI path:line syntax
-    test.cli(&["open", &format!("{}:3", file)]).unwrap();
+    test.cli(&format!("wormhole open {}:3", file)).unwrap();
     test.assert_focus(Editor(&proj));
 }
 
@@ -306,11 +309,11 @@ fn test_pin() {
     test.create_project(&dir, &proj);
 
     // Go to project in editor
-    test.cli(&["open", &proj]).unwrap();
+    test.cli(&format!("wormhole open {}", proj)).unwrap();
     test.assert_focus(Editor(&proj));
 
     // Pin while in editor - should set land-in=editor
-    test.cli(&["project", "pin"]).unwrap();
+    test.cli("wormhole project pin").unwrap();
     assert!(
         test.wait_for_kv(&proj, "land-in", "editor", 10),
         "Expected land-in=editor after pinning in editor"
@@ -323,7 +326,7 @@ fn test_pin() {
     test.focus_terminal();
     test.assert_focus(Terminal(&proj));
 
-    test.cli(&["project", "pin"]).unwrap();
+    test.cli("wormhole project pin").unwrap();
     assert!(
         test.wait_for_kv(&proj, "land-in", "terminal", 5),
         "Expected land-in=terminal after pinning in terminal"
@@ -360,7 +363,8 @@ fn test_task_switching() {
     ];
 
     for (switch_key, window_title, expected_cwd) in cases {
-        test.cli(&["open", switch_key]).unwrap();
+        test.cli(&format!("wormhole open '{}'", switch_key))
+            .unwrap();
         test.assert_focus(Editor(window_title));
         test.assert_tmux_cwd(expected_cwd);
     }
@@ -412,14 +416,15 @@ fn test_task_in_submodule() {
     );
 
     // Switch between submodule project and task
-    test.cli(&["open", &submodule_name]).unwrap();
+    test.cli(&format!("wormhole open {}", submodule_name))
+        .unwrap();
     test.assert_focus(Editor(&submodule_name));
     test.assert_tmux_cwd(&submodule_dir);
 
     // Switch to task using store_key format
     // Cursor window title shows the folder name (branch), not the store_key
     let store_key = test.task_store_key(&task_id, &submodule_name);
-    test.cli(&["open", &store_key]).unwrap();
+    test.cli(&format!("wormhole open '{}'", store_key)).unwrap();
     test.assert_focus(Editor(&task_id));
     test.assert_tmux_cwd(&task_dir);
 }
@@ -439,7 +444,7 @@ fn test_task_home_project_not_self() {
 
     // Switch to task so it's in the open projects list
     let store_key = test.task_store_key(&task_id, &home_proj);
-    test.cli(&["open", &store_key]).unwrap();
+    test.cli(&format!("wormhole open '{}'", store_key)).unwrap();
     // Cursor window title shows the folder name (branch), not the store_key
     test.assert_focus(Editor(&task_id));
 
@@ -471,12 +476,12 @@ fn test_task_switching_updates_ring_order() {
     let store_key = test.task_store_key(&task_id, &home_proj);
 
     // Switch to home project first
-    test.cli(&["open", &home_proj]).unwrap();
+    test.cli(&format!("wormhole open {}", home_proj)).unwrap();
     test.assert_focus(Editor(&home_proj));
 
     // Switch to task using store_key
     // Cursor window title shows the folder name (branch), not the store_key
-    test.cli(&["open", &store_key]).unwrap();
+    test.cli(&format!("wormhole open '{}'", store_key)).unwrap();
     test.assert_focus(Editor(&task_id));
 
     // Verify both are in the list
@@ -490,11 +495,11 @@ fn test_task_switching_updates_ring_order() {
     );
 
     // Toggle back via previous - should go to home project
-    test.cli(&["project", "previous"]).unwrap();
+    test.cli("wormhole project previous").unwrap();
     test.assert_focus(Editor(&home_proj));
 
     // Toggle forward via next - should go to task
-    test.cli(&["project", "next"]).unwrap();
+    test.cli("wormhole project next").unwrap();
     test.assert_focus(Editor(&task_id));
 }
 
@@ -513,18 +518,22 @@ fn test_project_status() {
     test.assert_focus(Editor(&proj));
 
     // Get info by name
-    let status = test.cli(&["project", "show", &proj]).unwrap();
+    let status = test
+        .cli(&format!("wormhole project show {}", proj))
+        .unwrap();
     assert!(status.contains(&proj), "Status should contain project name");
 
-    // Get current project info
-    let status = test.cli(&["project", "show"]).unwrap();
+    // Get current project info (via HTTP - CLI uses cwd which isn't the test project)
+    let status = test.http_get("/project/show").unwrap();
     assert!(
         status.contains(&proj),
         "Current status should contain project name"
     );
 
     // Get JSON format
-    let status = test.cli(&["project", "show", &proj, "-o", "json"]).unwrap();
+    let status = test
+        .cli(&format!("wormhole project show {} -o json", proj))
+        .unwrap();
     assert!(status.contains("\"name\""), "JSON should have name field");
     assert!(
         status.contains("\"plan_exists\": true"),
@@ -552,15 +561,15 @@ fn test_task_respects_land_in_kv() {
     let store_key = test.task_store_key(&task_id, &home_proj);
 
     // Directly set land-in=terminal for the task using store_key
-    test.cli(&["kv", "set", &store_key, "land-in", "terminal"])
+    test.cli(&format!("wormhole kv set '{}' land-in terminal", store_key))
         .unwrap();
 
     // Switch to home project first (so we're not on the task)
-    test.cli(&["open", &home_proj]).unwrap();
+    test.cli(&format!("wormhole open {}", home_proj)).unwrap();
     test.assert_focus(Editor(&home_proj));
 
     // Switch to task - should respect land-in=terminal
-    test.cli(&["open", &store_key]).unwrap();
+    test.cli(&format!("wormhole open '{}'", store_key)).unwrap();
     test.assert_focus(Terminal(&store_key));
 }
 
@@ -586,8 +595,10 @@ fn test_tasks_persist_after_tmux_window_closed() {
     let task_2_key = test.task_store_key(&task_2, &home_proj);
 
     // Switch to both tasks to ensure they're in the ring and have tmux windows
-    test.cli(&["open", &task_1_key]).unwrap();
-    test.cli(&["open", &task_2_key]).unwrap();
+    test.cli(&format!("wormhole open '{}'", task_1_key))
+        .unwrap();
+    test.cli(&format!("wormhole open '{}'", task_2_key))
+        .unwrap();
 
     // Verify both tasks are in the project list
     assert!(
@@ -646,8 +657,10 @@ fn test_neighbors_returns_branch_for_tasks() {
     let task_2_key = test.task_store_key(&task_2, &home_proj);
 
     // Switch to both tasks to add them to the ring
-    test.cli(&["open", &task_1_key]).unwrap();
-    test.cli(&["open", &task_2_key]).unwrap();
+    test.cli(&format!("wormhole open '{}'", task_1_key))
+        .unwrap();
+    test.cli(&format!("wormhole open '{}'", task_2_key))
+        .unwrap();
 
     // Get neighbors endpoint
     let neighbors_json = test.http_get("/project/neighbors").unwrap();
@@ -750,7 +763,7 @@ fn test_tasks_appear_without_terminal_windows() {
     );
 
     // Refresh to discover the new task
-    test.cli(&["refresh"]).unwrap();
+    test.cli("wormhole refresh").unwrap();
 
     // Give a moment for refresh to complete
     std::thread::sleep(std::time::Duration::from_millis(500));
@@ -814,13 +827,13 @@ fn test_switch_to_project_when_task_exists() {
 
     // Switch to the task first (so it's the most recent)
     let task_key = test.task_store_key(&task_branch, &home_proj);
-    test.cli(&["open", &task_key]).unwrap();
+    test.cli(&format!("wormhole open '{}'", task_key)).unwrap();
     let task_dir = format!("{}/{}", worktrees_dir, task_branch);
     test.assert_tmux_cwd(&task_dir);
 
     // Now switch to the PROJECT by name (not the task)
     // The bug would cause this to stay in task dir or return wrong project
-    test.cli(&["open", &home_proj]).unwrap();
+    test.cli(&format!("wormhole open {}", home_proj)).unwrap();
 
     // Verify we're in the PROJECT directory, not the task worktree
     test.assert_tmux_cwd(&home_dir);
@@ -836,11 +849,11 @@ fn test_switch_to_project_when_task_exists() {
     // This exercises a different code path in resolve_project that also had the bug.
 
     // Switch to task first
-    test.cli(&["open", &task_key]).unwrap();
+    test.cli(&format!("wormhole open '{}'", task_key)).unwrap();
     test.assert_tmux_cwd(&task_dir);
 
     // Now switch by absolute path to the project directory
-    test.cli(&["open", &home_dir]).unwrap();
+    test.cli(&format!("wormhole open {}", home_dir)).unwrap();
 
     // Should be in project dir, not task dir
     test.assert_tmux_cwd(&home_dir);
@@ -906,9 +919,9 @@ fn test_file_opens_in_project_not_task() {
     );
 
     let task_key = test.task_store_key(&task_branch, &home_proj);
-    test.cli(&["open", &task_key]).unwrap();
+    test.cli(&format!("wormhole open '{}'", task_key)).unwrap();
 
-    test.cli(&["open", &test_file]).unwrap();
+    test.cli(&format!("wormhole open {}", test_file)).unwrap();
 
     test.assert_focus(Editor(&home_proj));
     test.assert_tmux_cwd(&home_dir);
@@ -931,7 +944,7 @@ fn test_switch_creates_task_from_colon_syntax() {
 
     // Use colon syntax to create a NEW task (not --home-project/--branch)
     let task_key = format!("{}:{}", home_proj, task_branch);
-    test.cli(&["open", &task_key]).unwrap();
+    test.cli(&format!("wormhole open '{}'", task_key)).unwrap();
 
     // Give time for task creation
     std::thread::sleep(std::time::Duration::from_millis(500));
@@ -945,7 +958,7 @@ fn test_switch_creates_task_from_colon_syntax() {
     );
 
     // Refresh and verify task appears in list
-    test.cli(&["refresh"]).unwrap();
+    test.cli("wormhole refresh").unwrap();
     std::thread::sleep(std::time::Duration::from_millis(300));
 
     assert!(

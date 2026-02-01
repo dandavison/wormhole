@@ -992,7 +992,7 @@ fn task_create_from_sprint(client: &Client) -> Result<(), String> {
             continue;
         }
 
-        println!("\n{} {} {}", emoji, issue.key, issue.summary);
+        println!("\n{} {} {} [{}]", emoji, issue.key, issue.summary, issue.status);
 
         // If task exists locally, show it and offer to confirm/skip
         if let Some((existing_repo, existing_branch)) = existing {
@@ -1000,7 +1000,8 @@ fn task_create_from_sprint(client: &Client) -> Result<(), String> {
                 "  Already exists locally: {}:{}",
                 existing_repo, existing_branch
             );
-            let confirm = match rl.readline("  Keep existing? [Y/n/q]: ") {
+            println!();
+            let confirm = match rl.readline("  ▶ Keep existing? [Y/n/q]: ") {
                 Ok(line) => line.trim().to_lowercase(),
                 Err(rustyline::error::ReadlineError::Interrupted) => "n".to_string(),
                 Err(rustyline::error::ReadlineError::Eof) => break,

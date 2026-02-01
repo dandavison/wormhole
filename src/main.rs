@@ -34,9 +34,33 @@ use hyper::Server;
 use cli::{Cli, Command, ServerCommand};
 use util::warn;
 
+fn fallback_to_open() -> Option<Command> {
+    let args: Vec<String> = std::env::args().collect();
+    let first_arg = args.get(1)?;
+    let path = std::path::Path::new(first_arg);
+    if path.exists() {
+        Some(Command::Open {
+            target: first_arg.clone(),
+            land_in: None,
+        })
+    } else {
+        None
+    }
+}
+
 #[tokio::main]
 async fn main() {
-    let cli = Cli::parse();
+    let cli = match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(e) => {
+            // If parsing failed, check if first arg is an existing path
+            if let Some(cmd) = fallback_to_open() {
+                Cli { command: Some(cmd) }
+            } else {
+                e.exit();
+            }
+        }
+    };
 
     match cli.command {
         // No subcommand or "server start-foreground" -> start server

@@ -197,6 +197,7 @@ function toggleMaximizeToolbar(btn) {
     if (!container) return;
 
     const closeBtn = container.querySelector('.wormhole-control-close');
+    const wormholeButtons = document.querySelector('.wormhole-buttons');
 
     if (vscodeMaximized) {
         container.classList.remove('maximized');
@@ -204,12 +205,14 @@ function toggleMaximizeToolbar(btn) {
         document.body.style.overflow = '';
         vscodeMaximized = false;
         if (closeBtn) closeBtn.style.display = '';
+        if (wormholeButtons) wormholeButtons.style.display = '';
     } else {
         container.classList.add('maximized');
         btn.textContent = 'Restore';
         document.body.style.overflow = 'hidden';
         vscodeMaximized = true;
         if (closeBtn) closeBtn.style.display = 'none';
+        if (wormholeButtons) wormholeButtons.style.display = 'none';
     }
 }
 

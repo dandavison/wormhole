@@ -146,10 +146,10 @@ impl WormholeTest {
         }
     }
 
-    pub fn cli(&self, args: &[&str]) -> Result<String, String> {
-        let output = Command::new("./target/debug/wormhole")
-            .args(args)
-            .env("WORMHOLE_PORT", self.port.to_string())
+    pub fn cli(&self, cmd: &str) -> Result<String, String> {
+        let full_cmd = format!("WORMHOLE_PORT={} ./target/debug/{}", self.port, cmd);
+        let output = Command::new("sh")
+            .args(["-c", &full_cmd])
             .output()
             .map_err(|e| format!("cli failed: {}", e))?;
         if output.status.success() {

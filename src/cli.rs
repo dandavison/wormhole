@@ -939,13 +939,16 @@ fn task_create_from_sprint(client: &Client) -> Result<(), String> {
             })
             .unwrap_or(false);
 
-        if let Some(reason) = should_skip_issue(&issue.status, has_pr) {
+        if let Some(reason) = should_skip_issue(has_pr) {
             println!("{} {} [{}]", issue.key, issue.summary, reason);
             skipped_count += 1;
             continue;
         }
 
-        println!("\n{} {}", issue.key, issue.summary);
+        println!(
+            "\n{} {} [{}]",
+            issue.key, issue.summary, issue.status
+        );
 
         // If task exists locally, show it and offer to confirm/skip
         if let Some((existing_repo, existing_branch)) = existing {
@@ -1401,15 +1404,12 @@ fn to_kebab_case(s: &str) -> String {
         .join("-")
 }
 
-/// Determines if we should prompt for a branch name for this issue.
+/// Determines if we should auto-skip this issue (no prompt).
 /// Returns None if we should prompt, or Some(reason) if we should skip.
-fn should_skip_issue(status: &str, has_pr: bool) -> Option<&'static str> {
-    let status_lower = status.to_lowercase();
-    if status_lower == "done" || status_lower == "closed" || status_lower == "resolved" {
-        return Some("done");
-    }
+/// Only skips issues that have a non-draft PR (work is already submitted).
+fn should_skip_issue(has_pr: bool) -> Option<&'static str> {
     if has_pr {
-        return Some("has_pr");
+        return Some("has PR");
     }
     None
 }
@@ -1433,34 +1433,13 @@ mod tests {
     }
 
     #[test]
-    fn test_should_skip_done_issues() {
-        assert_eq!(should_skip_issue("Done", false), Some("done"));
-        assert_eq!(should_skip_issue("DONE", false), Some("done"));
-        assert_eq!(should_skip_issue("Closed", false), Some("done"));
-        assert_eq!(should_skip_issue("Resolved", false), Some("done"));
-    }
-
-    #[test]
     fn test_should_skip_issues_with_pr() {
-        assert_eq!(should_skip_issue("In Progress", true), Some("has_pr"));
-        assert_eq!(should_skip_issue("In Review", true), Some("has_pr"));
+        assert_eq!(should_skip_issue(true), Some("has PR"));
     }
 
     #[test]
-    fn test_should_prompt_for_active_issues_without_pr() {
-        assert_eq!(should_skip_issue("In Progress", false), None);
-        assert_eq!(should_skip_issue("In Review", false), None);
-        assert_eq!(should_skip_issue("To Do", false), None);
-        assert_eq!(should_skip_issue("Open", false), None);
-        assert_eq!(should_skip_issue("Backlog", false), None);
-        assert_eq!(should_skip_issue("Selected for Development", false), None);
-    }
-
-    #[test]
-    fn test_done_takes_priority_over_has_pr() {
-        // If issue is done, skip reason should be "done" even if it has a PR
-        assert_eq!(should_skip_issue("Done", true), Some("done"));
-        assert_eq!(should_skip_issue("Closed", true), Some("done"));
+    fn test_should_not_skip_issues_without_pr() {
+        assert_eq!(should_skip_issue(false), None);
     }
 
     #[test]

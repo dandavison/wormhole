@@ -193,6 +193,21 @@ pub fn encode_branch_for_path(branch: &str) -> String {
     url::form_urlencoded::byte_serialize(branch.as_bytes()).collect()
 }
 
+pub fn list_branches(repo_path: &Path) -> Vec<String> {
+    let output = Command::new("git")
+        .args(["for-each-ref", "--format=%(refname:short)", "refs/heads/"])
+        .current_dir(repo_path)
+        .output();
+
+    match output {
+        Ok(output) if output.status.success() => String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .map(|s| s.to_string())
+            .collect(),
+        _ => vec![],
+    }
+}
+
 pub fn remove_worktree(repo_path: &Path, worktree_path: &Path) -> Result<(), String> {
     let output = Command::new("git")
         .args([

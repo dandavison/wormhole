@@ -403,6 +403,51 @@ fn create_project_editor(
     Ok(rl)
 }
 
+struct BranchCompleter {
+    branches: Vec<String>,
+}
+impl Helper for BranchCompleter {}
+impl Validator for BranchCompleter {}
+impl Hinter for BranchCompleter {
+    type Hint = String;
+}
+impl Highlighter for BranchCompleter {}
+impl Completer for BranchCompleter {
+    type Candidate = Pair;
+    fn complete(
+        &self,
+        line: &str,
+        pos: usize,
+        _ctx: &Context,
+    ) -> rustyline::Result<(usize, Vec<Pair>)> {
+        let prefix = &line[..pos];
+        let candidates: Vec<Pair> = self
+            .branches
+            .iter()
+            .filter(|b| b.starts_with(prefix))
+            .map(|b| Pair {
+                display: b.clone(),
+                replacement: b.clone(),
+            })
+            .collect();
+        Ok((0, candidates))
+    }
+}
+
+fn create_branch_editor(
+    branches: Vec<String>,
+) -> Result<Editor<BranchCompleter, rustyline::history::DefaultHistory>, String> {
+    let config = Config::builder()
+        .auto_add_history(false)
+        .completion_type(rustyline::CompletionType::List)
+        .build();
+    let helper = BranchCompleter { branches };
+    let mut rl: Editor<BranchCompleter, rustyline::history::DefaultHistory> =
+        Editor::with_config(config).map_err(|e| format!("Failed to init editor: {}", e))?;
+    rl.set_helper(Some(helper));
+    Ok(rl)
+}
+
 fn get_available_projects(client: &Client) -> Result<Vec<String>, String> {
     let response = client.get("/project/list")?;
     let parsed: serde_json::Value = serde_json::from_str(&response).map_err(|e| e.to_string())?;
@@ -1003,12 +1048,18 @@ fn task_create_from_sprint(client: &Client) -> Result<(), String> {
         };
         last_home = Some(home.clone());
 
+        // Get branches from the selected repo for completion
+        let branches = config::resolve_project_name(&home)
+            .map(|path| crate::git::list_branches(&path))
+            .unwrap_or_default();
+        let mut branch_rl = create_branch_editor(branches)?;
+
         // Prompt for branch
         let default_branch = existing
             .map(|(_, branch)| branch.clone())
             .unwrap_or_else(|| to_kebab_case(&issue.summary));
 
-        let branch = match rl.readline_with_initial("  branch: ", (&default_branch, "")) {
+        let branch = match branch_rl.readline_with_initial("  branch: ", (&default_branch, "")) {
             Ok(line) => {
                 let trimmed = line.trim();
                 if trimmed.is_empty() {

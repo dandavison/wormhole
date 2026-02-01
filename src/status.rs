@@ -53,10 +53,9 @@ pub fn get_status_by_name(name: &str) -> Option<TaskStatus> {
     ensure_cache();
     let projects = projects::lock();
     let key = ProjectKey::parse(name);
-    let project = projects.by_key(&key).or_else(|| {
-        let path = std::path::Path::new(name);
-        crate::task::task_by_path(path).or_else(|| projects.by_path(path))
-    })?;
+    let project = projects
+        .by_key(&key)
+        .or_else(|| projects.by_path(std::path::Path::new(name)))?;
     Some(get_status(&project))
 }
 

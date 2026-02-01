@@ -16,21 +16,6 @@ pub fn get_task_by_branch(repo: &str, branch: &str) -> Option<Project> {
     get_task(&ProjectKey::task(repo, branch))
 }
 
-pub fn task_by_path(path: &Path) -> Option<Project> {
-    let path = std::fs::canonicalize(path).ok()?;
-    let projects = projects::lock();
-    projects
-        .all()
-        .into_iter()
-        .filter(|p| p.is_task())
-        .find(|p| {
-            p.worktree_path()
-                .map(|wt| path.starts_with(&wt))
-                .unwrap_or(false)
-        })
-        .cloned()
-}
-
 /// Create a task. The branch name is the task identity.
 pub fn create_task(repo: &str, branch: &str) -> Result<Project, String> {
     if let Some(task) = get_task_by_branch(repo, branch) {

@@ -327,10 +327,10 @@ function injectStyles() {
             text-decoration: underline;
         }
         .wormhole-link-jira {
-            color: #0052cc;
+            color: #0066cc;
         }
         .wormhole-link-github {
-            color: #238636;
+            color: #0066cc;
         }
         .wormhole-vscode-container {
             display: none;

@@ -230,7 +230,7 @@ fn render_task_card(task: &crate::project::Project, jira_instance: Option<&str>)
             .map(|c| format!(" [{}]", html_escape(&c)))
             .unwrap_or_default();
         format!(
-            r#"<span class="meta-item meta-item-github"><a href="{}" target="_blank">{}</a>{}</span>"#,
+            r#"<span class="meta-item"><a href="{}" target="_blank">{}</a>{}</span>"#,
             pr.url,
             html_escape(&pr.display()),
             comments

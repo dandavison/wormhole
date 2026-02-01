@@ -66,3 +66,23 @@ pub fn get_current_status() -> Option<TaskStatus> {
     let project = projects.current()?;
     Some(get_status(&project))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    #[test]
+    fn test_get_status_by_name_with_path_does_not_deadlock() {
+        // Use /tmp which exists but isn't a project - this triggers the deadlock
+        // because canonicalize succeeds, causing task_by_path to acquire the lock
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            get_status_by_name("/tmp");
+            tx.send(()).ok();
+        });
+        rx.recv_timeout(Duration::from_secs(2))
+            .expect("get_status_by_name deadlocked");
+    }
+}

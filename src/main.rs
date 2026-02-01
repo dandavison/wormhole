@@ -35,46 +35,11 @@ use hyper::Server;
 use cli::{Cli, Command, ServerCommand};
 use util::warn;
 
-const SUBCOMMANDS: &[&str] = &[
-    "server",
-    "project",
-    "open",
-    "kv",
-    "jira",
-    "task",
-    "completion",
-    "kill",
-    "doctor",
-    "refresh",
-];
-
-fn fallback_to_open() -> Option<Command> {
-    let args: Vec<String> = std::env::args().collect();
-    let first_arg = args.get(1)?;
-    if first_arg.starts_with('-') || SUBCOMMANDS.contains(&first_arg.as_str()) {
-        return None;
-    }
-    Some(Command::Open {
-        target: first_arg.clone(),
-        land_in: None,
-    })
-}
-
 #[tokio::main]
 async fn main() {
     CompleteEnv::with_factory(Cli::command).complete();
 
-    let cli = match Cli::try_parse() {
-        Ok(cli) => cli,
-        Err(e) => {
-            // If parsing failed, check if first arg is an existing path
-            if let Some(cmd) = fallback_to_open() {
-                Cli { command: Some(cmd) }
-            } else {
-                e.exit();
-            }
-        }
-    };
+    let cli = Cli::parse();
 
     match cli.command {
         // No subcommand or "server start-foreground" -> start server

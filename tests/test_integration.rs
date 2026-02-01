@@ -60,27 +60,6 @@ fn test_open_project() {
 }
 
 #[test]
-fn test_open_fallback_without_subcommand() {
-    // `wormhole <target>` should behave the same as `wormhole open <target>`
-    let test = harness::WormholeTest::new(8960);
-
-    let proj = format!("{}fallback", TEST_PREFIX);
-    let dir = format!("/tmp/{}", proj);
-
-    init_git_repo(&dir);
-    test.create_project(&dir, &proj);
-
-    // `wormhole <project-name>` without explicit `open` subcommand
-    test.cli(&format!("wormhole {}", proj)).unwrap();
-    test.assert_focus(Editor(&proj));
-    test.assert_tmux_cwd(&dir);
-
-    // Also works with path
-    test.cli(&format!("wormhole {}", dir)).unwrap();
-    test.assert_focus(Editor(&proj));
-}
-
-#[test]
 fn test_previous_project_and_next_project() {
     let test = harness::WormholeTest::new(8936);
 

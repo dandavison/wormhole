@@ -103,11 +103,14 @@ impl<'a> Projects<'a> {
             .collect()
     }
 
-    pub fn add(&mut self, path: &str, name: Option<&str>) {
+    pub fn add(&mut self, path: &str, name: Option<&str>) -> Result<(), String> {
         let path = PathBuf::from(path.to_string());
         let path = std::fs::canonicalize(&path).unwrap_or(path);
         if Some(path.as_path()) == dirs::home_dir().as_deref() {
-            return;
+            return Err("Cannot add home directory as a project".to_string());
+        }
+        if !git::is_git_repo(&path) {
+            return Err(format!("'{}' is not a git repository", path.display()));
         }
         let name = name
             .map(|s| s.to_string())
@@ -131,6 +134,7 @@ impl<'a> Projects<'a> {
             );
             self.0.ring.push_front(key);
         }
+        Ok(())
     }
 
     pub fn add_project(&mut self, project: Project) {

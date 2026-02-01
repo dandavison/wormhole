@@ -497,7 +497,7 @@ pub fn switch(name_or_path: &str, params: &QueryParams, sync: bool) -> Response<
         }
         let project_path = {
             let mut projects = projects::lock();
-            resolve_project(&mut projects, &name_or_path)
+            resolve_project(&mut projects, &name_or_path)?
         };
         if let Some(pp) = project_path {
             pp.open(Mutation::Insert, land_in);
@@ -559,10 +559,13 @@ pub fn vscode_url(name: &str) -> Response<Body> {
     }
 }
 
-fn resolve_project(projects: &mut projects::Projects, name_or_path: &str) -> Option<ProjectPath> {
+fn resolve_project(
+    projects: &mut projects::Projects,
+    name_or_path: &str,
+) -> Result<Option<ProjectPath>, String> {
     let key = ProjectKey::parse(name_or_path);
     if let Some(project) = projects.by_key(&key) {
-        Some(project.as_project_path())
+        Ok(Some(project.as_project_path()))
     } else if name_or_path.starts_with('/') {
         let path = std::path::PathBuf::from(name_or_path);
         let name = path
@@ -571,15 +574,15 @@ fn resolve_project(projects: &mut projects::Projects, name_or_path: &str) -> Opt
             .unwrap_or(name_or_path);
         let key = ProjectKey::project(name);
         if projects.by_key(&key).is_none() {
-            projects.add(name_or_path, None);
+            projects.add(name_or_path, None)?;
         }
-        projects.by_key(&key).map(|p| p.as_project_path())
+        Ok(projects.by_key(&key).map(|p| p.as_project_path()))
     } else if let Some(path) = config::resolve_project_name(name_or_path) {
         let path_str = path.to_string_lossy().to_string();
-        projects.add(&path_str, Some(name_or_path));
-        projects.by_key(&key).map(|p| p.as_project_path())
+        projects.add(&path_str, Some(name_or_path))?;
+        Ok(projects.by_key(&key).map(|p| p.as_project_path()))
     } else {
-        None
+        Ok(None)
     }
 }
 

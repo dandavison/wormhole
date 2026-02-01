@@ -196,10 +196,10 @@ fn render_task_card(task: &crate::project::Project, jira_instance: Option<&str>)
     let branch_html = task
         .branch
         .as_ref()
-        .map(|b| format!(" {}", html_escape(b.as_str())))
+        .map(|b| format!(r#" <span class="card-branch">{}</span>"#, html_escape(b.as_str())))
         .unwrap_or_default();
     let repo_branch = format!(
-        r#"<span class="card-key">{}{}</span>"#,
+        r#"<span class="card-repo">{}</span>{}"#,
         html_escape(task.repo_name.as_str()),
         branch_html
     );

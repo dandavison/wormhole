@@ -285,6 +285,23 @@ fn test_open_file() {
 }
 
 #[test]
+fn test_open_file_with_line_number() {
+    let test = harness::WormholeTest::new(8955);
+
+    let proj = format!("{}file-line", TEST_PREFIX);
+    let dir = format!("/tmp/{}", proj);
+    let file = format!("{}/test.rs", dir);
+
+    init_git_repo(&dir);
+    std::fs::write(&file, "line1\nline2\nline3\n").unwrap();
+
+    test.create_project(&dir, &proj);
+    // Open file with line number using CLI path:line syntax
+    test.cli(&["open", &format!("{}:3", file)]).unwrap();
+    test.assert_focus(Editor(&proj));
+}
+
+#[test]
 fn test_pin() {
     // Test that /pin/ sets the land-in KV based on current application.
     // The actual effect of land-in on navigation is tested in test_open_project.

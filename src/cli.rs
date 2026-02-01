@@ -881,20 +881,38 @@ fn task_create_from_sprint(client: &Client) -> Result<(), String> {
     let parsed: serde_json::Value = serde_json::from_str(&response).map_err(|e| e.to_string())?;
     let current = parsed
         .get("current")
-        .and_then(|v| v.as_array())
-        .cloned()
-        .unwrap_or_default();
+        .ok_or("Missing 'current' in /project/list response")?
+        .as_array()
+        .ok_or("'current' is not an array")?;
 
-    // Map jira_key -> (repo_name, branch) for existing tasks
-    let existing_by_jira: HashMap<String, (String, String)> = current
-        .iter()
-        .filter_map(|v| {
-            let jira_key = v.get("kv")?.get("jira_key")?.as_str()?;
-            let project_key = v.get("project_key")?.as_str()?;
-            let (repo, branch) = project_key.split_once(':')?;
-            Some((jira_key.to_string(), (repo.to_string(), branch.to_string())))
-        })
-        .collect();
+    // Build maps from the project list
+    let mut existing_by_jira: HashMap<String, (String, String)> = HashMap::new();
+    let mut has_non_draft_pr: HashMap<String, bool> = HashMap::new();
+
+    for item in current {
+        let project_key = item
+            .get("project_key")
+            .ok_or("Missing 'project_key' in project item")?
+            .as_str()
+            .ok_or("'project_key' is not a string")?;
+
+        // Track PR status
+        let pr_is_non_draft = item.get("pr").is_some_and(|pr| {
+            !pr.get("draft").and_then(|d| d.as_bool()).unwrap_or(false)
+        });
+        has_non_draft_pr.insert(project_key.to_string(), pr_is_non_draft);
+
+        // Only process items with jira_key
+        if let Some(jira_key) = item.get("kv").and_then(|kv| kv.get("jira_key")) {
+            let jira_key = jira_key
+                .as_str()
+                .ok_or("'jira_key' is not a string")?;
+            let (repo, branch) = project_key
+                .split_once(':')
+                .ok_or_else(|| format!("Task with jira_key '{}' has invalid project_key '{}' (expected repo:branch)", jira_key, project_key))?;
+            existing_by_jira.insert(jira_key.to_string(), (repo.to_string(), branch.to_string()));
+        }
+    }
 
     // Map (repo, branch) -> jira_key for reverse lookup
     let existing_by_task: HashMap<(String, String), String> = existing_by_jira
@@ -913,20 +931,11 @@ fn task_create_from_sprint(client: &Client) -> Result<(), String> {
     for issue in &issues {
         let existing = existing_by_jira.get(&issue.key);
 
-        // Check if task exists and has PR
+        // Check if task exists and has non-draft PR
         let has_pr = existing
             .map(|(repo, branch)| {
                 let store_key = format!("{}:{}", repo, branch);
-                current.iter().any(|v| {
-                    v.get("project_key")
-                        .and_then(|k| k.as_str())
-                        .is_some_and(|k| k == store_key)
-                        && v.get("pr").is_some()
-                        && !v.get("pr")
-                            .and_then(|pr| pr.get("draft"))
-                            .and_then(|d| d.as_bool())
-                            .unwrap_or(false)
-                })
+                *has_non_draft_pr.get(&store_key).unwrap_or(&false)
             })
             .unwrap_or(false);
 

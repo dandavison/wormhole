@@ -27,7 +27,8 @@ use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::process;
 
-use clap::Parser;
+use clap::{CommandFactory, Parser};
+use clap_complete::env::CompleteEnv;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::Server;
 
@@ -61,6 +62,8 @@ fn fallback_to_open() -> Option<Command> {
 
 #[tokio::main]
 async fn main() {
+    CompleteEnv::with_factory(Cli::command).complete();
+
     let cli = match Cli::try_parse() {
         Ok(cli) => cli,
         Err(e) => {

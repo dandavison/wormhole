@@ -103,13 +103,13 @@ fn describe_github(gh: &GitHubUrl) -> DescribeResponse {
     let pr_branch = rx.recv().ok().flatten();
 
     match task_match {
-        Some((store_key, home)) => DescribeResponse {
-            name: Some(store_key.to_string()),
+        Some(task) => DescribeResponse {
+            name: Some(task.store_key.to_string()),
             kind: Some("task".to_string()),
-            home_project: Some(home),
+            home_project: Some(task.home),
             pr_branch,
-            jira_url: None,
-            jira_key: None,
+            jira_url: task.jira_key.as_ref().and_then(|k| jira_url_for_key(k)),
+            jira_key: task.jira_key,
             github_url: None,
             github_label: None,
         },
@@ -219,7 +219,13 @@ fn jira_url_for_key(key: &str) -> Option<String> {
     Some(format!("https://{}.atlassian.net/browse/{}", instance, key))
 }
 
-fn find_task_by_pr(owner: &str, repo: &str, pr_number: u64) -> Option<(ProjectKey, String)> {
+struct TaskMatch {
+    store_key: ProjectKey,
+    home: String,
+    jira_key: Option<String>,
+}
+
+fn find_task_by_pr(owner: &str, repo: &str, pr_number: u64) -> Option<TaskMatch> {
     let expected_repo = format!("{}/{}", owner, repo);
     let tasks: Vec<(ProjectKey, crate::project::Project)> = projects::tasks().into_iter().collect();
 
@@ -232,7 +238,11 @@ fn find_task_by_pr(owner: &str, repo: &str, pr_number: u64) -> Option<(ProjectKe
         if task_repo != expected_repo {
             return None;
         }
-        Some((key.clone(), project.repo_name.to_string()))
+        Some(TaskMatch {
+            store_key: key.clone(),
+            home: project.repo_name.to_string(),
+            jira_key: project.kv.get("jira_key").cloned(),
+        })
     })
 }
 

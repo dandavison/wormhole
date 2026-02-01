@@ -390,13 +390,25 @@ fn create_task(client: &Client, home: &str, branch: &str, jira_key: &str) -> Res
     Ok(())
 }
 
-fn build_query(land_in: &Option<String>, name: &Option<String>) -> String {
+fn parse_path_and_line(target: &str) -> (String, Option<usize>) {
+    if let Some(idx) = target.rfind(':') {
+        let (path, rest) = target.split_at(idx);
+        if let Ok(line) = rest[1..].parse::<usize>() {
+            if std::path::Path::new(path).exists() {
+                return (path.to_string(), Some(line));
+            }
+        }
+    }
+    (target.to_string(), None)
+}
+
+fn build_query(land_in: &Option<String>, line: &Option<usize>) -> String {
     let mut params = vec![];
     if let Some(app) = land_in {
         params.push(format!("land-in={}", app));
     }
-    if let Some(n) = name {
-        params.push(format!("name={}", n));
+    if let Some(n) = line {
+        params.push(format!("line={}", n));
     }
     if params.is_empty() {
         String::new()
@@ -554,14 +566,15 @@ pub fn run(command: Command) -> Result<(), String> {
         },
 
         Command::Open { target, land_in } => {
-            let target_path = std::path::Path::new(&target);
+            let (path_str, line) = parse_path_and_line(&target);
+            let target_path = std::path::Path::new(&path_str);
 
             if target_path.exists() {
                 // File or directory - open in editor
                 let abs_path = std::fs::canonicalize(target_path)
                     .map(|p| p.to_string_lossy().to_string())
-                    .unwrap_or(target.clone());
-                let query = build_query(&Some("editor".to_string()), &None);
+                    .unwrap_or(path_str);
+                let query = build_query(&Some("editor".to_string()), &line);
                 let url_path = format!("/file/{}{}", abs_path, query);
                 client.get(&url_path)?;
             } else {

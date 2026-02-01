@@ -146,6 +146,22 @@ impl WormholeTest {
         }
     }
 
+    pub fn cli(&self, args: &[&str]) -> Result<String, String> {
+        let output = Command::new("./target/debug/wormhole")
+            .args(args)
+            .env("WORMHOLE_PORT", self.port.to_string())
+            .output()
+            .map_err(|e| format!("cli failed: {}", e))?;
+        if output.status.success() {
+            Ok(String::from_utf8_lossy(&output.stdout).to_string())
+        } else {
+            Err(format!(
+                "cli error: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ))
+        }
+    }
+
     pub fn task_in_list(&self, repo: &str, branch: &str) -> bool {
         let response = self.http_get("/project/list").unwrap();
         let data: serde_json::Value = serde_json::from_str(&response).unwrap();

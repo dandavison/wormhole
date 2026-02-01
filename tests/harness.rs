@@ -168,14 +168,14 @@ impl WormholeTest {
     }
 
     pub fn task_in_list(&self, repo: &str, branch: &str) -> bool {
+        let expected_key = format!("{}:{}", repo, branch);
         let response = self.http_get("/project/list").unwrap();
         let data: serde_json::Value = serde_json::from_str(&response).unwrap();
         data["current"]
             .as_array()
             .map(|arr| {
-                arr.iter().any(|e| {
-                    e["name"].as_str() == Some(repo) && e["branch"].as_str() == Some(branch)
-                })
+                arr.iter()
+                    .any(|e| e["project_key"].as_str() == Some(expected_key.as_str()))
             })
             .unwrap_or(false)
     }
@@ -185,10 +185,7 @@ impl WormholeTest {
         let data: serde_json::Value = serde_json::from_str(&response).unwrap();
         data["current"]
             .as_array()
-            .map(|arr| {
-                arr.iter()
-                    .any(|e| e["name"].as_str() == Some(name) && e["branch"].is_null())
-            })
+            .map(|arr| arr.iter().any(|e| e["project_key"].as_str() == Some(name)))
             .unwrap_or(false)
     }
 

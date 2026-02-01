@@ -165,19 +165,15 @@ fn test_project_list_sorted() {
     let list: Value = serde_json::from_str(&list_json).expect("invalid JSON from /project/list");
     let current = list["current"].as_array().expect("missing 'current' array");
 
-    // With new model: projects have just "name", tasks have "name" and "branch"
-    // Extract identifiers: for projects just name, for tasks name:branch
+    // Extract project keys, filtering to test projects only
     let identifiers: Vec<String> = current
         .iter()
         .filter_map(|e| {
-            let name = e["name"].as_str()?;
-            if !name.starts_with(TEST_PREFIX) {
-                return None;
-            }
-            if let Some(branch) = e["branch"].as_str() {
-                Some(format!("{}:{}", name, branch))
+            let project_key = e["project_key"].as_str()?;
+            if project_key.starts_with(TEST_PREFIX) {
+                Some(project_key.to_string())
             } else {
-                Some(name.to_string())
+                None
             }
         })
         .collect();
@@ -631,14 +627,9 @@ fn test_tasks_persist_after_tmux_window_closed() {
 }
 
 #[test]
-fn test_neighbors_returns_branch_for_tasks() {
-    // Regression test: The /project/neighbors endpoint must return `branch` for tasks
-    // so that clients (like Hammerspoon) can distinguish tasks from projects and
-    // correctly identify the current item in the ring.
-    // Bug: Hammerspoon checked `item.home` to detect tasks, but the new data model
-    // uses `item.branch`. Also, `isCurrent` checked just `item.name` which couldn't
-    // distinguish between tasks from the same repo.
-    // Fix: Hammerspoon now checks `item.branch` and uses `name:branch` as unique key.
+fn test_neighbors_returns_project_key() {
+    // Verify /project/neighbors returns project_key for each item in the ring.
+    // Tasks have project_key containing ':', regular projects don't.
     let test = harness::WormholeTest::new(8946);
 
     let home_proj = format!("{}neighbors-home", TEST_PREFIX);
@@ -657,10 +648,8 @@ fn test_neighbors_returns_branch_for_tasks() {
     let task_2_key = test.task_store_key(&task_2, &home_proj);
 
     // Switch to both tasks to add them to the ring
-    test.cli(&format!("wormhole open '{}'", task_1_key))
-        .unwrap();
-    test.cli(&format!("wormhole open '{}'", task_2_key))
-        .unwrap();
+    test.cli(&format!("wormhole open '{}'", task_1_key)).unwrap();
+    test.cli(&format!("wormhole open '{}'", task_2_key)).unwrap();
 
     // Get neighbors endpoint
     let neighbors_json = test.http_get("/project/neighbors").unwrap();
@@ -669,49 +658,32 @@ fn test_neighbors_returns_branch_for_tasks() {
         .as_array()
         .expect("ring should be an array");
 
-    // Find the two tasks in the ring
-    let task_1_entry = ring.iter().find(|e| {
-        e["name"].as_str() == Some(home_proj.as_str())
-            && e["branch"].as_str() == Some(task_1.as_str())
-    });
-    let task_2_entry = ring.iter().find(|e| {
-        e["name"].as_str() == Some(home_proj.as_str())
-            && e["branch"].as_str() == Some(task_2.as_str())
-    });
-
-    // Verify tasks have `branch` field (not `home`)
-    assert!(
-        task_1_entry.is_some(),
-        "Task 1 should be in ring with name={} and branch={}, got: {:?}",
-        home_proj,
-        task_1,
-        ring
-    );
-    assert!(
-        task_2_entry.is_some(),
-        "Task 2 should be in ring with name={} and branch={}, got: {:?}",
-        home_proj,
-        task_2,
-        ring
-    );
-
-    // Verify that tasks do NOT have `home` field (old model)
-    assert!(
-        task_1_entry.unwrap().get("home").is_none(),
-        "Tasks should not have 'home' field in new model"
-    );
-    assert!(
-        task_2_entry.unwrap().get("home").is_none(),
-        "Tasks should not have 'home' field in new model"
-    );
-
-    // Verify that regular project doesn't have branch
-    let project_entry = ring
+    // Collect all project_keys
+    let keys: Vec<&str> = ring
         .iter()
-        .find(|e| e["name"].as_str() == Some(home_proj.as_str()) && e["branch"].is_null());
+        .filter_map(|e| e["project_key"].as_str())
+        .collect();
+
+    // Verify tasks are in ring with colon-separated keys
     assert!(
-        project_entry.is_some(),
-        "Regular project should be in ring without branch field"
+        keys.contains(&task_1_key.as_str()),
+        "Task 1 key '{}' should be in ring, got: {:?}",
+        task_1_key,
+        keys
+    );
+    assert!(
+        keys.contains(&task_2_key.as_str()),
+        "Task 2 key '{}' should be in ring, got: {:?}",
+        task_2_key,
+        keys
+    );
+
+    // Verify regular project is in ring without colon
+    assert!(
+        keys.contains(&home_proj.as_str()),
+        "Project '{}' should be in ring, got: {:?}",
+        home_proj,
+        keys
     );
 }
 

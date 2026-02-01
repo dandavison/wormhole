@@ -128,8 +128,7 @@ end
 -- Check if target project has an editor window (using cached data if available)
 local function hasEditorWindow(item)
     if not neighborEditorWindows then return true end -- assume yes if not cached
-    local key = item.branch and (item.name .. ":" .. item.branch) or item.name
-    return neighborEditorWindows[key]
+    return neighborEditorWindows[item.project_key]
 end
 
 function M.previous()
@@ -260,10 +259,16 @@ end
 
 -- Helper to get unique identifier for a project/task
 local function itemKey(item)
-    if item.branch then
-        return item.name .. ":" .. item.branch
+    return item.project_key
+end
+
+-- Parse project_key into name and branch components
+local function parseProjectKey(project_key)
+    local name, branch = project_key:match("^([^:]+):(.+)$")
+    if name then
+        return name, branch
     else
-        return item.name
+        return project_key, nil
     end
 end
 
@@ -308,22 +313,23 @@ local function renderNeighborOverlay()
                 local dimColor = { white = 0.5, alpha = 0.8 }
                 local brightColor = { white = 1, alpha = 1 }
 
-                if item.branch then
+                local name, branch = parseProjectKey(item.project_key)
+                if branch then
                     -- Task: name(branch) format, horizontal
                     local nameColor = isCurrent and { white = 0.7, alpha = 1 } or { white = 0.4, alpha = 0.7 }
                     local branchColor = isCurrent and brightColor or dimColor
                     local nameFont = { size = 12 }
                     local branchFont = isCurrent and { size = 14, name = "Menlo-Bold" } or { size = 12 }
 
-                    styledText = styledText .. hs.styledtext.new(item.name, { font = nameFont, color = nameColor })
+                    styledText = styledText .. hs.styledtext.new(name, { font = nameFont, color = nameColor })
                     styledText = styledText .. hs.styledtext.new("(", { font = nameFont, color = nameColor })
-                    styledText = styledText .. hs.styledtext.new(item.branch, { font = branchFont, color = branchColor })
+                    styledText = styledText .. hs.styledtext.new(branch, { font = branchFont, color = branchColor })
                     styledText = styledText .. hs.styledtext.new(")", { font = nameFont, color = nameColor })
                 else
                     -- Single name for regular projects
                     local color = isCurrent and brightColor or dimColor
                     local font = isCurrent and { size = 14, name = "Menlo-Bold" } or { size = 12 }
-                    styledText = styledText .. hs.styledtext.new(item.name, { font = font, color = color })
+                    styledText = styledText .. hs.styledtext.new(name, { font = font, color = color })
                 end
             end
 

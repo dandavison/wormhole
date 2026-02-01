@@ -19,15 +19,13 @@ pub fn list_projects() -> Response<Body> {
     let mut current: Vec<_> = open_projects
         .into_iter()
         .map(|project| {
-            let mut obj = serde_json::json!({ "name": project.repo_name });
-            if let Some(branch) = &project.branch {
-                obj["branch"] = serde_json::json!(branch);
-                if let Some(worktree_path) = project.worktree_path() {
-                    obj["path"] = serde_json::json!(worktree_path);
-                }
-            } else {
-                obj["path"] = serde_json::json!(project.repo_path);
-            }
+            let mut obj = serde_json::json!({
+                "project_key": project.store_key().to_string()
+            });
+            let path = project
+                .worktree_path()
+                .unwrap_or_else(|| project.repo_path.clone());
+            obj["path"] = serde_json::json!(path);
             if !project.kv.is_empty() {
                 obj["kv"] = serde_json::json!(project.kv);
             }
@@ -41,18 +39,17 @@ pub fn list_projects() -> Response<Body> {
         })
         .collect();
 
-    // Sort: projects without branch first (alphabetically), then tasks (by name, branch)
+    // Sort: projects (no colon) first alphabetically, then tasks (with colon) by key
     current.sort_by(|a, b| {
-        let a_branch = a.get("branch").and_then(|h| h.as_str());
-        let b_branch = b.get("branch").and_then(|h| h.as_str());
-        let a_name = a.get("name").and_then(|n| n.as_str()).unwrap_or("");
-        let b_name = b.get("name").and_then(|n| n.as_str()).unwrap_or("");
+        let a_key = a.get("project_key").and_then(|k| k.as_str()).unwrap_or("");
+        let b_key = b.get("project_key").and_then(|k| k.as_str()).unwrap_or("");
+        let a_is_task = a_key.contains(':');
+        let b_is_task = b_key.contains(':');
 
-        match (a_branch, b_branch) {
-            (None, Some(_)) => std::cmp::Ordering::Less,
-            (Some(_), None) => std::cmp::Ordering::Greater,
-            (None, None) => a_name.cmp(b_name),
-            (Some(ab), Some(bb)) => (a_name, ab).cmp(&(b_name, bb)),
+        match (a_is_task, b_is_task) {
+            (false, true) => std::cmp::Ordering::Less,
+            (true, false) => std::cmp::Ordering::Greater,
+            _ => a_key.cmp(b_key),
         }
     });
 
@@ -80,9 +77,8 @@ pub fn debug_projects() -> Response<Body> {
         .map(|(i, project)| {
             serde_json::json!({
                 "index": i,
-                "name": project.repo_name,
+                "project_key": project.store_key().to_string(),
                 "path": project.repo_path.display().to_string(),
-                "branch": project.branch,
             })
         })
         .collect();
@@ -333,13 +329,7 @@ pub fn neighbors() -> Response<Body> {
     let ring: Vec<serde_json::Value> = projects
         .all()
         .iter()
-        .map(|p| {
-            let mut obj = serde_json::json!({ "name": p.repo_name });
-            if let Some(branch) = &p.branch {
-                obj["branch"] = serde_json::json!(branch);
-            }
-            obj
-        })
+        .map(|p| serde_json::json!({ "project_key": p.store_key().to_string() }))
         .collect();
     let json = serde_json::json!({ "ring": ring });
     Response::new(Body::from(json.to_string()))
@@ -452,7 +442,7 @@ pub fn refresh_project(name: &str) -> Response<Body> {
     if let Some(project) = projects.get_mut(&key) {
         crate::github::refresh_github_info(project);
         let json = serde_json::json!({
-            "name": project.repo_name,
+            "project_key": project.store_key().to_string(),
             "github_pr": project.cached.github_pr,
             "github_repo": project.cached.github_repo,
         });

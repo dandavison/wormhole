@@ -256,24 +256,15 @@ fn render_task_card(task: &crate::project::Project, jira_instance: Option<&str>)
         .unwrap_or_default();
 
     let path = task.working_tree();
-    let plan_exists = path.join(".task/plan.md").exists();
-    let plan_url = if plan_exists {
-        crate::git::github_file_url(&path, ".task/plan.md")
+    let plan_path = path.join(".task/plan.md");
+    let plan_html = if plan_path.exists() {
+        let file_url = format!("/file/{}", plan_path.to_string_lossy());
+        format!(
+            r#"<span class="meta-item"><a href="{}"">Plan</a></span>"#,
+            file_url
+        )
     } else {
-        None
-    };
-
-    let plan_html = if plan_exists {
-        if let Some(ref url) = plan_url {
-            format!(
-                r#"<span class="meta-item">Plan: <a href="{}" target="_blank" class="check">✓</a></span>"#,
-                url
-            )
-        } else {
-            r#"<span class="meta-item">Plan: <span class="check">✓</span></span>"#.to_string()
-        }
-    } else {
-        r#"<span class="meta-item">Plan: <span class="cross">✗</span></span>"#.to_string()
+        String::new()
     };
 
     let iframe_html = match crate::serve_web::manager().get_or_start(task.repo_name.as_str(), &path)

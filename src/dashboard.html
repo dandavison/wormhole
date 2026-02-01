@@ -296,6 +296,13 @@
           }
         }
       });
+
+      document.querySelectorAll('.plan-link').forEach((link) => {
+        link.addEventListener('click', (e) => {
+          e.preventDefault();
+          fetch(link.dataset.url);
+        });
+      });
     </script>
   </body>
 </html>

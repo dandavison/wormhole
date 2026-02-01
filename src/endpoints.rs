@@ -258,9 +258,9 @@ fn render_task_card(task: &crate::project::Project, jira_instance: Option<&str>)
     let path = task.working_tree();
     let plan_path = path.join(".task/plan.md");
     let plan_html = if plan_path.exists() {
-        let file_url = format!("/file/{}", plan_path.to_string_lossy());
+        let file_url = format!("/file/{}?land-in=editor", plan_path.to_string_lossy());
         format!(
-            r#"<span class="meta-item"><a href="{}"">Plan</a></span>"#,
+            "<span class=\"meta-item\"><a href=\"javascript:void(0)\" class=\"plan-link\" data-url=\"{}\">Plan</a></span>",
             file_url
         )
     } else {

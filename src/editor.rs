@@ -116,27 +116,51 @@ impl Editor {
     }
 }
 
-fn workspace_file_path(project: &Project) -> std::path::PathBuf {
+fn wormhole_workspace_path(project: &Project) -> std::path::PathBuf {
     let store_key = project.store_key().to_string();
     let filename = format!("{}.code-workspace", store_key);
     let gitdir = crate::git::git_common_dir(&project.repo_path);
     gitdir.join("wormhole/workspaces").join(filename)
 }
 
-fn ensure_workspace_file(project: &Project) -> std::path::PathBuf {
-    let workspace_path = workspace_file_path(project);
-    if !workspace_path.exists() {
-        let project_dir = project.working_tree();
-        let content = format!(
-            r#"{{"folders": [{{"path": "{}"}}]}}"#,
-            project_dir.display()
-        );
-        if let Some(parent) = workspace_path.parent() {
-            let _ = fs::create_dir_all(parent);
+fn root_workspace_file(project: &Project) -> Option<std::path::PathBuf> {
+    let root = project.working_tree();
+    let entries = fs::read_dir(&root).ok()?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().map_or(false, |e| e == "code-workspace") {
+            return Some(path);
         }
-        let _ = fs::write(&workspace_path, content);
     }
-    workspace_path
+    Option::None
+}
+
+fn resolve_workspace_file(project: &Project) -> Result<std::path::PathBuf, String> {
+    let root_ws = root_workspace_file(project);
+    let wormhole_ws = wormhole_workspace_path(project);
+    let wormhole_exists = wormhole_ws.exists();
+
+    match (root_ws, wormhole_exists) {
+        (Some(root), true) => Err(format!(
+            "Workspace file conflict: both '{}' and '{}' exist",
+            root.display(),
+            wormhole_ws.display()
+        )),
+        (Some(root), false) => Ok(root),
+        (Option::None, true) => Ok(wormhole_ws),
+        (Option::None, false) => {
+            let project_dir = project.working_tree();
+            let content = format!(
+                r#"{{"folders": [{{"path": "{}"}}]}}"#,
+                project_dir.display()
+            );
+            if let Some(parent) = wormhole_ws.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            let _ = fs::write(&wormhole_ws, content);
+            Ok(wormhole_ws)
+        }
+    }
 }
 
 pub fn open_workspace(project: &Project) {
@@ -149,7 +173,13 @@ pub fn open_workspace(project: &Project) {
     match editor {
         None => {}
         Cursor | VSCode | VSCodeInsiders => {
-            let workspace_path = ensure_workspace_file(project);
+            let workspace_path = match resolve_workspace_file(project) {
+                Ok(p) => p,
+                Err(e) => {
+                    crate::util::error(&e);
+                    return;
+                }
+            };
             execute_command(
                 editor.cli_executable_name(),
                 ["--new-window", workspace_path.to_str().unwrap()],
@@ -207,7 +237,7 @@ pub fn open_path(path: &ProjectPath) -> Result<(), String> {
     }
 
     // Open workspace file (fast via URI, sets correct window title)
-    let workspace_path = ensure_workspace_file(&path.project);
+    let workspace_path = resolve_workspace_file(&path.project)?;
     if let Some(uri) = editor.open_directory_uri(&workspace_path) {
         execute_command("open", ["-g", uri.as_str()], &root_abspath);
     }

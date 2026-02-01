@@ -34,10 +34,23 @@ use hyper::Server;
 use cli::{Cli, Command, ServerCommand};
 use util::warn;
 
+const SUBCOMMANDS: &[&str] = &[
+    "server",
+    "project",
+    "open",
+    "kv",
+    "jira",
+    "task",
+    "completion",
+    "kill",
+    "doctor",
+    "refresh",
+];
+
 fn fallback_to_open() -> Option<Command> {
     let args: Vec<String> = std::env::args().collect();
     let first_arg = args.get(1)?;
-    if first_arg.starts_with('-') {
+    if first_arg.starts_with('-') || SUBCOMMANDS.contains(&first_arg.as_str()) {
         return None;
     }
     Some(Command::Open {

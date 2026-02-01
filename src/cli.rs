@@ -871,7 +871,6 @@ fn doctor_persisted_data(output: &str) -> Result<(), String> {
 
 fn task_create_from_sprint(client: &Client) -> Result<(), String> {
     use std::collections::HashMap;
-    use std::path::PathBuf;
 
     let default_home = std::env::var("WORMHOLE_DEFAULT_HOME_PROJECT").ok();
 
@@ -883,17 +882,21 @@ fn task_create_from_sprint(client: &Client) -> Result<(), String> {
         .cloned()
         .unwrap_or_default();
 
-    let existing_tasks: HashMap<String, (PathBuf, String)> = current
+    // Map jira_key -> (repo_name, branch) for existing tasks
+    let existing_by_jira: HashMap<String, (String, String)> = current
         .iter()
         .filter_map(|v| {
             let jira_key = v.get("kv")?.get("jira_key")?.as_str()?;
-            let path = v.get("path")?.as_str()?;
+            let repo = v.get("repo_name")?.as_str()?;
             let branch = v.get("branch")?.as_str()?;
-            Some((
-                jira_key.to_string(),
-                (PathBuf::from(path), branch.to_string()),
-            ))
+            Some((jira_key.to_string(), (repo.to_string(), branch.to_string())))
         })
+        .collect();
+
+    // Map (repo, branch) -> jira_key for reverse lookup
+    let existing_by_task: HashMap<(String, String), String> = existing_by_jira
+        .iter()
+        .map(|(jira, (repo, branch))| ((repo.clone(), branch.clone()), jira.clone()))
         .collect();
 
     let available_projects = get_available_projects(client)?;
@@ -902,27 +905,70 @@ fn task_create_from_sprint(client: &Client) -> Result<(), String> {
     let mut rl = create_project_editor(available_projects)?;
     let mut last_home = default_home;
     let mut created_count = 0;
+    let mut skipped_count = 0;
 
     for issue in &issues {
-        let existing = existing_tasks.get(&issue.key);
+        let existing = existing_by_jira.get(&issue.key);
+
+        // Check if task exists and has PR
         let has_pr = existing
-            .map(|(path, _)| crate::github::get_pr_status(path).is_some())
+            .map(|(repo, branch)| {
+                let store_key = format!("{}:{}", repo, branch);
+                current.iter().any(|v| {
+                    v.get("project_key")
+                        .and_then(|k| k.as_str())
+                        .is_some_and(|k| k == store_key)
+                        && v.get("pr").is_some()
+                })
+            })
             .unwrap_or(false);
 
         if let Some(reason) = should_skip_issue(&issue.status, has_pr) {
             println!("{} {} [{}]", issue.key, issue.summary, reason);
+            skipped_count += 1;
             continue;
         }
 
         println!("\n{} {}", issue.key, issue.summary);
 
-        let default_h = last_home.clone().unwrap_or_default();
-        let home = match rl.readline_with_initial("home: ", (&default_h, "")) {
+        // If task exists locally, show it and offer to confirm/skip
+        if let Some((existing_repo, existing_branch)) = existing {
+            println!(
+                "  Already exists locally: {}:{}",
+                existing_repo, existing_branch
+            );
+            let confirm = match rl.readline("  Keep existing? [Y/n/q]: ") {
+                Ok(line) => line.trim().to_lowercase(),
+                Err(rustyline::error::ReadlineError::Interrupted) => "n".to_string(),
+                Err(rustyline::error::ReadlineError::Eof) => break,
+                Err(e) => return Err(format!("Input error: {}", e)),
+            };
+            match confirm.as_str() {
+                "" | "y" | "yes" => {
+                    println!("  Keeping {}:{}", existing_repo, existing_branch);
+                    skipped_count += 1;
+                    last_home = Some(existing_repo.clone());
+                    continue;
+                }
+                "q" | "quit" => break,
+                _ => {
+                    println!("  Will prompt for new location (existing task will remain)");
+                }
+            }
+        }
+
+        // Prompt for home project
+        let default_h = existing
+            .map(|(repo, _)| repo.clone())
+            .or_else(|| last_home.clone())
+            .unwrap_or_default();
+
+        let home = match rl.readline_with_initial("  home: ", (&default_h, "")) {
             Ok(line) => {
                 let trimmed = line.trim();
                 if trimmed.is_empty() {
                     if default_h.is_empty() {
-                        eprintln!("Skipping (no home)");
+                        eprintln!("  Skipping (no home)");
                         continue;
                     }
                     default_h
@@ -931,7 +977,7 @@ fn task_create_from_sprint(client: &Client) -> Result<(), String> {
                 }
             }
             Err(rustyline::error::ReadlineError::Interrupted) => {
-                eprintln!("Skipping");
+                eprintln!("  Skipping");
                 continue;
             }
             Err(rustyline::error::ReadlineError::Eof) => break,
@@ -939,11 +985,12 @@ fn task_create_from_sprint(client: &Client) -> Result<(), String> {
         };
         last_home = Some(home.clone());
 
+        // Prompt for branch
         let default_branch = existing
             .map(|(_, branch)| branch.clone())
             .unwrap_or_else(|| to_kebab_case(&issue.summary));
 
-        let branch = match rl.readline_with_initial("branch: ", (&default_branch, "")) {
+        let branch = match rl.readline_with_initial("  branch: ", (&default_branch, "")) {
             Ok(line) => {
                 let trimmed = line.trim();
                 if trimmed.is_empty() {
@@ -953,17 +1000,65 @@ fn task_create_from_sprint(client: &Client) -> Result<(), String> {
                 }
             }
             Err(rustyline::error::ReadlineError::Interrupted) => {
-                eprintln!("Skipping");
+                eprintln!("  Skipping");
                 continue;
             }
             Err(rustyline::error::ReadlineError::Eof) => break,
             Err(e) => return Err(format!("Input error: {}", e)),
         };
 
+        // Safety check: warn if this repo:branch already has a different JIRA key
+        let task_key = (home.clone(), branch.clone());
+        if let Some(other_jira) = existing_by_task.get(&task_key) {
+            if other_jira != &issue.key {
+                eprintln!(
+                    "  WARNING: {}:{} is already linked to {}",
+                    home, branch, other_jira
+                );
+                let confirm = match rl.readline("  Continue anyway? [y/N]: ") {
+                    Ok(line) => line.trim().to_lowercase(),
+                    Err(_) => "n".to_string(),
+                };
+                if confirm != "y" && confirm != "yes" {
+                    eprintln!("  Skipping to avoid conflict");
+                    continue;
+                }
+            }
+        }
+
+        // Safety check: warn if changing repo or branch for existing JIRA task
+        if let Some((existing_repo, existing_branch)) = existing {
+            if &home != existing_repo || &branch != existing_branch {
+                eprintln!(
+                    "  WARNING: {} already exists as {}:{}",
+                    issue.key, existing_repo, existing_branch
+                );
+                eprintln!(
+                    "  Creating {}:{} will result in duplicate tasks for same JIRA",
+                    home, branch
+                );
+                let confirm = match rl.readline("  Continue anyway? [y/N]: ") {
+                    Ok(line) => line.trim().to_lowercase(),
+                    Err(_) => "n".to_string(),
+                };
+                if confirm != "y" && confirm != "yes" {
+                    eprintln!("  Skipping to avoid duplicate");
+                    continue;
+                }
+            }
+        }
+
+        // Final confirmation before creating
+        println!("  Creating {}:{} for {}", home, branch, issue.key);
         create_task(client, &home, &branch, &issue.key)?;
-        println!("Created {}:{}", home, branch);
+        println!("  Created {}:{}", home, branch);
         created_count += 1;
     }
+
+    println!(
+        "\nDone: {} created, {} skipped",
+        created_count, skipped_count
+    );
 
     if created_count > 0 {
         let _ = client.post("/project/refresh");

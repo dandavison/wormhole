@@ -21,14 +21,14 @@ Wormhole is a tool for working on software projects.
 
 - The point of truth for what projects and tasks exist is this filesystem state. The only data
   persisted by wormhole itself is associated with the `wormhole kv` interface. It is stored in JSON
-  files named `$gitdir/wormhole/kv/$branch.json`, where `$gitdir` is as defined above for the
-  submodule and non-submodule cases. For example, if a task has an associated JIRA ticket, then
-  wormhole stores the JIRA identifier in kv. (A task may also have an associated GitHub PR but that
-  does not need to be stored in kv since the `gh` CLI can discover it using the repo remote that is
-  stored by git on disk.)
+  files named `$gitdir/wormhole/kv/${repo}_${branch}.json` (with branch encoded to handle `/`),
+  where `$gitdir` is as defined above for the submodule and non-submodule cases. For example, if a
+  task has an associated JIRA ticket, then wormhole stores the JIRA identifier in kv. (A task may
+  also have an associated GitHub PR but that does not need to be stored in kv since the `gh` CLI can
+  discover it using the repo remote that is stored by git on disk.)
 
 - Wormhole is a process exposing an HTTP API, with a CLI client that is a thin wrapper over the HTTP
-  API. The CLI API includes `wormhole project list`, `wormhole task list`, `wormhole task create`,
+  API. The CLI API includes `wormhole project list`, `wormhole task create`,
   `wormhole project switch`, etc.
 
 - On server start, `wormhole project list` lists all tasks discovered on disk.
@@ -49,8 +49,8 @@ Wormhole is a tool for working on software projects.
   editor workspace. A third button brings up an embedded vscode session in an iframe, on the same
   task workspace.
 
-- Wormhole serves a dashboard with a card for each task. Each card has the same 3 buttons linking to
-  terminal, editor, and embedded vscode.
+- Wormhole serves a sprint dashboard with a card for each sprint issue. Each card has buttons linking
+  to terminal, editor, and embedded vscode.
 
 - The server-side handlers for wormhole API operations typically do no network or disk I/O, instead
   using in-memory data about projects. `wormhole refresh` causes this data to be refreshed by
@@ -81,32 +81,35 @@ ln -s /Applications/Hammerspoon.app/Contents/Frameworks/hs/hs ~/bin/
 
 # Build
 cargo build --release
-cp target/release/wormhole ~/bin/
+ln -s target/release/wormhole ~/bin/
 
 # Run server
-wormhole serve
+wormhole server start
 
 # To run multiple wormholes, create a new tmux session, set WORMHOLE_PORT, and run `server start-foreground`
 
 # GUI (optional)
 (cd gui && make dist)
-ln -fs $PWD/gui/dist/Wormhole/Wormhole.app /Applications/Wormhole.app
+ln -fs $PWD/gui/dist/Wormhole/Wormhole.app /Applications/
 
 # Chrome extension (optional)
 # Load web/chrome-extension as unpacked extension
 ```
 
-Edit `src/config.rs` for editor/terminal settings.
-
 ## CLI
 
 ```bash
-wormhole serve                          # Start server (port 7117)
-wormhole project switch myapp           # Switch to project by name
-wormhole project switch /path/to/repo   # Open/create project at path
-wormhole project switch ACT-1234 --home-project myrepo  # Open task (creates worktree)
+wormhole server start                   # Start server daemon (port 7117)
+wormhole server stop                    # Stop server daemon
+wormhole server attach                  # Attach to running server
+wormhole open myapp                     # Switch to project by name
+wormhole open /path/to/repo             # Open/create project at path
+wormhole open /path/to/file.rs:42       # Open file at line in editor
+wormhole open myrepo:ACT-1234           # Open task (creates worktree if needed)
 wormhole project list                   # List projects (includes tasks)
 wormhole project list --available       # List available projects (from WORMHOLE_PATH)
+wormhole project list --active          # List only projects with tmux windows
+wormhole project list --name-only       # Output project keys only (for completion)
 wormhole project previous               # Previous project
 wormhole project next                   # Next project
 wormhole project close myapp            # Close project windows
@@ -114,24 +117,29 @@ wormhole project remove myapp           # Remove project/task
 wormhole project pin                    # Pin current (project, app) state
 wormhole project debug                  # Debug info for all projects
 wormhole project show                   # Show task info (JIRA, PR, plan.md)
-wormhole project show ACT-1234          # Show info for specific project
-wormhole file /path/to/file.rs:42       # Open file at line
+wormhole project show myrepo:ACT-1234   # Show info for specific project/task
 wormhole kv get myapp land-in           # Get KV
 wormhole kv set myapp land-in editor    # Set KV
-wormhole jira sprint                    # List JIRA sprint issues
-wormhole jira sprint create             # Create tasks for all sprint issues
-wormhole jira sprint create ACT-123 myrepo  # With home project override
-wormhole kill-session                   # Kill tmux session and clean up
+wormhole kv delete myapp land-in        # Delete KV
+wormhole kv list myapp                  # List all KV for project
+wormhole task create <jira-url>         # Create task from JIRA URL
+wormhole task create-from-sprint        # Create tasks for all sprint issues
+wormhole jira sprint list               # List JIRA sprint issues
+wormhole jira sprint show               # Show detailed sprint status
+wormhole refresh                        # Refresh in-memory data from disk/APIs
+wormhole kill                           # Kill tmux session and clean up
+wormhole doctor persisted-data          # Report on worktrees and KV files
 wormhole completion bash                # Generate shell completions
-wormhole completion --available         # List available project names (for completion)
 ```
 
 ## HTTP API
 
 | Method | Endpoint                    | Description                       |
 |--------|-----------------------------|-----------------------------------|
-| GET    | `/project/switch/<name>`    | Switch/create project or task     |
 | GET    | `/project/list`             | List projects (JSON, includes tasks) |
+| GET    | `/project/neighbors`        | Project ring for navigation UI    |
+| GET    | `/project/switch/<name>`    | Switch/create project or task     |
+| GET    | `/project/create/<branch>`  | Create task with branch name      |
 | GET    | `/project/previous`         | Previous project                  |
 | GET    | `/project/next`             | Next project                      |
 | POST   | `/project/close/<name>`     | Close project windows             |
@@ -139,6 +147,13 @@ wormhole completion --available         # List available project names (for comp
 | POST   | `/project/pin`              | Pin current (project, app) state  |
 | GET    | `/project/debug`            | Debug info                        |
 | GET    | `/project/show[/<name>]`    | Task info (JIRA, PR, plan.md)     |
+| POST   | `/project/describe`         | Describe URL (JIRA/GitHub lookup) |
+| GET    | `/project/vscode/<name>`    | Get embedded VSCode URL           |
+| POST   | `/project/refresh`          | Refresh all in-memory data        |
+| POST   | `/project/refresh/<name>`   | Refresh single project            |
+| POST   | `/project/refresh-tasks`    | Refresh task worktrees            |
+| GET    | `/dashboard`                | Sprint dashboard HTML             |
+| GET    | `/shell`                    | Shell env vars (pwd query param)  |
 | GET    | `/file/<path>`              | Open file (path:line supported)   |
 | GET    | `/<github_blob_path>?line=N`| Open GitHub file locally          |
 | GET    | `/kv/<project>/<key>`       | Get value                         |
@@ -147,17 +162,17 @@ wormhole completion --available         # List available project names (for comp
 | GET    | `/kv/<project>`             | List project KV                   |
 | GET    | `/kv`                       | List all KV                       |
 
-Query params: `land-in=terminal|editor`, `name=<project_name>`, `line=N`, `home-project=<project>` (for tasks), `format=json`
+Query params: `land-in=terminal|editor`, `line=N`, `home-project=<project>`, `active=true`, `skip-editor=true`, `focus-terminal=true`, `sync=true`, `pwd=<path>`
 
 ## Environment Variables
 
-| Variable | Description |
-|----------|-------------|
-| `JIRA_INSTANCE` | JIRA instance name (e.g., `mycompany` for mycompany.atlassian.net) |
-| `JIRA_EMAIL` | JIRA account email |
-| `JIRA_TOKEN` | JIRA API token |
-| `GITHUB_REPO` | GitHub repo (e.g., `owner/repo`) for PR lookup in `jira sprint` |
-| `WORMHOLE_DEFAULT_HOME` | Default home project for `jira sprint create` |
+| Variable                | Description                                                        |
+|-------------------------|--------------------------------------------------------------------|
+| `JIRA_INSTANCE`         | JIRA instance name (e.g., `mycompany` for mycompany.atlassian.net) |
+| `JIRA_EMAIL`            | JIRA account email                                                 |
+| `JIRA_TOKEN`            | JIRA API token                                                     |
+| `GITHUB_REPO`           | GitHub repo (e.g., `owner/repo`) for PR lookup in `jira sprint`    |
+| `WORMHOLE_DEFAULT_HOME` | Default home project for `jira sprint create`                      |
 
 ## Example Workflows
 
@@ -173,25 +188,39 @@ hs.hotkey.bind({}, "f13", wormhole.select)
 ```
 
 **GitHub links → local editor:**
-Install the Chrome extension from `web/chrome-extension/`, or use Requestly with:
-- `/^https://github.com/([^#]+/blob/[^#?]+)(?:#L(\d+))?(?:-L\d+)?$/` → `http://localhost:7117/$1?line=$2`
+Install the Chrome extension as an unpacked extension from `web/chrome-extension/`
 
 **Terminal hyperlinks:**
 Tools like [delta](https://dandavison.github.io/delta/) and [ripgrep](https://github.com/BurntSushi/ripgrep) emit OSC 8 hyperlinks. Configure them to use `http://localhost:7117/file/` URLs.
 
 ## Shell Integration
 
-When wormhole opens a terminal for a project, it writes environment variables to `/tmp/wormhole.env`:
+When wormhole opens a terminal for a project, it sets environment variables:
+- `WORMHOLE_PROJECT_NAME` - project or task name
+- `WORMHOLE_PROJECT_DIR` - project root directory
+- `WORMHOLE_JIRA_URL` - JIRA issue URL (if task has JIRA)
+- `WORMHOLE_GITHUB_REPO` - GitHub repo (e.g., `owner/repo`)
+- `WORMHOLE_GITHUB_PR_URL` - PR URL (if task has open PR)
+
+**Zsh prompt** (`shell/zsh/prompt.sh`):
+
+Shows project name and git branch with OSC 8 hyperlinks:
+- Project name links to JIRA issue (if available)
+- Branch links to GitHub PR (if exists) or compare URL
+
 ```bash
-export WORMHOLE_PROJECT_NAME=myproject WORMHOLE_PROJECT_DIR=/path/to/myproject
+source /path/to/wormhole/shell/zsh/prompt.sh
 ```
 
-Wormhole doesn't try to `cd` existing shells—it opens new terminal windows/tabs at the correct directory (via tmux `new-window -c` or similar). The env file is metadata that scripts or prompts can optionally source.
+**Shell helpers** (`shell/lib.sh`):
 
-Optional shell helpers in `cli/lib.sh`:
 ```bash
-source /path/to/wormhole/cli/lib.sh
+source /path/to/wormhole/shell/lib.sh
 
-wormhole-env   # Source /tmp/wormhole.env into current shell
-wormhole-cd    # cd to $WORMHOLE_PROJECT_DIR (or pass a path)
+wormhole-cd              # cd to $WORMHOLE_PROJECT_DIR
+wormhole-cd /some/path   # cd to specified path
+wormhole-open            # open current directory in wormhole
+wormhole-open /path      # open specified path in wormhole
+wormhole-shell-switch /path  # switch shell session to different project
+wormhole-shell-reset     # re-fetch env vars from wormhole server
 ```

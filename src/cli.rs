@@ -163,15 +163,9 @@ pub enum Command {
         /// Path to file/directory, project name, or task (project:branch)
         #[arg(value_hint = ValueHint::AnyPath)]
         target: String,
-        /// Which application to focus: editor or terminal
+        /// Which application to focus (only for project/task, not file/directory)
         #[arg(long, value_name = "APP")]
         land_in: Option<String>,
-        /// Home project for creating a new task
-        #[arg(long)]
-        home_project: Option<String>,
-        /// Branch name for new task
-        #[arg(long)]
-        branch: Option<String>,
     },
 
     /// Key-value storage operations
@@ -436,45 +430,6 @@ fn build_switch_query(
     format!("?{}", params.join("&"))
 }
 
-fn prompt_for_branch_if_needed(
-    client: &Client,
-    task_id: &str,
-    home_project: &Option<String>,
-    branch: Option<String>,
-) -> Result<Option<String>, String> {
-    if branch.is_some() {
-        return Ok(branch);
-    }
-    if home_project.is_none() {
-        return Ok(None);
-    }
-    // Check if task already exists via HTTP
-    let response = client.get("/project/list")?;
-    let task_exists = serde_json::from_str::<serde_json::Value>(&response)
-        .ok()
-        .and_then(|v| v.get("current")?.as_array().cloned())
-        .map(|arr| {
-            arr.iter()
-                .any(|v| v.get("name").and_then(|n| n.as_str()) == Some(task_id))
-        })
-        .unwrap_or(false);
-
-    if task_exists {
-        return Ok(None);
-    }
-    eprint!("Branch name for {}: ", task_id);
-    io::Write::flush(&mut io::stderr()).ok();
-    let mut input = String::new();
-    io::stdin()
-        .read_line(&mut input)
-        .map_err(|e| format!("Failed to read branch name: {}", e))?;
-    let branch = input.trim();
-    if branch.is_empty() {
-        return Err("Branch name required for new task".to_string());
-    }
-    Ok(Some(branch.to_string()))
-}
-
 pub fn run(command: Command) -> Result<(), String> {
     let client = Client::new();
 
@@ -591,39 +546,20 @@ pub fn run(command: Command) -> Result<(), String> {
             }
         },
 
-        Command::Open {
-            target,
-            land_in,
-            home_project,
-            branch,
-        } => {
+        Command::Open { target, land_in } => {
             let target_path = std::path::Path::new(&target);
-            let is_file = target_path.is_file();
-            let is_dir = target_path.is_dir();
 
-            if is_file {
-                // It's a file - use /file/ endpoint, default to landing in editor
+            if target_path.exists() {
+                // File or directory - open in editor
                 let abs_path = std::fs::canonicalize(target_path)
                     .map(|p| p.to_string_lossy().to_string())
                     .unwrap_or(target.clone());
-                let land_in = land_in.or_else(|| Some("editor".to_string()));
-                let query = build_query(&land_in, &None);
+                let query = build_query(&Some("editor".to_string()), &None);
                 let url_path = format!("/file/{}{}", abs_path, query);
                 client.get(&url_path)?;
-            } else if is_dir {
-                // It's a directory - switch to it as a project
-                let abs_path = std::fs::canonicalize(target_path)
-                    .map(|p| p.to_string_lossy().to_string())
-                    .unwrap_or(target.clone());
-                let branch =
-                    prompt_for_branch_if_needed(&client, &abs_path, &home_project, branch)?;
-                let query = build_switch_query(&land_in, &None, &home_project, &branch);
-                let path = format!("/project/switch/{}{}", abs_path, query);
-                client.get(&path)?;
             } else {
-                // It's a project name or task identifier
-                let branch = prompt_for_branch_if_needed(&client, &target, &home_project, branch)?;
-                let query = build_switch_query(&land_in, &None, &home_project, &branch);
+                // Project name or task identifier - respects land-in KV
+                let query = build_switch_query(&land_in, &None, &None, &None);
                 let path = format!("/project/switch/{}{}", target, query);
                 client.get(&path)?;
             }

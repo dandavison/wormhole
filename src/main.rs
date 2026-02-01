@@ -98,13 +98,19 @@ async fn main() {
 }
 
 async fn serve_http() {
-    let addr = SocketAddr::from(([127, 0, 0, 1], config::wormhole_port()));
+    let port = config::wormhole_port();
+    let addr = SocketAddr::from(([127, 0, 0, 1], port));
 
     let make_service =
         make_service_fn(|_conn| async { Ok::<_, Infallible>(service_fn(wormhole::service)) });
 
-    // Serve forever: a Wormhole service is created for each incoming connection
-    let server = Server::bind(&addr).serve(make_service);
+    let server = match Server::try_bind(&addr) {
+        Ok(builder) => builder.serve(make_service),
+        Err(e) => {
+            eprintln!("Error: cannot bind to port {port}: {e}. Is another wormhole server already running?");
+            process::exit(1);
+        }
+    };
 
     if let Err(e) = server.await {
         warn(&format!("server error: {}", e));

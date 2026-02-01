@@ -497,8 +497,10 @@ pub fn run(command: Command) -> Result<(), String> {
                     } else if let Some(current) = json.get("current").and_then(|v| v.as_array()) {
                         for item in current {
                             if name_only {
-                                if let Some(name) = item.get("name").and_then(|n| n.as_str()) {
-                                    println!("{}", name);
+                                if let Some(project_key) =
+                                    item.get("project_key").and_then(|k| k.as_str())
+                                {
+                                    println!("{}", project_key);
                                 }
                             } else {
                                 println!("{}", render_project_item(item));
@@ -1031,18 +1033,16 @@ fn sprint_list(client: &Client, output: &str) -> Result<(), String> {
 
 /// Render a project item from /project/list response
 fn render_project_item(item: &serde_json::Value) -> String {
-    let name = item.get("name").and_then(|n| n.as_str()).unwrap_or("");
-    let store_key = if let Some(branch) = item.get("branch").and_then(|b| b.as_str()) {
-        format!("{}:{}", name, branch)
-    } else {
-        name.to_string()
-    };
+    let project_key = item
+        .get("project_key")
+        .and_then(|k| k.as_str())
+        .unwrap_or("");
     let task_url = format!(
         "http://127.0.0.1:{}/project/switch/{}",
         config::wormhole_port(),
-        store_key
+        project_key
     );
-    let task_display = crate::format_osc8_hyperlink(&task_url, &store_key);
+    let task_display = crate::format_osc8_hyperlink(&task_url, project_key);
 
     let jira_instance = std::env::var("JIRA_INSTANCE").ok();
     let (jira_key, status) = item
@@ -1083,7 +1083,7 @@ fn render_project_item(item: &serde_json::Value) -> String {
     };
 
     let emoji = jira::status_emoji(status);
-    let pad = 40_usize.saturating_sub(store_key.len());
+    let pad = 40_usize.saturating_sub(project_key.len());
 
     format!(
         "{} {}{} {}{}",
@@ -1311,14 +1311,14 @@ mod tests {
 
     #[test]
     fn test_render_project_item_bare_project() {
-        // Project without branch or JIRA - just shows name
+        // Project without JIRA - just shows project_key
         let item = serde_json::json!({
-            "name": "wormhole",
+            "project_key": "wormhole",
             "path": "/Users/dan/src/wormhole"
         });
         let rendered = render_project_item(&item);
-        // Should contain the project name (inside a hyperlink)
-        assert!(rendered.contains("wormhole"), "Should contain project name");
+        // Should contain the project key (inside a hyperlink)
+        assert!(rendered.contains("wormhole"), "Should contain project key");
         // Should not contain emoji (no JIRA)
         assert!(
             !rendered.contains("⚫"),
@@ -1328,16 +1328,15 @@ mod tests {
 
     #[test]
     fn test_render_project_item_task_without_jira() {
-        // Task (has branch) but no JIRA - shows repo:branch
+        // Task but no JIRA - shows project_key
         let item = serde_json::json!({
-            "name": "cli",
-            "branch": "feature-branch",
+            "project_key": "cli:feature-branch",
             "path": "/Users/dan/src/cli/feature-branch"
         });
         let rendered = render_project_item(&item);
         assert!(
             rendered.contains("cli:feature-branch"),
-            "Should show repo:branch format"
+            "Should show project_key"
         );
         assert!(
             !rendered.contains("⚫"),
@@ -1349,8 +1348,7 @@ mod tests {
     fn test_render_project_item_task_with_jira() {
         // Task with JIRA info - shows emoji, task, JIRA key (no summary)
         let item = serde_json::json!({
-            "name": "cli",
-            "branch": "standalone-activity",
+            "project_key": "cli:standalone-activity",
             "path": "/Users/dan/src/cli/standalone-activity",
             "jira": {
                 "key": "ACT-107",
@@ -1365,7 +1363,7 @@ mod tests {
         );
         assert!(
             rendered.contains("cli:standalone-activity"),
-            "Should contain task identifier"
+            "Should contain project_key"
         );
         assert!(rendered.contains("ACT-107"), "Should contain JIRA key");
         assert!(
@@ -1378,8 +1376,7 @@ mod tests {
     fn test_render_project_item_task_with_pr() {
         // Task with JIRA and PR
         let item = serde_json::json!({
-            "name": "cli",
-            "branch": "feature",
+            "project_key": "cli:feature",
             "jira": {
                 "key": "ACT-100",
                 "status": "In Review",
@@ -1398,8 +1395,7 @@ mod tests {
     #[test]
     fn test_render_project_item_draft_pr() {
         let item = serde_json::json!({
-            "name": "cli",
-            "branch": "feature",
+            "project_key": "cli:feature",
             "jira": {
                 "key": "ACT-100",
                 "status": "In Review",

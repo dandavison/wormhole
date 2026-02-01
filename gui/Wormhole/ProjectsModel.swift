@@ -2,12 +2,24 @@ import Foundation
 import Combine
 
 struct ProjectInfo: Codable {
-    let name: String
-    let branch: String?
+    let project_key: String
 
-    var isTask: Bool { branch != nil }
+    var isTask: Bool { project_key.contains(":") }
 
-    // For display: repo name
+    var name: String {
+        if let idx = project_key.firstIndex(of: ":") {
+            return String(project_key[..<idx])
+        }
+        return project_key
+    }
+
+    var branch: String? {
+        if let idx = project_key.firstIndex(of: ":") {
+            return String(project_key[project_key.index(after: idx)...])
+        }
+        return nil
+    }
+
     var repo: String { name }
 }
 
@@ -77,10 +89,9 @@ final class ProjectsModel: ObservableObject {
             if let branch = p.branch {
                 let col1 = truncateOrPad(p.repo, width: repoWidth)
                 let col2 = truncate(branch, width: branchWidth)
-                // Value is store_key format: repo:branch
-                return Project(text: "\(col1)  \(col2)", value: "\(p.repo):\(branch)")
+                return Project(text: "\(col1)  \(col2)", value: p.project_key)
             }
-            return Project(text: p.name, value: p.name)
+            return Project(text: p.name, value: p.project_key)
         }
     }
 

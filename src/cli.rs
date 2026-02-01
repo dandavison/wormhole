@@ -90,6 +90,9 @@ pub enum ProjectCommand {
         /// List available projects (from WORMHOLE_PATH) instead of current
         #[arg(short, long)]
         available: bool,
+        /// Output only project names (for shell completion)
+        #[arg(long)]
+        name_only: bool,
     },
     /// Switch to the previous project
     Previous {
@@ -189,14 +192,8 @@ pub enum Command {
     /// Generate shell completions
     Completion {
         /// Shell to generate completions for
-        #[arg(value_enum, required_unless_present_any = ["projects", "available"])]
-        shell: Option<Shell>,
-        /// Output current project names (for dynamic completion)
-        #[arg(long)]
-        projects: bool,
-        /// Output available project names (for dynamic completion)
-        #[arg(long)]
-        available: bool,
+        #[arg(value_enum)]
+        shell: Shell,
     },
 
     /// Kill tmux session and clean up
@@ -468,7 +465,11 @@ pub fn run(command: Command) -> Result<(), String> {
         },
 
         Command::Project { command } => match command {
-            ProjectCommand::List { output, available } => {
+            ProjectCommand::List {
+                output,
+                available,
+                name_only,
+            } => {
                 let response = client.get("/project/list")?;
                 if output == "json" {
                     println!("{}", response);
@@ -483,7 +484,13 @@ pub fn run(command: Command) -> Result<(), String> {
                         }
                     } else if let Some(current) = json.get("current").and_then(|v| v.as_array()) {
                         for item in current {
-                            println!("{}", render_project_item(item));
+                            if name_only {
+                                if let Some(name) = item.get("name").and_then(|n| n.as_str()) {
+                                    println!("{}", name);
+                                }
+                            } else {
+                                println!("{}", render_project_item(item));
+                            }
                         }
                     }
                 }
@@ -639,31 +646,8 @@ pub fn run(command: Command) -> Result<(), String> {
             TaskCommand::CreateFromSprint => task_create_from_sprint(&client),
         },
 
-        Command::Completion {
-            shell,
-            projects,
-            available,
-        } => {
-            if projects || available {
-                let response = client.get("/project/list")?;
-                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response) {
-                    let key = if available { "available" } else { "current" };
-                    if let Some(arr) = json.get(key).and_then(|v| v.as_array()) {
-                        for item in arr {
-                            let name = if available {
-                                item.as_str()
-                            } else {
-                                item.get("name").and_then(|n| n.as_str())
-                            };
-                            if let Some(name) = name {
-                                println!("{}", name);
-                            }
-                        }
-                    }
-                }
-            } else if let Some(shell) = shell {
-                generate(shell, &mut Cli::command(), "wormhole", &mut io::stdout());
-            }
+        Command::Completion { shell } => {
+            generate(shell, &mut Cli::command(), "wormhole", &mut io::stdout());
             Ok(())
         }
 

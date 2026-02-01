@@ -7,32 +7,6 @@ local alertId = nil
 local tap = nil
 local overlayActive = false
 local displayOrder = nil
-local currentIdx = nil
-local editorWindows = nil
-
-local function getEditorWindows()
-    local projects = {}
-    for _, appName in ipairs({ "Cursor", "Code" }) do
-        local app = hs.application.find(appName)
-        if app then
-            for _, win in ipairs(app:allWindows()) do
-                local title = win:title() or ""
-                local project = title:match(" [%-–—] ([^%-–—]+)$")
-                if project then
-                    projects[project] = true
-                else
-                    projects[title] = true
-                end
-            end
-        end
-    end
-    return projects
-end
-
-local function hasEditorWindow(item)
-    if not editorWindows then return true end
-    return editorWindows[item.project_key]
-end
 
 local function parseProjectKey(project_key)
     local name, branch = project_key:match("^([^:]+):(.+)$")
@@ -55,6 +29,7 @@ local function render()
 
         local currentKey = ring[1] and ring[1].project_key
 
+        -- Lock display order on first show to prevent items jumping around
         if not displayOrder then
             displayOrder = {}
             local offset = n - math.floor(n / 2)
@@ -62,8 +37,6 @@ local function render()
                 local srcIdx = ((i - 1 + offset) % n) + 1
                 table.insert(displayOrder, ring[srcIdx])
             end
-            currentIdx = math.ceil(n / 2)
-            editorWindows = getEditorWindows()
         end
 
         hs.timer.doAfter(0, function()
@@ -122,8 +95,6 @@ end
 local function hide()
     overlayActive = false
     displayOrder = nil
-    currentIdx = nil
-    editorWindows = nil
     if alertId then
         hs.alert.closeSpecific(alertId)
         alertId = nil
@@ -131,35 +102,13 @@ local function hide()
 end
 
 function M.previous()
-    local url = M.host .. "/project/previous?active=true"
-    if overlayActive and displayOrder and currentIdx and editorWindows then
-        local n = #displayOrder
-        local targetIdx = currentIdx - 1
-        if targetIdx < 1 then targetIdx = n end
-        local target = displayOrder[targetIdx]
-        if target and not hasEditorWindow(target) then
-            url = url .. "&skip-editor=true"
-        end
-        currentIdx = targetIdx
-    end
-    hs.http.asyncGet(url, nil, function()
+    hs.http.asyncGet(M.host .. "/project/previous?active=true", nil, function()
         if overlayActive then render() end
     end)
 end
 
 function M.next()
-    local url = M.host .. "/project/next?active=true"
-    if overlayActive and displayOrder and currentIdx and editorWindows then
-        local n = #displayOrder
-        local targetIdx = currentIdx + 1
-        if targetIdx > n then targetIdx = 1 end
-        local target = displayOrder[targetIdx]
-        if target and not hasEditorWindow(target) then
-            url = url .. "&skip-editor=true"
-        end
-        currentIdx = targetIdx
-    end
-    hs.http.asyncGet(url, nil, function()
+    hs.http.asyncGet(M.host .. "/project/next?active=true", nil, function()
         if overlayActive then render() end
     end)
 end

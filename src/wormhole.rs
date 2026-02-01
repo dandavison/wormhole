@@ -50,11 +50,10 @@ pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
     }
 
     let params = QueryParams::from_query(uri.query());
-    if path != "/project/list" {
-        ps!("{} {} {:?}", method, uri, params);
-    }
-
     let response = route(req, &method, &path, &params).await;
+    if path != "/project/list" {
+        ps!("{} {} {} {:?}", response.status().as_u16(), method, uri, params);
+    }
     Ok(response)
 }
 

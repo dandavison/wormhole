@@ -499,10 +499,13 @@ pub fn switch(name_or_path: &str, params: &QueryParams, sync: bool) -> Response<
             let mut projects = projects::lock();
             resolve_project(&mut projects, &name_or_path)?
         };
-        if let Some(pp) = project_path {
-            pp.open(Mutation::Insert, land_in);
+        match project_path {
+            Some(pp) => {
+                pp.open(Mutation::Insert, land_in);
+                Ok(())
+            }
+            None => Err(format!("Project '{}' not found", name_or_path)),
         }
-        Ok(())
     };
 
     if sync {

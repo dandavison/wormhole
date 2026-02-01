@@ -874,6 +874,9 @@ fn task_create_from_sprint(client: &Client) -> Result<(), String> {
 
     let default_home = std::env::var("WORMHOLE_DEFAULT_HOME_PROJECT").ok();
 
+    // Refresh to discover all existing worktrees before checking
+    let _ = client.post("/project/refresh-tasks");
+
     let response = client.get("/project/list")?;
     let parsed: serde_json::Value = serde_json::from_str(&response).map_err(|e| e.to_string())?;
     let current = parsed
@@ -887,8 +890,8 @@ fn task_create_from_sprint(client: &Client) -> Result<(), String> {
         .iter()
         .filter_map(|v| {
             let jira_key = v.get("kv")?.get("jira_key")?.as_str()?;
-            let repo = v.get("repo_name")?.as_str()?;
-            let branch = v.get("branch")?.as_str()?;
+            let project_key = v.get("project_key")?.as_str()?;
+            let (repo, branch) = project_key.split_once(':')?;
             Some((jira_key.to_string(), (repo.to_string(), branch.to_string())))
         })
         .collect();
@@ -919,6 +922,10 @@ fn task_create_from_sprint(client: &Client) -> Result<(), String> {
                         .and_then(|k| k.as_str())
                         .is_some_and(|k| k == store_key)
                         && v.get("pr").is_some()
+                        && !v.get("pr")
+                            .and_then(|pr| pr.get("draft"))
+                            .and_then(|d| d.as_bool())
+                            .unwrap_or(false)
                 })
             })
             .unwrap_or(false);

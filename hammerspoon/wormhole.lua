@@ -132,7 +132,7 @@ local function hasEditorWindow(item)
 end
 
 function M.previous()
-    local url = M.host .. "/project/previous"
+    local url = M.host .. "/project/previous?active=true"
     -- During overlay with cached state, check target without extra HTTP call
     if neighborOverlayActive and neighborDisplayOrder and neighborCurrentIdx and neighborEditorWindows then
         local n = #neighborDisplayOrder
@@ -141,7 +141,7 @@ function M.previous()
         if targetIdx < 1 then targetIdx = n end
         local target = neighborDisplayOrder[targetIdx]
         if target and not hasEditorWindow(target) then
-            url = url .. "?skip-editor=true"
+            url = url .. "&skip-editor=true"
         end
         neighborCurrentIdx = targetIdx
     end
@@ -151,7 +151,7 @@ function M.previous()
 end
 
 function M.next()
-    local url = M.host .. "/project/next"
+    local url = M.host .. "/project/next?active=true"
     -- During overlay with cached state, check target without extra HTTP call
     if neighborOverlayActive and neighborDisplayOrder and neighborCurrentIdx and neighborEditorWindows then
         local n = #neighborDisplayOrder
@@ -160,7 +160,7 @@ function M.next()
         if targetIdx > n then targetIdx = 1 end
         local target = neighborDisplayOrder[targetIdx]
         if target and not hasEditorWindow(target) then
-            url = url .. "?skip-editor=true"
+            url = url .. "&skip-editor=true"
         end
         neighborCurrentIdx = targetIdx
     end
@@ -274,7 +274,7 @@ end
 
 -- Neighbor overlay (shows prev/next when ctrl+cmd held)
 local function renderNeighborOverlay()
-    hs.http.asyncGet(M.host .. "/project/neighbors", nil, function(status, body)
+    hs.http.asyncGet(M.host .. "/project/neighbors?active=true", nil, function(status, body)
         if status ~= 200 or not neighborOverlayActive then return end
         local ok, data = pcall(hs.json.decode, body)
         if not ok or not data.ring then return end

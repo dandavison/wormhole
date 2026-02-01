@@ -167,7 +167,7 @@ pub fn pin_current() {
 pub fn dashboard() -> Response<Body> {
     use crate::project::Project;
 
-    let tasks: Vec<Project> = {
+    let mut tasks: Vec<Project> = {
         let projects = projects::lock();
         projects
             .all()
@@ -176,6 +176,7 @@ pub fn dashboard() -> Response<Body> {
             .cloned()
             .collect()
     };
+    tasks.sort_by_key(|t| status_sort_order(t.cached.jira.as_ref().map(|j| j.status.as_str())));
     let jira_instance = std::env::var("JIRA_INSTANCE").ok();
 
     let cards_html: String = tasks
@@ -318,6 +319,16 @@ fn status_data_attr(status: &str) -> String {
     match status.to_lowercase().as_str() {
         "done" | "closed" | "resolved" => r#" data-status="done""#.to_string(),
         _ => String::new(),
+    }
+}
+
+fn status_sort_order(status: Option<&str>) -> u8 {
+    match status.map(|s| s.to_lowercase()).as_deref() {
+        Some("done") | Some("closed") | Some("resolved") => 0,
+        Some("in review") => 1,
+        Some("in progress") => 2,
+        Some("to do") => 3,
+        _ => 4,
     }
 }
 

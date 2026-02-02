@@ -1,6 +1,8 @@
 use clap::builder::ValueHint;
 use clap::{CommandFactory, Parser, Subcommand};
-use clap_complete::engine::{ArgValueCompleter, CompletionCandidate, PathCompleter, ValueCompleter};
+use clap_complete::engine::{
+    ArgValueCompleter, CompletionCandidate, PathCompleter, ValueCompleter,
+};
 use clap_complete::{generate, Shell};
 use serde::Serialize;
 use std::io;
@@ -33,7 +35,10 @@ fn complete_projects(current: &std::ffi::OsStr) -> Vec<CompletionCandidate> {
     if let Some(available) = json.get("available").and_then(|v| v.as_array()) {
         for item in available {
             if let Some(name) = item.as_str() {
-                if !candidates.iter().any(|c| c.get_value().to_str() == Some(name)) {
+                if !candidates
+                    .iter()
+                    .any(|c| c.get_value().to_str() == Some(name))
+                {
                     candidates.push(CompletionCandidate::new(name));
                 }
             }
@@ -940,19 +945,20 @@ fn task_create_from_sprint(client: &Client) -> Result<(), String> {
             .ok_or("'project_key' is not a string")?;
 
         // Track PR status
-        let pr_is_non_draft = item.get("pr").is_some_and(|pr| {
-            !pr.get("isDraft").and_then(|d| d.as_bool()).unwrap_or(false)
-        });
+        let pr_is_non_draft = item
+            .get("pr")
+            .is_some_and(|pr| !pr.get("isDraft").and_then(|d| d.as_bool()).unwrap_or(false));
         has_non_draft_pr.insert(project_key.to_string(), pr_is_non_draft);
 
         // Only process items with jira_key
         if let Some(jira_key) = item.get("kv").and_then(|kv| kv.get("jira_key")) {
-            let jira_key = jira_key
-                .as_str()
-                .ok_or("'jira_key' is not a string")?;
-            let (repo, branch) = project_key
-                .split_once(':')
-                .ok_or_else(|| format!("Task with jira_key '{}' has invalid project_key '{}' (expected repo:branch)", jira_key, project_key))?;
+            let jira_key = jira_key.as_str().ok_or("'jira_key' is not a string")?;
+            let (repo, branch) = project_key.split_once(':').ok_or_else(|| {
+                format!(
+                    "Task with jira_key '{}' has invalid project_key '{}' (expected repo:branch)",
+                    jira_key, project_key
+                )
+            })?;
             existing_by_jira.insert(jira_key.to_string(), (repo.to_string(), branch.to_string()));
         }
     }
@@ -989,8 +995,13 @@ fn task_create_from_sprint(client: &Client) -> Result<(), String> {
             continue;
         }
 
-        println!("\n─────────────────────────────────────────────────────────────────────────────────");
-        println!("{} {} {} [{}]", emoji, issue.key, issue.summary, issue.status);
+        println!(
+            "\n─────────────────────────────────────────────────────────────────────────────────"
+        );
+        println!(
+            "{} {} {} [{}]",
+            emoji, issue.key, issue.summary, issue.status
+        );
 
         // If task exists locally, show it and offer to confirm/skip
         if let Some((existing_repo, existing_branch)) = existing {

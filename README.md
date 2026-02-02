@@ -162,7 +162,7 @@ wormhole completion bash                # Generate shell completions
 | GET    | `/kv/<project>`             | List project KV                   |
 | GET    | `/kv`                       | List all KV                       |
 
-Query params: `land-in=terminal|editor`, `line=N`, `home-project=<project>`, `active=true`, `skip-editor=true`, `focus-terminal=true`, `sync=true`, `pwd=<path>`
+Query params: `land-in=terminal|editor`, `line=N`, `home-project=<project>`, `branch=<branch>`, `active=true`, `skip-editor=true`, `focus-terminal=true`, `sync=true`, `pwd=<path>`
 
 ## Environment Variables
 

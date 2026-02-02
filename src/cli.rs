@@ -1209,7 +1209,7 @@ fn sprint_list(client: &Client, output: &str) -> Result<(), String> {
     let json: serde_json::Value = serde_json::from_str(&response).map_err(|e| e.to_string())?;
 
     // Filter to tasks with jira_key in sprint
-    let sprint_tasks: Vec<&serde_json::Value> = json
+    let mut sprint_tasks: Vec<&serde_json::Value> = json
         .get("current")
         .and_then(|v| v.as_array())
         .map(|arr| {
@@ -1223,6 +1223,13 @@ fn sprint_list(client: &Client, output: &str) -> Result<(), String> {
                 .collect()
         })
         .unwrap_or_default();
+    sprint_tasks.sort_by_key(|item| {
+        let status = item
+            .get("jira")
+            .and_then(|j| j.get("status"))
+            .and_then(|s| s.as_str());
+        status_sort_order(status)
+    });
 
     if output == "json" {
         println!(
@@ -1235,6 +1242,16 @@ fn sprint_list(client: &Client, output: &str) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+fn status_sort_order(status: Option<&str>) -> u8 {
+    match status.map(|s| s.to_lowercase()).as_deref() {
+        Some("done") | Some("closed") | Some("resolved") => 0,
+        Some("in review") => 1,
+        Some("in progress") => 2,
+        Some("to do") => 3,
+        _ => 4,
+    }
 }
 
 /// Render a project item from /project/list response

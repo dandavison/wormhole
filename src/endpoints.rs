@@ -197,7 +197,12 @@ fn render_task_card(task: &crate::project::Project, jira_instance: Option<&str>)
     let branch_html = task
         .branch
         .as_ref()
-        .map(|b| format!(r#" <span class="card-branch">{}</span>"#, html_escape(b.as_str())))
+        .map(|b| {
+            format!(
+                r#" <span class="card-branch">{}</span>"#,
+                html_escape(b.as_str())
+            )
+        })
         .unwrap_or_default();
     let repo_branch = format!(
         r#"<span class="card-repo">{}</span>{}"#,
@@ -288,12 +293,19 @@ fn render_task_card(task: &crate::project::Project, jira_instance: Option<&str>)
         .map(|j| status_data_attr(&j.status))
         .unwrap_or_default();
 
+    let assignee_html = task
+        .cached
+        .jira
+        .as_ref()
+        .map(|j| render_assignee_warning(j.assignee.as_deref(), j.assignee_email.as_deref()))
+        .unwrap_or_default();
+
     let task_id = task.store_key().to_string();
 
     format!(
         r#"<div class="card" data-task="{}"{}>
 <div class="card-header">{}<span class="card-summary">{}</span>{}</div>
-<div class="card-meta">{}{}{}</div>
+<div class="card-meta">{}{}{}{}</div>
 {}
 </div>"#,
         html_escape(&task_id),
@@ -304,6 +316,7 @@ fn render_task_card(task: &crate::project::Project, jira_instance: Option<&str>)
         jira_html,
         pr_html,
         plan_html,
+        assignee_html,
         iframe_html
     )
 }
@@ -320,6 +333,19 @@ fn status_data_attr(status: &str) -> String {
         "done" | "closed" | "resolved" => r#" data-status="done""#.to_string(),
         _ => String::new(),
     }
+}
+
+fn render_assignee_warning(assignee: Option<&str>, assignee_email: Option<&str>) -> String {
+    let my_email = std::env::var("JIRA_EMAIL").ok();
+    let is_mine = assignee_email.is_some() && assignee_email == my_email.as_deref();
+    if is_mine {
+        return String::new();
+    }
+    let display = assignee.unwrap_or("Unassigned");
+    format!(
+        r#"<span class="meta-item assignee-warning">⚠️ {}</span>"#,
+        html_escape(display)
+    )
 }
 
 fn status_sort_order(status: Option<&str>) -> u8 {

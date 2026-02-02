@@ -17,6 +17,15 @@ struct Issue {
 struct Fields {
     summary: String,
     status: Status,
+    assignee: Option<Assignee>,
+}
+
+#[derive(Deserialize, Clone)]
+struct Assignee {
+    #[serde(rename = "emailAddress")]
+    email_address: Option<String>,
+    #[serde(rename = "displayName")]
+    display_name: Option<String>,
 }
 
 #[derive(Deserialize, Clone)]
@@ -29,6 +38,8 @@ pub struct IssueStatus {
     pub key: String,
     pub summary: String,
     pub status: String,
+    pub assignee: Option<String>,
+    pub assignee_email: Option<String>,
 }
 
 impl IssueStatus {
@@ -67,7 +78,7 @@ pub fn get_issue(key: &str) -> Result<Option<IssueStatus>, String> {
     );
 
     let response = ureq::get(&url)
-        .query("fields", "summary,status")
+        .query("fields", "summary,status,assignee")
         .set("Authorization", &auth_header()?)
         .set("Content-Type", "application/json")
         .call();
@@ -81,6 +92,16 @@ pub fn get_issue(key: &str) -> Result<Option<IssueStatus>, String> {
                 key: issue.key,
                 summary: issue.fields.summary,
                 status: issue.fields.status.name,
+                assignee: issue
+                    .fields
+                    .assignee
+                    .as_ref()
+                    .and_then(|a| a.display_name.clone()),
+                assignee_email: issue
+                    .fields
+                    .assignee
+                    .as_ref()
+                    .and_then(|a| a.email_address.clone()),
             }))
         }
         Err(ureq::Error::Status(404, _)) => Ok(None),
@@ -95,7 +116,7 @@ pub fn get_sprint_issues() -> Result<Vec<IssueStatus>, String> {
 
     let response: SearchResponse = ureq::get(&url)
         .query("jql", jql)
-        .query("fields", "key,summary,status")
+        .query("fields", "key,summary,status,assignee")
         .set("Authorization", &auth_header()?)
         .set("Content-Type", "application/json")
         .call()
@@ -110,6 +131,16 @@ pub fn get_sprint_issues() -> Result<Vec<IssueStatus>, String> {
             key: i.key,
             summary: i.fields.summary,
             status: i.fields.status.name,
+            assignee: i
+                .fields
+                .assignee
+                .as_ref()
+                .and_then(|a| a.display_name.clone()),
+            assignee_email: i
+                .fields
+                .assignee
+                .as_ref()
+                .and_then(|a| a.email_address.clone()),
         })
         .collect())
 }

@@ -102,8 +102,9 @@ fn instance() -> Result<String, String> {
 
 pub fn get_issue(key: &str) -> Result<Option<IssueStatus>, String> {
     let instance = instance()?;
+    // Use Agile API to get sprint data (standard API doesn't return it)
     let url = format!(
-        "https://{}.atlassian.net/rest/api/3/issue/{}",
+        "https://{}.atlassian.net/rest/agile/1.0/issue/{}",
         instance, key
     );
 

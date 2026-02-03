@@ -270,6 +270,19 @@ fn render_task_card(task: &crate::project::Project, jira_instance: Option<&str>)
         })
         .unwrap_or_default();
 
+    let sprint_html = task
+        .cached
+        .jira
+        .as_ref()
+        .and_then(|j| j.sprint.as_ref())
+        .map(|s| {
+            format!(
+                r#"<span class="meta-item card-sprint">{}</span>"#,
+                html_escape(s)
+            )
+        })
+        .unwrap_or_default();
+
     let path = task.working_tree();
     let plan_path = path.join(".task/plan.md");
     let plan_html = if plan_path.exists() {
@@ -314,7 +327,7 @@ fn render_task_card(task: &crate::project::Project, jira_instance: Option<&str>)
     format!(
         r#"<div class="card" data-task="{}"{}>
 <div class="card-header">{}<span class="card-summary">{}</span>{}</div>
-<div class="card-meta">{}{}{}{}</div>
+<div class="card-meta">{}{}{}{}{}</div>
 {}
 </div>"#,
         html_escape(&task_id),
@@ -323,6 +336,7 @@ fn render_task_card(task: &crate::project::Project, jira_instance: Option<&str>)
         summary,
         status_html,
         jira_html,
+        sprint_html,
         pr_html,
         plan_html,
         assignee_html,

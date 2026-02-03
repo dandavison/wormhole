@@ -42,6 +42,10 @@
         padding: 1rem;
         box-shadow: 2px 2px 0 #ddd;
       }
+      .card.current {
+        border-color: #0066cc;
+        box-shadow: 2px 2px 0 #0066cc;
+      }
       .card[data-task].switching {
         opacity: 0.6;
       }
@@ -80,6 +84,10 @@
         font-weight: 600;
         font-size: 0.9rem;
         color: #1a1a1a;
+        cursor: pointer;
+      }
+      .card-branch:hover {
+        text-decoration: underline;
       }
       .card-status {
         font-size: 0.75rem;
@@ -316,6 +324,57 @@
           fetch(link.dataset.url);
         });
       });
+
+      document.querySelectorAll('.card-branch').forEach((branch) => {
+        branch.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const key = branch.dataset.key;
+          if (!key) return;
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(key).catch(() => copyFallback(key));
+          } else {
+            copyFallback(key);
+          }
+        });
+      });
+
+      function copyFallback(text) {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+
+      // Long-poll for current project changes
+      (async function pollCurrent(current) {
+        try {
+          const res = await fetch(
+            '/project/current/poll?current=' +
+              encodeURIComponent(current || ''),
+            { headers: { Prefer: 'wait=30' } }
+          );
+          const data = await res.json();
+          if (data.changed) {
+            document
+              .querySelectorAll('.card')
+              .forEach((c) => c.classList.remove('current'));
+            if (data.current) {
+              const card = document.querySelector(
+                `.card[data-task="${data.current}"]`
+              );
+              if (card) card.classList.add('current');
+            }
+          }
+          pollCurrent(data.current);
+        } catch (e) {
+          // Retry after delay on error
+          setTimeout(() => pollCurrent(current), 5000);
+        }
+      })(null);
     </script>
   </body>
 </html>

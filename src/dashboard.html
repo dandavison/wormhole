@@ -349,8 +349,8 @@
         document.body.removeChild(ta);
       }
 
-      // Long-poll for current project changes
-      (async function pollCurrent(current) {
+      // Long-poll for current project changes, reload on change
+      (async function poll(current, isFirstPoll) {
         try {
           const res = await fetch(
             '/project/current/poll?current=' +
@@ -358,23 +358,15 @@
             { headers: { Prefer: 'wait=30' } }
           );
           const data = await res.json();
-          if (data.changed) {
-            document
-              .querySelectorAll('.card')
-              .forEach((c) => c.classList.remove('current'));
-            if (data.current) {
-              const card = document.querySelector(
-                `.card[data-task="${data.current}"]`
-              );
-              if (card) card.classList.add('current');
-            }
+          if (data.changed && !isFirstPoll) {
+            location.reload();
+          } else {
+            poll(data.current, false);
           }
-          pollCurrent(data.current);
         } catch (e) {
-          // Retry after delay on error
-          setTimeout(() => pollCurrent(current), 5000);
+          setTimeout(() => poll(current, false), 5000);
         }
-      })(null);
+      })(null, true);
     </script>
   </body>
 </html>

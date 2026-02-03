@@ -299,7 +299,13 @@ impl QueryParams {
                     "sync" => params.sync = val == "true" || val == "1",
                     "pwd" => params.pwd = Some(val.to_string()),
                     "active" => params.active = val == "true" || val == "1",
-                    "current" => params.current = Some(val.to_string()),
+                    "current" => {
+                        params.current = if val.is_empty() {
+                            None
+                        } else {
+                            Some(val.to_string())
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -331,4 +337,34 @@ fn cors_response(response: Response<Body>) -> Response<Body> {
         "Content-Type".parse().unwrap(),
     );
     Response::from_parts(parts, body)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_query_params_empty_current_is_none() {
+        // Empty current= should be treated as None
+        let params = QueryParams::from_query(Some("current="));
+        assert!(
+            params.current.is_none(),
+            "Empty current= should be None, got {:?}",
+            params.current
+        );
+    }
+
+    #[test]
+    fn test_query_params_missing_current_is_none() {
+        // No current param should be None
+        let params = QueryParams::from_query(Some("active=true"));
+        assert!(params.current.is_none());
+    }
+
+    #[test]
+    fn test_query_params_current_with_value() {
+        // current=foo should be Some("foo")
+        let params = QueryParams::from_query(Some("current=myproject"));
+        assert_eq!(params.current, Some("myproject".to_string()));
+    }
 }

@@ -177,21 +177,26 @@ pub fn favicon() -> Response<Body> {
 pub fn dashboard() -> Response<Body> {
     use crate::project::Project;
 
-    let mut tasks: Vec<Project> = {
+    let (mut tasks, current_key): (Vec<Project>, Option<String>) = {
         let projects = projects::lock();
-        projects
+        let tasks = projects
             .all()
             .into_iter()
             .filter(|p| p.is_task() && p.kv.contains_key("jira_key"))
             .cloned()
-            .collect()
+            .collect();
+        let current = projects.current().map(|p| p.store_key().to_string());
+        (tasks, current)
     };
     tasks.sort_by_key(|t| status_sort_order(t.cached.jira.as_ref().map(|j| j.status.as_str())));
     let jira_instance = std::env::var("JIRA_INSTANCE").ok();
 
     let cards_html: String = tasks
         .iter()
-        .map(|task| render_task_card(task, jira_instance.as_deref()))
+        .map(|task| {
+            let is_current = current_key.as_ref() == Some(&task.store_key().to_string());
+            render_task_card(task, jira_instance.as_deref(), is_current)
+        })
         .collect();
 
     let template = include_str!("dashboard.html");
@@ -203,7 +208,11 @@ pub fn dashboard() -> Response<Body> {
         .unwrap()
 }
 
-fn render_task_card(task: &crate::project::Project, jira_instance: Option<&str>) -> String {
+fn render_task_card(
+    task: &crate::project::Project,
+    jira_instance: Option<&str>,
+    is_current: bool,
+) -> String {
     let task_key = task.store_key().to_string();
     let branch_html = task
         .branch
@@ -326,13 +335,15 @@ fn render_task_card(task: &crate::project::Project, jira_instance: Option<&str>)
         .unwrap_or_default();
 
     let task_id = task.store_key().to_string();
+    let current_class = if is_current { " current" } else { "" };
 
     format!(
-        r#"<div class="card" data-task="{}"{}>
+        r#"<div class="card{}" data-task="{}"{}>
 <div class="card-header">{}<span class="card-summary">{}</span>{}</div>
 <div class="card-meta">{}{}{}{}{}</div>
 {}
 </div>"#,
+        current_class,
         html_escape(&task_id),
         status_attr,
         repo_branch,
@@ -684,37 +695,63 @@ fn resolve_project(
     }
 }
 
-/// Long-poll endpoint for current project changes.
-/// Blocks until the current project differs from client's belief or timeout.
-pub async fn poll_current(client_current: Option<&str>, timeout_secs: u64) -> Response<Body> {
-    let deadline = Instant::now() + Duration::from_secs(timeout_secs);
-    let poll_interval = Duration::from_millis(200);
+/// Generic long-poll helper: waits until predicate returns true or timeout.
+/// Returns true if predicate became true, false if timeout.
+pub async fn poll_until<F>(mut predicate: F, timeout: Duration) -> bool
+where
+    F: FnMut() -> bool,
+{
+    // Check immediately
+    if predicate() {
+        return true;
+    }
+
+    let deadline = Instant::now() + timeout;
+    let mut rx = projects::subscribe_to_changes();
 
     loop {
-        let server_current = {
-            let projects = projects::lock();
-            projects.current().map(|p| p.store_key().to_string())
-        };
-
-        let changed = match (&client_current, &server_current) {
-            (None, None) => false,
-            (Some(c), Some(s)) => c != s,
-            _ => true,
-        };
-
-        if changed {
-            return poll_response(server_current, true, timeout_secs);
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return false;
         }
 
-        if Instant::now() + poll_interval >= deadline {
-            return poll_response(server_current, false, timeout_secs);
+        // Wait for state change or timeout
+        match tokio::time::timeout(remaining, rx.changed()).await {
+            Ok(Ok(())) => {
+                if predicate() {
+                    return true;
+                }
+            }
+            _ => return false, // timeout or channel closed
         }
-
-        tokio::time::sleep(poll_interval).await;
     }
 }
 
-fn poll_response(current: Option<String>, changed: bool, wait: u64) -> Response<Body> {
+/// Long-poll endpoint for current project changes.
+pub async fn poll_current(client_current: Option<&str>, timeout_secs: u64) -> Response<Body> {
+    let client_current = client_current.map(|s| s.to_string());
+    let changed = poll_until(
+        || {
+            let server_current = projects::lock()
+                .current()
+                .map(|p| p.store_key().to_string());
+            match (&client_current, &server_current) {
+                (None, None) => false,
+                (Some(c), Some(s)) => c != s,
+                _ => true,
+            }
+        },
+        Duration::from_secs(timeout_secs),
+    )
+    .await;
+
+    let server_current = projects::lock()
+        .current()
+        .map(|p| p.store_key().to_string());
+    poll_current_response(server_current, changed, timeout_secs)
+}
+
+fn poll_current_response(current: Option<String>, changed: bool, wait: u64) -> Response<Body> {
     let json = serde_json::json!({
         "current": current,
         "changed": changed

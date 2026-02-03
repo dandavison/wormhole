@@ -204,3 +204,31 @@ fn test_poll_current_timeout_no_change() {
         "Current should remain unchanged"
     );
 }
+
+#[test]
+fn test_poll_current_empty_string_treated_as_none() {
+    let test = harness::WormholeTest::new(18919);
+
+    // First, get current state without any current param
+    let (body1, _) = test
+        .http_get_with_header("/project/current/poll", "Prefer: wait=1")
+        .unwrap();
+    let json1: Value = serde_json::from_str(&body1).expect("Should be valid JSON");
+
+    // Now poll with empty current= param (which JS sends as encodeURIComponent(''))
+    // This should be treated identically to no param at all
+    let (body2, _) = test
+        .http_get_with_header("/project/current/poll?current=", "Prefer: wait=1")
+        .unwrap();
+    let json2: Value = serde_json::from_str(&body2).expect("Should be valid JSON");
+
+    // Both should return the same result - empty string should be treated as None
+    assert_eq!(
+        json1["current"], json2["current"],
+        "Empty current= should behave same as no current param"
+    );
+    assert_eq!(
+        json1["changed"], json2["changed"],
+        "Empty current= should behave same as no current param"
+    );
+}

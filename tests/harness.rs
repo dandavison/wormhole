@@ -146,6 +146,29 @@ impl WormholeTest {
         }
     }
 
+    /// HTTP GET with custom header. Returns (body, headers) tuple.
+    pub fn http_get_with_header(
+        &self,
+        path: &str,
+        header: &str,
+    ) -> Result<(String, String), String> {
+        let url = format!("http://127.0.0.1:{}{}", self.port, path);
+        let output = Command::new("curl")
+            .args(["-s", "-i", "-H", header, &url])
+            .output()
+            .map_err(|e| format!("curl failed: {}", e))?;
+        let full = String::from_utf8_lossy(&output.stdout).to_string();
+        // Split headers and body (separated by \r\n\r\n or \n\n)
+        let (headers, body) = if let Some(pos) = full.find("\r\n\r\n") {
+            (full[..pos].to_string(), full[pos + 4..].to_string())
+        } else if let Some(pos) = full.find("\n\n") {
+            (full[..pos].to_string(), full[pos + 2..].to_string())
+        } else {
+            (String::new(), full)
+        };
+        Ok((body, headers))
+    }
+
     pub fn cli(&self, cmd: &str) -> Result<String, String> {
         let full_cmd = format!(
             "timeout 30 sh -c 'WORMHOLE_PORT={} ./target/debug/{}'",

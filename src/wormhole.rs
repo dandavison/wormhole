@@ -35,6 +35,7 @@ pub struct QueryParams {
     pub sync: bool,
     pub pwd: Option<String>,
     pub active: bool,
+    pub current: Option<String>,
 }
 
 pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
@@ -90,6 +91,10 @@ async fn route(
             Response::new(Body::from("Pinning current state..."))
         }),
         "/project/show" => endpoints::show(None),
+        "/project/current/poll" => {
+            let wait = parse_prefer_wait(&req);
+            endpoints::poll_current(params.current.as_deref(), wait).await
+        }
         "/project/describe" => {
             require_post_async(method, || async { endpoints::describe(req).await }).await
         }
@@ -274,6 +279,7 @@ impl QueryParams {
             sync: false,
             pwd: None,
             active: false,
+            current: None,
         };
         if let Some(query) = query {
             for (key, val) in form_urlencoded::parse(query.as_bytes()) {
@@ -293,12 +299,22 @@ impl QueryParams {
                     "sync" => params.sync = val == "true" || val == "1",
                     "pwd" => params.pwd = Some(val.to_string()),
                     "active" => params.active = val == "true" || val == "1",
+                    "current" => params.current = Some(val.to_string()),
                     _ => {}
                 }
             }
         }
         params
     }
+}
+
+fn parse_prefer_wait(req: &Request<Body>) -> u64 {
+    req.headers()
+        .get("Prefer")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.strip_prefix("wait="))
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(30)
 }
 
 fn cors_response(response: Response<Body>) -> Response<Body> {

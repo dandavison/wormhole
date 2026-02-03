@@ -4,6 +4,7 @@
 
 use hyper::{Body, Request, Response, StatusCode};
 use std::thread;
+use std::time::{Duration, Instant};
 
 use crate::project::ProjectKey;
 use crate::project_path::ProjectPath;
@@ -203,12 +204,14 @@ pub fn dashboard() -> Response<Body> {
 }
 
 fn render_task_card(task: &crate::project::Project, jira_instance: Option<&str>) -> String {
+    let task_key = task.store_key().to_string();
     let branch_html = task
         .branch
         .as_ref()
         .map(|b| {
             format!(
-                r#" <span class="card-branch">{}</span>"#,
+                r#" <span class="card-branch" data-key="{}">{}</span>"#,
+                html_escape(&task_key),
                 html_escape(b.as_str())
             )
         })
@@ -679,6 +682,48 @@ fn resolve_project(
     } else {
         Ok(None)
     }
+}
+
+/// Long-poll endpoint for current project changes.
+/// Blocks until the current project differs from client's belief or timeout.
+pub async fn poll_current(client_current: Option<&str>, timeout_secs: u64) -> Response<Body> {
+    let deadline = Instant::now() + Duration::from_secs(timeout_secs);
+    let poll_interval = Duration::from_millis(200);
+
+    loop {
+        let server_current = {
+            let projects = projects::lock();
+            projects.current().map(|p| p.store_key().to_string())
+        };
+
+        let changed = match (&client_current, &server_current) {
+            (None, None) => false,
+            (Some(c), Some(s)) => c != s,
+            _ => true,
+        };
+
+        if changed {
+            return poll_response(server_current, true, timeout_secs);
+        }
+
+        if Instant::now() + poll_interval >= deadline {
+            return poll_response(server_current, false, timeout_secs);
+        }
+
+        tokio::time::sleep(poll_interval).await;
+    }
+}
+
+fn poll_response(current: Option<String>, changed: bool, wait: u64) -> Response<Body> {
+    let json = serde_json::json!({
+        "current": current,
+        "changed": changed
+    });
+    Response::builder()
+        .header("Content-Type", "application/json")
+        .header("Preference-Applied", format!("wait={}", wait))
+        .body(Body::from(json.to_string()))
+        .unwrap()
 }
 
 pub const WORMHOLE_RESPONSE_HTML: &str =

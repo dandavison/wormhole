@@ -164,6 +164,15 @@ pub fn pin_current() {
     }
 }
 
+pub fn favicon() -> Response<Body> {
+    Response::builder()
+        .header("Content-Type", "image/png")
+        .body(Body::from(
+            &include_bytes!("../web/chrome-extension/icon48.png")[..],
+        ))
+        .unwrap()
+}
+
 pub fn dashboard() -> Response<Body> {
     use crate::project::Project;
 

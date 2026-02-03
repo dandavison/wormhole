@@ -75,6 +75,7 @@ async fn route(
         "/project/neighbors" => endpoints::neighbors(params.active),
         "/project/debug" => endpoints::debug_projects(),
         "/dashboard" => endpoints::dashboard(),
+        "/favicon.png" => endpoints::favicon(),
         "/shell" => endpoints::shell_env(params.pwd.as_deref()),
         "/project/previous" => {
             endpoints::navigate(endpoints::Direction::Previous, params);

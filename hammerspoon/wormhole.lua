@@ -215,9 +215,7 @@ function M.focusDashboard()
                     }
                 }
             }
-            if (windows.length > 0) {
-                island.openLocation("]] .. dashboardUrl .. [[");
-            }
+            island.openLocation("]] .. dashboardUrl .. [[");
             return false;
         })()
     ]]

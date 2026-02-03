@@ -83,6 +83,20 @@ impl fmt::Display for ProjectKey {
     }
 }
 
+impl crate::pst::TerminalHyperlink for ProjectKey {
+    fn display_text(&self) -> String {
+        self.to_string()
+    }
+
+    fn hyperlink_url(&self) -> String {
+        format!(
+            "http://127.0.0.1:{}/project/switch/{}",
+            config::wormhole_port(),
+            self
+        )
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct Cached {
     pub git_common_dir: Option<PathBuf>,

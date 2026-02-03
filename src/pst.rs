@@ -48,3 +48,17 @@ pub fn format_osc8_hyperlink(url: &str, text: &str) -> String {
         st = "\x1b\\"
     )
 }
+
+/// Trait for types that can be rendered as terminal hyperlinks.
+pub trait TerminalHyperlink {
+    /// Returns the display text for this item.
+    fn display_text(&self) -> String;
+
+    /// Returns the URL this item should link to.
+    fn hyperlink_url(&self) -> String;
+
+    /// Returns an OSC 8 hyperlinked string for terminal display.
+    fn hyperlink(&self) -> String {
+        format_osc8_hyperlink(&self.hyperlink_url(), &self.display_text())
+    }
+}

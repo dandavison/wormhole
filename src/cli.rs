@@ -9,6 +9,8 @@ use std::io;
 
 use crate::config;
 use crate::jira;
+use crate::project::ProjectKey;
+use crate::pst::TerminalHyperlink;
 
 fn complete_projects(current: &std::ffi::OsStr) -> Vec<CompletionCandidate> {
     let mut candidates = PathCompleter::any().complete(current);
@@ -57,7 +59,8 @@ struct ProjectDebug {
 
 impl ProjectDebug {
     fn render_terminal(&self) -> String {
-        format!("[{}] name: {}, path: {}", self.index, self.name, self.path)
+        let name_linked = ProjectKey::parse(&self.name).hyperlink();
+        format!("[{}] name: {}, path: {}", self.index, name_linked, self.path)
     }
 }
 
@@ -807,7 +810,8 @@ impl PersistedDataReport {
 
         let mut lines = Vec::new();
         for project in &self.projects {
-            lines.push(format!("{}:", project.name));
+            let name_linked = ProjectKey::parse(&project.name).hyperlink();
+            lines.push(format!("{}:", name_linked));
             lines.push(format!("  path: {}", project.path));
 
             if !project.worktrees.is_empty() {
@@ -1005,10 +1009,8 @@ fn task_create_from_sprint(client: &Client) -> Result<(), String> {
 
         // If task exists locally, show it and offer to confirm/skip
         if let Some((existing_repo, existing_branch)) = existing {
-            println!(
-                "  Already exists locally: {}:{}",
-                existing_repo, existing_branch
-            );
+            let existing_key = ProjectKey::task(existing_repo, existing_branch);
+            println!("  Already exists locally: {}", existing_key.hyperlink());
             println!();
             let confirm = match rl.readline("  ▶ Keep existing? [Y/n/q]: ") {
                 Ok(line) => line.trim().to_lowercase(),
@@ -1018,7 +1020,7 @@ fn task_create_from_sprint(client: &Client) -> Result<(), String> {
             };
             match confirm.as_str() {
                 "" | "y" | "yes" => {
-                    println!("  Keeping {}:{}", existing_repo, existing_branch);
+                    println!("  Keeping {}", existing_key.hyperlink());
                     skipped_count += 1;
                     continue;
                 }
@@ -1076,12 +1078,14 @@ fn task_create_from_sprint(client: &Client) -> Result<(), String> {
         };
 
         // Safety check: warn if this repo:branch already has a different JIRA key
-        let task_key = (home.clone(), branch.clone());
-        if let Some(other_jira) = existing_by_task.get(&task_key) {
+        let task_key_tuple = (home.clone(), branch.clone());
+        if let Some(other_jira) = existing_by_task.get(&task_key_tuple) {
             if other_jira != &issue.key {
+                let key = ProjectKey::task(&home, &branch);
                 eprintln!(
-                    "  WARNING: {}:{} is already linked to {}",
-                    home, branch, other_jira
+                    "  WARNING: {} is already linked to {}",
+                    key.hyperlink(),
+                    other_jira
                 );
                 let confirm = match rl.readline("  Continue anyway? [y/N]: ") {
                     Ok(line) => line.trim().to_lowercase(),
@@ -1097,13 +1101,16 @@ fn task_create_from_sprint(client: &Client) -> Result<(), String> {
         // Safety check: warn if changing repo or branch for existing JIRA task
         if let Some((existing_repo, existing_branch)) = existing {
             if &home != existing_repo || &branch != existing_branch {
+                let existing_key = ProjectKey::task(existing_repo, existing_branch);
+                let new_key = ProjectKey::task(&home, &branch);
                 eprintln!(
-                    "  WARNING: {} already exists as {}:{}",
-                    issue.key, existing_repo, existing_branch
+                    "  WARNING: {} already exists as {}",
+                    issue.key,
+                    existing_key.hyperlink()
                 );
                 eprintln!(
-                    "  Creating {}:{} will result in duplicate tasks for same JIRA",
-                    home, branch
+                    "  Creating {} will result in duplicate tasks for same JIRA",
+                    new_key.hyperlink()
                 );
                 let confirm = match rl.readline("  Continue anyway? [y/N]: ") {
                     Ok(line) => line.trim().to_lowercase(),
@@ -1117,9 +1124,10 @@ fn task_create_from_sprint(client: &Client) -> Result<(), String> {
         }
 
         // Final confirmation before creating
-        println!("  Creating {}:{} for {}", home, branch, issue.key);
+        let task_key = ProjectKey::task(&home, &branch);
+        println!("  Creating {} for {}", task_key.hyperlink(), issue.key);
         create_task(client, &home, &branch, &issue.key)?;
-        println!("  Created {}:{}", home, branch);
+        println!("  Created {}", task_key.hyperlink());
         created_count += 1;
     }
 
@@ -1185,14 +1193,15 @@ fn task_create_from_url(
         Err(_) => return Err("Aborted".to_string()),
     };
 
-    println!("Creating {}:{}", home, branch);
+    let task_key = ProjectKey::task(&home, &branch);
+    println!("Creating {}", task_key.hyperlink());
 
     create_task(client, &home, &branch, &jira_key)?;
 
     // Refresh cache so dashboard shows JIRA link immediately
     let _ = client.post("/project/refresh");
 
-    println!("Created task {}:{} for {}", home, branch, jira_key);
+    println!("Created task {} for {}", task_key.hyperlink(), jira_key);
     Ok(())
 }
 
@@ -1256,16 +1265,11 @@ fn status_sort_order(status: Option<&str>) -> u8 {
 
 /// Render a project item from /project/list response
 fn render_project_item(item: &serde_json::Value) -> String {
-    let project_key = item
+    let project_key_str = item
         .get("project_key")
         .and_then(|k| k.as_str())
         .unwrap_or("");
-    let task_url = format!(
-        "http://127.0.0.1:{}/project/switch/{}",
-        config::wormhole_port(),
-        project_key
-    );
-    let task_display = crate::format_osc8_hyperlink(&task_url, project_key);
+    let task_display = ProjectKey::parse(project_key_str).hyperlink();
 
     let jira_instance = std::env::var("JIRA_INSTANCE").ok();
     let (jira_key, status) = item
@@ -1306,7 +1310,7 @@ fn render_project_item(item: &serde_json::Value) -> String {
     };
 
     let emoji = jira::status_emoji(status);
-    let pad = 40_usize.saturating_sub(project_key.len());
+    let pad = 40_usize.saturating_sub(project_key_str.len());
 
     format!(
         "{} {}{} {}{}",
@@ -1380,14 +1384,12 @@ fn sprint_show(output: &str) -> Result<(), String> {
 }
 
 fn render_task_status(status: &crate::status::TaskStatus) -> String {
-    let jira_instance = std::env::var("JIRA_INSTANCE").ok();
-
-    let name_linked = if let Some(ref instance) = jira_instance {
-        let url = format!("https://{}.atlassian.net/browse/{}", instance, status.name);
-        crate::format_osc8_hyperlink(&url, &status.name)
-    } else {
-        status.name.clone()
+    let project_key = match &status.branch {
+        Some(branch) => ProjectKey::task(&status.name, branch),
+        None => ProjectKey::project(&status.name),
     };
+    let name_linked = project_key.hyperlink();
+    let name_display = project_key.to_string();
 
     let title = if let Some(ref jira) = status.jira {
         format!("{}: {}", name_linked, jira.summary)
@@ -1395,9 +1397,9 @@ fn render_task_status(status: &crate::status::TaskStatus) -> String {
         name_linked.clone()
     };
     let title_len = if let Some(ref jira) = status.jira {
-        status.name.len() + 2 + jira.summary.len()
+        name_display.len() + 2 + jira.summary.len()
     } else {
-        status.name.len()
+        name_display.len()
     };
 
     let mut lines = vec![title, "─".repeat(title_len)];
@@ -1444,10 +1446,17 @@ fn render_task_status(status: &crate::status::TaskStatus) -> String {
 }
 
 fn render_issue_status(issue: &crate::jira::IssueStatus) -> String {
+    let jira_instance = std::env::var("JIRA_INSTANCE").ok();
+    let key_display = if let Some(ref instance) = jira_instance {
+        let url = format!("https://{}.atlassian.net/browse/{}", instance, issue.key);
+        crate::format_osc8_hyperlink(&url, &issue.key)
+    } else {
+        issue.key.clone()
+    };
     format!(
         "{} {}: {}",
         crate::jira::status_emoji(&issue.status),
-        issue.key,
+        key_display,
         issue.summary
     )
 }

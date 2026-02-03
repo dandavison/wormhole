@@ -18,6 +18,34 @@ struct Fields {
     summary: String,
     status: Status,
     assignee: Option<Assignee>,
+    #[serde(default)]
+    sprint: SprintField,
+}
+
+#[derive(Deserialize, Clone, Default)]
+#[serde(untagged)]
+enum SprintField {
+    #[default]
+    None,
+    Single(Sprint),
+    Array(Vec<Sprint>),
+}
+
+impl SprintField {
+    fn active_sprint(&self) -> Option<&Sprint> {
+        match self {
+            SprintField::None => None,
+            SprintField::Single(s) => Some(s),
+            SprintField::Array(arr) => arr.iter().find(|s| s.state == "active").or(arr.last()),
+        }
+    }
+}
+
+#[derive(Deserialize, Clone)]
+struct Sprint {
+    name: String,
+    #[serde(default)]
+    state: String,
 }
 
 #[derive(Deserialize, Clone)]
@@ -40,6 +68,8 @@ pub struct IssueStatus {
     pub status: String,
     pub assignee: Option<String>,
     pub assignee_email: Option<String>,
+    #[serde(default)]
+    pub sprint: Option<String>,
 }
 
 impl IssueStatus {
@@ -78,7 +108,7 @@ pub fn get_issue(key: &str) -> Result<Option<IssueStatus>, String> {
     );
 
     let response = ureq::get(&url)
-        .query("fields", "summary,status,assignee")
+        .query("fields", "summary,status,assignee,sprint")
         .set("Authorization", &auth_header()?)
         .set("Content-Type", "application/json")
         .call();
@@ -102,6 +132,7 @@ pub fn get_issue(key: &str) -> Result<Option<IssueStatus>, String> {
                     .assignee
                     .as_ref()
                     .and_then(|a| a.email_address.clone()),
+                sprint: issue.fields.sprint.active_sprint().map(|s| s.name.clone()),
             }))
         }
         Err(ureq::Error::Status(404, _)) => Ok(None),
@@ -116,7 +147,7 @@ pub fn get_sprint_issues() -> Result<Vec<IssueStatus>, String> {
 
     let response: SearchResponse = ureq::get(&url)
         .query("jql", jql)
-        .query("fields", "key,summary,status,assignee")
+        .query("fields", "key,summary,status,assignee,sprint")
         .set("Authorization", &auth_header()?)
         .set("Content-Type", "application/json")
         .call()
@@ -141,6 +172,7 @@ pub fn get_sprint_issues() -> Result<Vec<IssueStatus>, String> {
                 .assignee
                 .as_ref()
                 .and_then(|a| a.email_address.clone()),
+            sprint: i.fields.sprint.active_sprint().map(|s| s.name.clone()),
         })
         .collect())
 }

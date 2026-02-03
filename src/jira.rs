@@ -43,9 +43,14 @@ impl SprintField {
 
 #[derive(Deserialize, Clone)]
 struct Sprint {
+    id: u64,
     name: String,
     #[serde(default)]
     state: String,
+    #[serde(rename = "boardId")]
+    board_id: Option<u64>,
+    #[serde(rename = "self")]
+    self_url: Option<String>,
 }
 
 #[derive(Deserialize, Clone)]
@@ -70,6 +75,12 @@ pub struct IssueStatus {
     pub assignee_email: Option<String>,
     #[serde(default)]
     pub sprint: Option<String>,
+    #[serde(default)]
+    pub sprint_id: Option<u64>,
+    #[serde(default)]
+    pub sprint_board_id: Option<u64>,
+    #[serde(default)]
+    pub sprint_url: Option<String>,
 }
 
 impl IssueStatus {
@@ -119,6 +130,7 @@ pub fn get_issue(key: &str) -> Result<Option<IssueStatus>, String> {
             let issue: Issue = resp
                 .into_json()
                 .map_err(|e| format!("Failed to parse JIRA response: {}", e))?;
+            let sprint = issue.fields.sprint.active_sprint();
             Ok(Some(IssueStatus {
                 key: issue.key,
                 summary: issue.fields.summary,
@@ -133,7 +145,10 @@ pub fn get_issue(key: &str) -> Result<Option<IssueStatus>, String> {
                     .assignee
                     .as_ref()
                     .and_then(|a| a.email_address.clone()),
-                sprint: issue.fields.sprint.active_sprint().map(|s| s.name.clone()),
+                sprint: sprint.map(|s| s.name.clone()),
+                sprint_id: sprint.map(|s| s.id),
+                sprint_board_id: sprint.and_then(|s| s.board_id),
+                sprint_url: sprint.and_then(|s| s.self_url.clone()),
             }))
         }
         Err(ureq::Error::Status(404, _)) => Ok(None),
@@ -159,21 +174,27 @@ pub fn get_sprint_issues() -> Result<Vec<IssueStatus>, String> {
     Ok(response
         .issues
         .into_iter()
-        .map(|i| IssueStatus {
-            key: i.key,
-            summary: i.fields.summary,
-            status: i.fields.status.name,
-            assignee: i
-                .fields
-                .assignee
-                .as_ref()
-                .and_then(|a| a.display_name.clone()),
-            assignee_email: i
-                .fields
-                .assignee
-                .as_ref()
-                .and_then(|a| a.email_address.clone()),
-            sprint: i.fields.sprint.active_sprint().map(|s| s.name.clone()),
+        .map(|i| {
+            let sprint = i.fields.sprint.active_sprint();
+            IssueStatus {
+                key: i.key,
+                summary: i.fields.summary,
+                status: i.fields.status.name,
+                assignee: i
+                    .fields
+                    .assignee
+                    .as_ref()
+                    .and_then(|a| a.display_name.clone()),
+                assignee_email: i
+                    .fields
+                    .assignee
+                    .as_ref()
+                    .and_then(|a| a.email_address.clone()),
+                sprint: sprint.map(|s| s.name.clone()),
+                sprint_id: sprint.map(|s| s.id),
+                sprint_board_id: sprint.and_then(|s| s.board_id),
+                sprint_url: sprint.and_then(|s| s.self_url.clone()),
+            }
         })
         .collect())
 }

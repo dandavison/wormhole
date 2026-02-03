@@ -286,12 +286,26 @@ fn render_task_card(
         .cached
         .jira
         .as_ref()
-        .and_then(|j| j.sprint.as_ref())
-        .map(|s| {
-            format!(
-                r#"<span class="meta-item card-sprint">{}</span>"#,
-                html_escape(s)
-            )
+        .and_then(|j| {
+            j.sprint.as_ref().map(|name| {
+                match (jira_instance, j.sprint_id) {
+                    (Some(inst), Some(sprint_id)) => {
+                        let url = format!(
+                            "https://{}.atlassian.net/secure/GHGoToBoard.jspa?sprintId={}",
+                            inst, sprint_id
+                        );
+                        format!(
+                            r#"<span class="meta-item card-sprint"><a href="{}" target="_blank">{}</a></span>"#,
+                            url,
+                            html_escape(name)
+                        )
+                    }
+                    _ => format!(
+                        r#"<span class="meta-item card-sprint">{}</span>"#,
+                        html_escape(name)
+                    ),
+                }
+            })
         })
         .unwrap_or_default();
 

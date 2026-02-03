@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
 use std::thread;
 use std::time::Duration;
+use tokio::sync::watch;
 
 /*
     - Projects are held in a ring for navigation (previous/current/next).
@@ -31,6 +32,17 @@ lazy_static! {
         all: HashMap::new(),
         ring: VecDeque::new(),
     });
+    static ref STATE_VERSION: (watch::Sender<u64>, watch::Receiver<u64>) = watch::channel(0);
+}
+
+/// Notify that project state has changed, waking any waiting poll requests.
+pub fn notify_state_change() {
+    STATE_VERSION.0.send_modify(|v| *v = v.wrapping_add(1));
+}
+
+/// Subscribe to state change notifications.
+pub fn subscribe_to_changes() -> watch::Receiver<u64> {
+    STATE_VERSION.1.clone()
 }
 
 pub struct Projects<'a>(MutexGuard<'a, ProjectsStore>);
@@ -78,7 +90,7 @@ impl<'a> Projects<'a> {
 
     pub fn apply(&mut self, mutation: Mutation, key: &ProjectKey) {
         match mutation {
-            Mutation::None => {}
+            Mutation::None => return,
             Mutation::Insert => {
                 self.move_to_back(key);
                 self.0.ring.rotate_right(1);
@@ -86,6 +98,7 @@ impl<'a> Projects<'a> {
             Mutation::RotateLeft => self.0.ring.rotate_left(1),
             Mutation::RotateRight => self.0.ring.rotate_right(1),
         };
+        notify_state_change();
     }
 
     pub fn open(&self) -> Vec<Project> {
@@ -132,6 +145,7 @@ impl<'a> Projects<'a> {
                 },
             );
             self.0.ring.push_front(key);
+            notify_state_change();
         }
         Ok(())
     }
@@ -141,12 +155,18 @@ impl<'a> Projects<'a> {
             return;
         }
         let key = project.store_key();
+        let mut changed = false;
         if !self.0.all.contains_key(&key) {
             ps!("projects::add_project");
             self.0.all.insert(key.clone(), project);
+            changed = true;
         }
         if !self.0.ring.contains(&key) {
             self.0.ring.push_front(key);
+            changed = true;
+        }
+        if changed {
+            notify_state_change();
         }
     }
 
@@ -155,6 +175,7 @@ impl<'a> Projects<'a> {
             if let Some(i) = self.ring_index(key) {
                 self.0.ring.remove(i);
             }
+            notify_state_change();
             true
         } else {
             false
@@ -164,6 +185,7 @@ impl<'a> Projects<'a> {
     pub fn remove_from_ring(&mut self, key: &ProjectKey) {
         if let Some(i) = self.ring_index(key) {
             self.0.ring.remove(i);
+            notify_state_change();
         }
     }
 
@@ -357,13 +379,22 @@ pub fn refresh_tasks() {
 
     let tasks = discover_tasks(additional_paths);
 
+    let mut changed = false;
     let mut projects = lock();
     for (key, project) in tasks {
         // Add to ring if not already present (so tasks appear in project list)
         if !projects.0.ring.contains(&key) {
             projects.0.ring.push_back(key.clone());
+            changed = true;
         }
-        projects.0.all.entry(key).or_insert(project);
+        if !projects.0.all.contains_key(&key) {
+            projects.0.all.insert(key, project);
+            changed = true;
+        }
+    }
+    drop(projects);
+    if changed {
+        notify_state_change();
     }
 }
 
@@ -407,13 +438,16 @@ pub fn refresh_cache() {
         })
         .collect();
 
-    let mut projects = lock();
-    for (key, jira, pr) in results {
-        if let Some(project) = projects.0.all.get_mut(&key) {
-            project.cached.jira = jira;
-            project.cached.pr = pr;
+    {
+        let mut projects = lock();
+        for (key, jira, pr) in results {
+            if let Some(project) = projects.0.all.get_mut(&key) {
+                project.cached.jira = jira;
+                project.cached.pr = pr;
+            }
         }
     }
+    notify_state_change();
 }
 
 pub fn cache_needs_refresh() -> bool {

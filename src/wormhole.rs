@@ -35,6 +35,7 @@ pub struct QueryParams {
     pub sync: bool,
     pub pwd: Option<String>,
     pub active: bool,
+    pub current: Option<String>,
 }
 
 pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
@@ -90,6 +91,10 @@ async fn route(
             Response::new(Body::from("Pinning current state..."))
         }),
         "/project/show" => endpoints::show(None),
+        "/project/current/poll" => {
+            let wait = parse_prefer_wait(&req);
+            endpoints::poll_current(params.current.as_deref(), wait).await
+        }
         "/project/describe" => {
             require_post_async(method, || async { endpoints::describe(req).await }).await
         }
@@ -274,6 +279,7 @@ impl QueryParams {
             sync: false,
             pwd: None,
             active: false,
+            current: None,
         };
         if let Some(query) = query {
             for (key, val) in form_urlencoded::parse(query.as_bytes()) {
@@ -293,12 +299,28 @@ impl QueryParams {
                     "sync" => params.sync = val == "true" || val == "1",
                     "pwd" => params.pwd = Some(val.to_string()),
                     "active" => params.active = val == "true" || val == "1",
+                    "current" => {
+                        params.current = if val.is_empty() {
+                            None
+                        } else {
+                            Some(val.to_string())
+                        }
+                    }
                     _ => {}
                 }
             }
         }
         params
     }
+}
+
+fn parse_prefer_wait(req: &Request<Body>) -> u64 {
+    req.headers()
+        .get("Prefer")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.strip_prefix("wait="))
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(30)
 }
 
 fn cors_response(response: Response<Body>) -> Response<Body> {
@@ -315,4 +337,34 @@ fn cors_response(response: Response<Body>) -> Response<Body> {
         "Content-Type".parse().unwrap(),
     );
     Response::from_parts(parts, body)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_query_params_empty_current_is_none() {
+        // Empty current= should be treated as None
+        let params = QueryParams::from_query(Some("current="));
+        assert!(
+            params.current.is_none(),
+            "Empty current= should be None, got {:?}",
+            params.current
+        );
+    }
+
+    #[test]
+    fn test_query_params_missing_current_is_none() {
+        // No current param should be None
+        let params = QueryParams::from_query(Some("active=true"));
+        assert!(params.current.is_none());
+    }
+
+    #[test]
+    fn test_query_params_current_with_value() {
+        // current=foo should be Some("foo")
+        let params = QueryParams::from_query(Some("current=myproject"));
+        assert_eq!(params.current, Some("myproject".to_string()));
+    }
 }

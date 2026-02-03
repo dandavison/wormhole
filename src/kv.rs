@@ -37,6 +37,8 @@ pub async fn set_value(key: &ProjectKey, kv_key: &str, body: Body) -> Response<B
     if let Some(project) = projects.get_mut(key) {
         project.kv.insert(kv_key.to_string(), value);
         save_project_kv(project);
+        drop(projects);
+        crate::projects::notify_state_change();
         Response::new(Body::empty())
     } else {
         Response::builder()
@@ -52,6 +54,8 @@ pub fn set_value_sync(key: &ProjectKey, kv_key: &str, value: &str) {
     if let Some(project) = projects.get_mut(key) {
         project.kv.insert(kv_key.to_string(), value.to_string());
         save_project_kv(project);
+        drop(projects);
+        crate::projects::notify_state_change();
     }
 }
 
@@ -61,6 +65,8 @@ pub fn delete_value(key: &ProjectKey, kv_key: &str) -> Response<Body> {
     if let Some(project) = projects.get_mut(key) {
         if project.kv.remove(kv_key).is_some() {
             save_project_kv(project);
+            drop(projects);
+            crate::projects::notify_state_change();
             Response::new(Body::empty())
         } else {
             Response::builder()

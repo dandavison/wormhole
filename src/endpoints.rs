@@ -21,7 +21,7 @@ pub fn list_projects(active_only: bool) -> Response<Body> {
         projects::lock()
             .open()
             .into_iter()
-            .filter(|p| window_names.contains(&p.store_key().to_string()))
+            .filter(|p| p.is_active(&window_names))
             .collect()
     } else {
         projects::lock().open()
@@ -177,12 +177,13 @@ pub fn favicon() -> Response<Body> {
 pub fn dashboard() -> Response<Body> {
     use crate::project::Project;
 
+    let window_names = crate::tmux::window_names();
     let (mut tasks, current_key): (Vec<Project>, Option<String>) = {
         let projects = projects::lock();
         let tasks = projects
             .all()
             .into_iter()
-            .filter(|p| p.is_task() && p.kv.contains_key("jira_key"))
+            .filter(|p| p.is_task() && (p.kv.contains_key("jira_key") || p.is_active(&window_names)))
             .cloned()
             .collect();
         let current = projects.current().map(|p| p.store_key().to_string());
@@ -420,7 +421,7 @@ pub fn neighbors(active: bool) -> Response<Body> {
         projects
             .open()
             .into_iter()
-            .filter(|p| window_names.contains(&p.store_key().to_string()))
+            .filter(|p| p.is_active(&window_names))
             .map(|p| serde_json::json!({ "project_key": p.store_key().to_string() }))
             .collect()
     } else {

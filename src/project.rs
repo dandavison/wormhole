@@ -125,6 +125,12 @@ impl Project {
         self.branch.is_some()
     }
 
+    /// Check if this project has an active tmux window.
+    /// Takes pre-fetched window names for efficiency when filtering many projects.
+    pub fn is_active(&self, window_names: &[String]) -> bool {
+        window_names.contains(&self.store_key().to_string())
+    }
+
     pub fn store_key(&self) -> ProjectKey {
         match &self.branch {
             Some(branch) => ProjectKey::task(self.repo_name.as_str(), branch.as_str()),

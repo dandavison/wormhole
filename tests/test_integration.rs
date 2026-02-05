@@ -652,8 +652,10 @@ fn test_neighbors_returns_project_key() {
     let task_2_key = test.task_store_key(&task_2, &home_proj);
 
     // Switch to both tasks to add them to the ring
-    test.cli(&format!("wormhole open '{}'", task_1_key)).unwrap();
-    test.cli(&format!("wormhole open '{}'", task_2_key)).unwrap();
+    test.cli(&format!("wormhole open '{}'", task_1_key))
+        .unwrap();
+    test.cli(&format!("wormhole open '{}'", task_2_key))
+        .unwrap();
 
     // Get neighbors endpoint
     let neighbors_json = test.http_get("/project/neighbors").unwrap();

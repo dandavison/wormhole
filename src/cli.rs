@@ -60,7 +60,10 @@ struct ProjectDebug {
 impl ProjectDebug {
     fn render_terminal(&self) -> String {
         let name_linked = ProjectKey::parse(&self.name).hyperlink();
-        format!("[{}] name: {}, path: {}", self.index, name_linked, self.path)
+        format!(
+            "[{}] name: {}, path: {}",
+            self.index, name_linked, self.path
+        )
     }
 }
 
@@ -95,11 +98,11 @@ pub enum JiraCommand {
 
 #[derive(Subcommand)]
 pub enum TaskCommand {
-    /// Create a task from a JIRA URL
-    Create {
-        /// JIRA URL (e.g., https://temporalio.atlassian.net/browse/ACT-622)
-        url: String,
-        /// Home project for the worktree
+    /// Create or update a task
+    Upsert {
+        /// Target: project key (repo:branch), JIRA URL, or JIRA key (ACT-123)
+        target: String,
+        /// Home project for the worktree (required for create)
         #[arg(short = 'p', long)]
         home_project: Option<String>,
     },
@@ -470,17 +473,6 @@ fn get_available_projects(client: &Client) -> Result<Vec<String>, String> {
         .unwrap_or_default())
 }
 
-fn create_task(client: &Client, home: &str, branch: &str, jira_key: &str) -> Result<(), String> {
-    let url = format!("/project/create/{}?home-project={}", branch, home);
-    client.get(&url)?;
-
-    let store_key = format!("{}:{}", home, branch);
-    let kv_url = format!("/kv/{}/jira_key", store_key);
-    let _ = client.put(&kv_url, jira_key);
-
-    Ok(())
-}
-
 fn parse_path_and_line(target: &str) -> (String, Option<usize>) {
     if let Some(idx) = target.rfind(':') {
         let (path, rest) = target.split_at(idx);
@@ -751,9 +743,10 @@ pub fn run(command: Command) -> Result<(), String> {
         },
 
         Command::Task { command } => match command {
-            TaskCommand::Create { url, home_project } => {
-                task_create_from_url(&client, &url, home_project)
-            }
+            TaskCommand::Upsert {
+                target,
+                home_project,
+            } => task_upsert(&client, &target, home_project),
             TaskCommand::CreateFromSprint => task_create_from_sprint(&client),
         },
 
@@ -1126,7 +1119,7 @@ fn task_create_from_sprint(client: &Client) -> Result<(), String> {
         // Final confirmation before creating
         let task_key = ProjectKey::task(&home, &branch);
         println!("  Creating {} for {}", task_key.hyperlink(), issue.key);
-        create_task(client, &home, &branch, &issue.key)?;
+        upsert_task(client, &home, &branch, Some(&issue.key))?;
         println!("  Created {}", task_key.hyperlink());
         created_count += 1;
     }
@@ -1143,35 +1136,119 @@ fn task_create_from_sprint(client: &Client) -> Result<(), String> {
     Ok(())
 }
 
-fn task_create_from_url(
+/// Represents a parsed task target for the upsert command
+enum UpsertTarget {
+    /// A project key like "repo:branch"
+    ProjectKey { repo: String, branch: String },
+    /// A JIRA key (bare like "ACT-123" or extracted from URL)
+    JiraKey(String),
+}
+
+/// Find an existing task by JIRA key from the project list
+fn find_task_by_jira_key(
     client: &Client,
-    url: &str,
-    home_project: Option<String>,
-) -> Result<(), String> {
-    let jira_key = crate::describe::parse_jira_url(url)
-        .ok_or_else(|| format!("Could not parse JIRA key from URL: {}", url))?;
+    jira_key: &str,
+) -> Result<Option<(String, String)>, String> {
+    let response = client.get("/project/list")?;
+    let parsed: serde_json::Value = serde_json::from_str(&response).map_err(|e| e.to_string())?;
 
-    let issue =
-        jira::get_issue(&jira_key)?.ok_or_else(|| format!("JIRA issue not found: {}", jira_key))?;
+    if let Some(current) = parsed.get("current").and_then(|v| v.as_array()) {
+        for item in current {
+            if let Some(kv_jira) = item
+                .get("kv")
+                .and_then(|kv| kv.get("jira_key"))
+                .and_then(|k| k.as_str())
+            {
+                if kv_jira == jira_key {
+                    if let Some(project_key) = item.get("project_key").and_then(|k| k.as_str()) {
+                        if let Some((repo, branch)) = project_key.split_once(':') {
+                            return Ok(Some((repo.to_string(), branch.to_string())));
+                        }
+                    }
+                }
+            }
+        }
+    }
 
-    println!("{} {}", jira_key, issue.summary);
+    Ok(None)
+}
+
+/// Get existing task info by project key
+fn get_task_info(client: &Client, repo: &str, branch: &str) -> Result<Option<String>, String> {
+    let store_key = format!("{}:{}", repo, branch);
+    let kv_url = format!("/kv/{}/jira_key", store_key);
+    match client.get(&kv_url) {
+        Ok(jira_key) => Ok(Some(jira_key)),
+        Err(_) => Ok(None),
+    }
+}
+
+fn task_upsert(client: &Client, target: &str, home_project: Option<String>) -> Result<(), String> {
+    // Refresh to get latest task list
+    let _ = client.post("/project/refresh-tasks");
+
+    // Parse target to determine what we're working with
+    let (upsert_target, existing_task) = parse_upsert_target(client, target)?;
+
+    // Get JIRA info if we have a JIRA key
+    let (jira_key, jira_issue) = match &upsert_target {
+        UpsertTarget::JiraKey(key) => {
+            let issue = jira::get_issue(key)?;
+            (Some(key.clone()), issue)
+        }
+        UpsertTarget::ProjectKey { repo, branch } => {
+            // Check if existing task has a JIRA key
+            match get_task_info(client, repo, branch)? {
+                Some(key) => {
+                    let issue = jira::get_issue(&key)?;
+                    (Some(key), issue)
+                }
+                None => (None, None),
+            }
+        }
+    };
+
+    // Print header with JIRA info if available
+    if let Some(ref key) = jira_key {
+        if let Some(ref issue) = jira_issue {
+            println!("{} {}", key, issue.summary);
+        } else {
+            println!("{}", key);
+        }
+    }
+
+    // Determine defaults
+    let (default_home, default_branch) = match (&existing_task, &upsert_target) {
+        (Some((repo, branch)), _) => (repo.clone(), branch.clone()),
+        (None, UpsertTarget::ProjectKey { repo, branch }) => (repo.clone(), branch.clone()),
+        (None, UpsertTarget::JiraKey(_)) => {
+            let home = home_project
+                .clone()
+                .or_else(|| std::env::var("WORMHOLE_DEFAULT_HOME_PROJECT").ok())
+                .unwrap_or_default();
+            let branch = jira_issue
+                .as_ref()
+                .map(|i| to_kebab_case(&i.summary))
+                .unwrap_or_default();
+            (home, branch)
+        }
+    };
 
     let available_projects = get_available_projects(client)?;
     let mut rl = create_project_editor(available_projects)?;
 
+    // Prompt for home project
     let home = if let Some(h) = home_project {
         h
     } else {
-        let default_home = std::env::var("WORMHOLE_DEFAULT_HOME_PROJECT").ok();
-        let default_h = default_home.unwrap_or_default();
-        match rl.readline_with_initial("home: ", (&default_h, "")) {
+        match rl.readline_with_initial("home: ", (&default_home, "")) {
             Ok(line) => {
                 let trimmed = line.trim();
                 if trimmed.is_empty() {
-                    if default_h.is_empty() {
+                    if default_home.is_empty() {
                         return Err("Home project is required".to_string());
                     }
-                    default_h
+                    default_home.clone()
                 } else {
                     trimmed.to_string()
                 }
@@ -1180,12 +1257,21 @@ fn task_create_from_url(
         }
     };
 
-    let default_branch = to_kebab_case(&issue.summary);
-    let branch = match rl.readline_with_initial("branch: ", (&default_branch, "")) {
+    // Get branches from the selected repo for completion
+    let branches = config::resolve_project_name(&home)
+        .map(|path| crate::git::list_branches(&path))
+        .unwrap_or_default();
+    let mut branch_rl = create_branch_editor(branches)?;
+
+    // Prompt for branch
+    let branch = match branch_rl.readline_with_initial("branch: ", (&default_branch, "")) {
         Ok(line) => {
             let trimmed = line.trim();
             if trimmed.is_empty() {
-                default_branch
+                if default_branch.is_empty() {
+                    return Err("Branch is required".to_string());
+                }
+                default_branch.clone()
             } else {
                 trimmed.to_string()
             }
@@ -1194,14 +1280,103 @@ fn task_create_from_url(
     };
 
     let task_key = ProjectKey::task(&home, &branch);
-    println!("Creating {}", task_key.hyperlink());
+    let same_location = existing_task
+        .as_ref()
+        .is_some_and(|(r, b)| r == &home && b == &branch);
+    let is_move = existing_task.is_some() && !same_location;
 
-    create_task(client, &home, &branch, &jira_key)?;
+    if same_location {
+        println!("Updating {}", task_key.hyperlink());
+    } else if is_move {
+        let (old_repo, old_branch) = existing_task.as_ref().unwrap();
+        let old_key = ProjectKey::task(old_repo, old_branch);
+        println!("Moving {} → {}", old_key.hyperlink(), task_key.hyperlink());
+    } else {
+        println!("Creating {}", task_key.hyperlink());
+    }
 
-    // Refresh cache so dashboard shows JIRA link immediately
+    // Create/ensure new task exists
+    upsert_task(client, &home, &branch, jira_key.as_deref())?;
+
+    // Delete old worktree if moving to a new location
+    if is_move {
+        let (old_repo, old_branch) = existing_task.as_ref().unwrap();
+        let old_key = format!("{}:{}", old_repo, old_branch);
+        if let Err(e) = client.post(&format!("/project/remove/{}", old_key)) {
+            eprintln!("Warning: failed to remove old worktree: {}", e);
+        }
+    }
+
+    // Refresh cache
     let _ = client.post("/project/refresh");
 
-    println!("Created task {} for {}", task_key.hyperlink(), jira_key);
+    if same_location {
+        println!("Updated {}", task_key.hyperlink());
+    } else if is_move {
+        println!("Moved to {}", task_key.hyperlink());
+    } else if let Some(ref key) = jira_key {
+        println!("Created task {} for {}", task_key.hyperlink(), key);
+    } else {
+        println!("Created task {}", task_key.hyperlink());
+    }
+
+    Ok(())
+}
+
+fn parse_upsert_target(
+    client: &Client,
+    target: &str,
+) -> Result<(UpsertTarget, Option<(String, String)>), String> {
+    // First, check if it's a JIRA URL or key
+    if let Some(jira_key) = crate::describe::parse_jira_key_or_url(target) {
+        let existing = find_task_by_jira_key(client, &jira_key)?;
+        return Ok((UpsertTarget::JiraKey(jira_key), existing));
+    }
+
+    // Check if it's a project key (repo:branch)
+    if let Some((repo, branch)) = target.split_once(':') {
+        // Verify the task exists (or at least the repo exists)
+        let existing = if client
+            .get(&format!("/kv/{}:{}/jira_key", repo, branch))
+            .is_ok()
+        {
+            Some((repo.to_string(), branch.to_string()))
+        } else {
+            None
+        };
+        return Ok((
+            UpsertTarget::ProjectKey {
+                repo: repo.to_string(),
+                branch: branch.to_string(),
+            },
+            existing,
+        ));
+    }
+
+    Err(format!(
+        "Could not parse target '{}'. Expected: project key (repo:branch), JIRA URL, or JIRA key (ACT-123)",
+        target
+    ))
+}
+
+/// Create or update a task with optional JIRA key
+fn upsert_task(
+    client: &Client,
+    home: &str,
+    branch: &str,
+    jira_key: Option<&str>,
+) -> Result<(), String> {
+    // Create the worktree/task
+    let url = format!("/project/create/{}?home-project={}", branch, home);
+    client.get(&url)?;
+
+    // Store JIRA key if provided
+    if let Some(key) = jira_key {
+        let store_key = format!("{}:{}", home, branch);
+        let kv_url = format!("/kv/{}/jira_key", store_key);
+        let _ = client.put(&kv_url, key);
+    }
+
     Ok(())
 }
 

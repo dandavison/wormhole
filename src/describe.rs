@@ -156,6 +156,22 @@ pub fn parse_jira_url(url: &str) -> Option<String> {
     None
 }
 
+/// Parse a JIRA key from either a URL or a bare key like "ACT-123"
+pub fn parse_jira_key_or_url(input: &str) -> Option<String> {
+    // First try URL parsing
+    if let Some(key) = parse_jira_url(input) {
+        return Some(key);
+    }
+
+    // Then try bare JIRA key format (e.g., "ACT-123")
+    let jira_key_re = Regex::new(r"^[A-Z]+-\d+$").ok()?;
+    if jira_key_re.is_match(input) {
+        return Some(input.to_string());
+    }
+
+    None
+}
+
 fn describe_jira(jira_key: &str) -> DescribeResponse {
     // Find task by JIRA key stored in kv
     let tasks = projects::tasks();
@@ -335,5 +351,24 @@ mod tests {
         let url = "https://temporalio.atlassian.net/jira/software/c/projects/ACT/boards/72?assignee=712020&selectedIssue=ACT-108";
         let key = parse_jira_url(url).unwrap();
         assert_eq!(key, "ACT-108");
+    }
+
+    #[test]
+    fn test_parse_jira_key_or_url_bare_key() {
+        let key = parse_jira_key_or_url("ACT-123").unwrap();
+        assert_eq!(key, "ACT-123");
+    }
+
+    #[test]
+    fn test_parse_jira_key_or_url_url() {
+        let key = parse_jira_key_or_url("https://temporalio.atlassian.net/browse/ACT-108").unwrap();
+        assert_eq!(key, "ACT-108");
+    }
+
+    #[test]
+    fn test_parse_jira_key_or_url_invalid() {
+        assert!(parse_jira_key_or_url("not-a-jira-key").is_none());
+        assert!(parse_jira_key_or_url("repo:branch").is_none());
+        assert!(parse_jira_key_or_url("temporal").is_none());
     }
 }

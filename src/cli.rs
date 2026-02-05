@@ -101,9 +101,10 @@ pub enum TaskCommand {
     /// Create or update a task
     Upsert {
         /// Target: project key (repo:branch), JIRA URL, or JIRA key (ACT-123)
+        #[arg(add = ArgValueCompleter::new(complete_projects))]
         target: String,
         /// Home project for the worktree (required for create)
-        #[arg(short = 'p', long)]
+        #[arg(short = 'p', long, add = ArgValueCompleter::new(complete_projects))]
         home_project: Option<String>,
     },
     /// Create tasks from current sprint issues
@@ -158,11 +159,13 @@ pub enum ProjectCommand {
     /// Close a project (editor and terminal windows)
     Close {
         /// Project name
+        #[arg(add = ArgValueCompleter::new(complete_projects))]
         name: String,
     },
     /// Remove a project from wormhole (removes worktree for tasks)
     Remove {
         /// Project name
+        #[arg(add = ArgValueCompleter::new(complete_projects))]
         name: String,
     },
     /// Pin current (project, application) state
@@ -176,6 +179,7 @@ pub enum ProjectCommand {
     /// Show project/task info (JIRA, PR, etc.)
     Show {
         /// Project name (defaults to current project)
+        #[arg(add = ArgValueCompleter::new(complete_projects))]
         name: Option<String>,
         /// Output format: text (default) or json
         #[arg(short, long, default_value = "text")]

@@ -40,9 +40,18 @@ impl ProjectPath {
         let land_in = if skip_editor {
             Some(Application::Terminal)
         } else {
+            // navigate() pre-rotates the ring then calls us with Mutation::None;
+            // only inherit focus from the current app for explicit opens.
+            let is_explicit_switch = !matches!(mutation, Mutation::None);
             land_in
                 .or_else(|| parse_application(self.project.kv.get("land-in")))
-                .or_else(|| if is_already_open { current_app } else { None })
+                .or_else(|| {
+                    if is_already_open && is_explicit_switch {
+                        current_app
+                    } else {
+                        None
+                    }
+                })
         };
         projects.apply(mutation, &self.project.store_key());
         if util::debug() {

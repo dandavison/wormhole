@@ -2,8 +2,14 @@
 setopt prompt_subst
 
 wormhole-shell-reset() {
-    eval "$(curl -s "localhost:7117/shell?pwd=$PWD")"
+    eval "$(curl -s --max-time 1 "localhost:${WORMHOLE_PORT:-7117}/shell?pwd=$PWD")"
 }
+
+# Auto-detect wormhole project for new panes (the -e vars from new-window
+# don't propagate to split panes)
+if [[ -z $WORMHOLE_PROJECT_NAME ]]; then
+    wormhole-shell-reset
+fi
 
 export GIT_PS1_SHOWDIRTYSTATE=yes
 export GIT_PS1_UNSTAGED="અ "

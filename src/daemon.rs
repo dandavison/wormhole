@@ -51,6 +51,14 @@ impl TmuxSession {
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .status();
+        // Wait for the tmux server to fully exit so the socket is released
+        let start = Instant::now();
+        while start.elapsed() < Duration::from_secs(3) {
+            if !self.is_running() {
+                return;
+            }
+            thread::sleep(Duration::from_millis(50));
+        }
     }
 
     pub fn is_running(&self) -> bool {

@@ -995,3 +995,39 @@ fn test_task_with_slash_in_branch() {
     test.cli(&format!("wormhole open '{}'", store_key)).unwrap();
     test.assert_focus(Editor(&task_branch));
 }
+
+#[test]
+fn test_dashboard_renders_card_md() {
+    let test = harness::WormholeTest::new(8960);
+
+    let home_proj = format!("{}dash-card", TEST_PREFIX);
+    let home_dir = format!("/tmp/{}", home_proj);
+    let task_branch = format!("{}CARD-MD", TEST_PREFIX);
+
+    init_git_repo(&home_dir);
+    test.create_project(&home_dir, &home_proj);
+    test.create_task(&task_branch, &home_proj);
+
+    // Write card.md into the task's .task directory
+    let worktree_path = format!(
+        "{}/.git/wormhole/worktrees/{}/{}",
+        home_dir, task_branch, home_proj
+    );
+    let card_md = format!("{}/.task/card.md", worktree_path);
+    std::fs::write(&card_md, "[my link](https://example.com)\n").unwrap();
+
+    let html = test.http_get("/dashboard").unwrap();
+
+    assert!(
+        html.contains("card-content"),
+        "Dashboard should contain card-content div"
+    );
+    assert!(
+        html.contains("https://example.com"),
+        "Dashboard should contain rendered link from card.md"
+    );
+    assert!(
+        html.contains("my link"),
+        "Dashboard should contain link text from card.md"
+    );
+}

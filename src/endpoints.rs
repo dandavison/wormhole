@@ -324,6 +324,22 @@ fn render_task_card(
         String::new()
     };
 
+    let card_md_path = path.join(".task/card.md");
+    let card_content_html = if card_md_path.exists() {
+        std::fs::read_to_string(&card_md_path)
+            .ok()
+            .filter(|s| !s.is_empty())
+            .map(|md| {
+                format!(
+                    r#"<div class="card-content">{}</div>"#,
+                    render_markdown(&md)
+                )
+            })
+            .unwrap_or_default()
+    } else {
+        String::new()
+    };
+
     let iframe_html = match crate::serve_web::manager().get_or_start(task.repo_name.as_str(), &path)
     {
         Ok(port) => {
@@ -358,7 +374,7 @@ fn render_task_card(
         r#"<div class="card{}" data-task="{}"{}>
 <div class="card-header">{}<span class="card-summary">{}</span>{}</div>
 <div class="card-meta">{}{}{}{}{}</div>
-{}
+{}{}
 </div>"#,
         current_class,
         html_escape(&task_id),
@@ -371,6 +387,7 @@ fn render_task_card(
         pr_html,
         plan_html,
         assignee_html,
+        card_content_html,
         iframe_html
     )
 }
@@ -400,6 +417,14 @@ fn render_assignee_warning(assignee: Option<&str>, assignee_email: Option<&str>)
         r#"<span class="meta-item assignee-warning">⚠️ {}</span>"#,
         html_escape(display)
     )
+}
+
+fn render_markdown(md: &str) -> String {
+    use pulldown_cmark::{html, Options, Parser};
+    let parser = Parser::new_ext(md, Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TABLES);
+    let mut html_output = String::new();
+    html::push_html(&mut html_output, parser);
+    html_output
 }
 
 fn status_sort_order(status: Option<&str>) -> u8 {

@@ -270,6 +270,8 @@ pub enum DoctorCommand {
         #[arg(short, long, default_value = "text")]
         output: String,
     },
+    /// Migrate worktrees from old layout ($branch) to new layout ($branch/$repo_name)
+    MigrateWorktrees,
 }
 
 #[derive(Subcommand)]
@@ -770,6 +772,7 @@ pub fn run(command: Command) -> Result<(), String> {
 
         Command::Doctor { command } => match command {
             DoctorCommand::PersistedData { output } => doctor_persisted_data(&output),
+            DoctorCommand::MigrateWorktrees => doctor_migrate_worktrees(),
         },
 
         Command::Refresh => {
@@ -917,6 +920,30 @@ fn doctor_persisted_data(output: &str) -> Result<(), String> {
         println!("{}", report.render_terminal());
     }
 
+    Ok(())
+}
+
+fn doctor_migrate_worktrees() -> Result<(), String> {
+    let available = config::available_projects();
+    let mut total = 0;
+    for (name, path) in &available {
+        if !crate::git::is_git_repo(path) {
+            continue;
+        }
+        match crate::git::migrate_worktrees(name, path) {
+            Ok(0) => {}
+            Ok(n) => {
+                println!("{}: migrated {} worktree(s)", name, n);
+                total += n;
+            }
+            Err(e) => eprintln!("{}: error: {}", name, e),
+        }
+    }
+    if total == 0 {
+        println!("No worktrees needed migration.");
+    } else {
+        println!("\nMigrated {} worktree(s) total.", total);
+    }
     Ok(())
 }
 

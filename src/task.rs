@@ -28,9 +28,9 @@ pub fn create_task(repo: &str, branch: &str) -> Result<Project, String> {
         return Err(format!("'{}' is not a git repository", repo));
     }
 
-    // Worktree directory is named by encoded branch (URL-encoded to stay flat)
-    let worktree_path =
-        git::worktree_base_path(&repo_path).join(git::encode_branch_for_path(branch));
+    let worktree_path = git::worktree_base_path(&repo_path)
+        .join(git::encode_branch_for_path(branch))
+        .join(repo);
 
     if !worktree_path.exists() {
         git::create_worktree(&repo_path, &worktree_path, branch)?;

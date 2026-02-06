@@ -225,6 +225,51 @@ pub fn list_branches(repo_path: &Path) -> Vec<String> {
     }
 }
 
+/// Migrate worktrees from old layout (`worktrees/$branch`) to new layout
+/// (`worktrees/$branch/$repo_name`). Returns the number of worktrees migrated.
+pub fn migrate_worktrees(repo_name: &str, repo_path: &Path) -> Result<usize, String> {
+    let base = worktree_base_path(repo_path);
+    if !base.exists() {
+        return Ok(0);
+    }
+    let mut new_paths: Vec<PathBuf> = Vec::new();
+    let entries: Vec<_> = std::fs::read_dir(&base)
+        .map_err(|e| format!("Failed to read {}: {}", base.display(), e))?
+        .filter_map(|e| e.ok())
+        .collect();
+    for entry in entries {
+        let old = entry.path();
+        // Old layout: $base/$encoded_branch/.git exists (it's a worktree)
+        if !old.join(".git").is_file() {
+            continue;
+        }
+        let tmp = old.with_extension("wh-migrate-tmp");
+        std::fs::rename(&old, &tmp)
+            .map_err(|e| format!("Failed to rename {}: {}", old.display(), e))?;
+        let new = old.join(repo_name);
+        std::fs::create_dir_all(&old)
+            .map_err(|e| format!("Failed to create dir {}: {}", old.display(), e))?;
+        std::fs::rename(&tmp, &new)
+            .map_err(|e| format!("Failed to rename {} -> {}: {}", tmp.display(), new.display(), e))?;
+        new_paths.push(new);
+    }
+    if !new_paths.is_empty() {
+        let mut args: Vec<&str> = vec!["worktree", "repair"];
+        let path_strs: Vec<String> = new_paths.iter().map(|p| p.display().to_string()).collect();
+        args.extend(path_strs.iter().map(|s| s.as_str()));
+        let output = Command::new("git")
+            .args(&args)
+            .current_dir(repo_path)
+            .output()
+            .map_err(|e| format!("git worktree repair failed: {}", e))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("git worktree repair failed: {}", stderr.trim()));
+        }
+    }
+    Ok(new_paths.len())
+}
+
 pub fn remove_worktree(repo_path: &Path, worktree_path: &Path) -> Result<(), String> {
     let output = Command::new("git")
         .args([
@@ -300,11 +345,11 @@ mod tests {
 HEAD abc123
 branch refs/heads/main
 
-worktree /Users/dan/src/temporal/.git/wormhole/worktrees/ACT-1234
+worktree /Users/dan/src/temporal/.git/wormhole/worktrees/ACT-1234/temporal
 HEAD def456
 branch refs/heads/ACT-1234
 
-worktree /Users/dan/src/temporal/.git/wormhole/worktrees/ACT-5678
+worktree /Users/dan/src/temporal/.git/wormhole/worktrees/ACT-5678/temporal
 HEAD 789abc
 detached
 "#;
@@ -314,12 +359,12 @@ detached
         assert_eq!(worktrees[0].branch, Some("main".to_string()));
         assert_eq!(
             worktrees[1].path,
-            PathBuf::from("/Users/dan/src/temporal/.git/wormhole/worktrees/ACT-1234")
+            PathBuf::from("/Users/dan/src/temporal/.git/wormhole/worktrees/ACT-1234/temporal")
         );
         assert_eq!(worktrees[1].branch, Some("ACT-1234".to_string()));
         assert_eq!(
             worktrees[2].path,
-            PathBuf::from("/Users/dan/src/temporal/.git/wormhole/worktrees/ACT-5678")
+            PathBuf::from("/Users/dan/src/temporal/.git/wormhole/worktrees/ACT-5678/temporal")
         );
         assert_eq!(worktrees[2].branch, None);
     }

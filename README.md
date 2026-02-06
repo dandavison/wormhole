@@ -11,9 +11,10 @@ Wormhole is a tool for working on software projects.
   checked out. You always work on the task in the worktree: never in the main repo dir. Wormhole can
   thus determine all known tasks by enumerating worktrees of available repos.
 
--  In practive, wormhole stores its worktrees at `$gitdir/wormhole/worktrees/$branch`. If the repo
-  directory is not a submodule then `$gitdir` is `$dir/.git`; if it is a submodule then `$gitdir` is
-  the gitdir entry specified in the `$dir/.git` file.
+- In practice, wormhole stores its worktrees at `$gitdir/wormhole/worktrees/$branch/$repo_name`. If
+  the repo directory is not a submodule then `$gitdir` is `$dir/.git`; if it is a submodule then
+  `$gitdir` is the gitdir entry specified in the `$dir/.git` file. The leaf directory is `$repo_name`
+  so that editors display the repo name (not the branch) in the sidebar.
 
 - A _task_ is a type of _project_. Each repo is a non-task _project_. A non-task project has no
   associated branch. Thus the set of projects is the union of the _available repos_ and the
@@ -129,6 +130,7 @@ wormhole jira sprint show               # Show detailed sprint status
 wormhole refresh                        # Refresh in-memory data from disk/APIs
 wormhole kill                           # Kill tmux session and clean up
 wormhole doctor persisted-data          # Report on worktrees and KV files
+wormhole doctor migrate-worktrees      # Migrate worktrees to new layout
 wormhole completion bash                # Generate shell completions
 ```
 

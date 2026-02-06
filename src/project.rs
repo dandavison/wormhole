@@ -144,7 +144,8 @@ impl Project {
         Some(
             common_dir
                 .join("wormhole/worktrees")
-                .join(git::encode_branch_for_path(branch.as_str())),
+                .join(git::encode_branch_for_path(branch.as_str()))
+                .join(self.repo_name.as_str()),
         )
     }
 

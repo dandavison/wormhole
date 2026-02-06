@@ -350,8 +350,8 @@ fn test_task_switching() {
 
     let task_1_key = test.task_store_key(&task_1, &home_proj);
     let task_2_key = test.task_store_key(&task_2, &home_proj);
-    let task_1_dir = format!("{}/.git/wormhole/worktrees/{}", home_dir, task_1);
-    let task_2_dir = format!("{}/.git/wormhole/worktrees/{}", home_dir, task_2);
+    let task_1_dir = format!("{}/.git/wormhole/worktrees/{}/{}", home_dir, task_1, home_proj);
+    let task_2_dir = format!("{}/.git/wormhole/worktrees/{}/{}", home_dir, task_2, home_proj);
 
     // Table-driven: (switch_key, window_title, expected_cwd)
     let cases = [
@@ -411,8 +411,8 @@ fn test_task_in_submodule() {
 
     // Worktree should be in parent's .git/modules/<submodule>/wormhole/worktrees/
     let task_dir = format!(
-        "{}/.git/modules/{}/wormhole/worktrees/{}",
-        parent_dir, submodule_dirname, task_id
+        "{}/.git/modules/{}/wormhole/worktrees/{}/{}",
+        parent_dir, submodule_dirname, task_id, submodule_name
     );
 
     // Switch between submodule project and task
@@ -716,13 +716,14 @@ fn test_tasks_appear_without_terminal_windows() {
     // (NOT via create_task, so no terminal window is created for the task)
     let worktrees_dir = format!("{}/.git/wormhole/worktrees", home_dir);
     std::fs::create_dir_all(&worktrees_dir).unwrap();
+    let worktree_path = format!("{}/{}/{}", worktrees_dir, task_branch, home_proj);
     let output = Command::new("git")
         .args([
             "worktree",
             "add",
             "-b",
             &task_branch,
-            &format!("{}/{}", worktrees_dir, task_branch),
+            &worktree_path,
         ])
         .current_dir(&home_dir)
         .output()
@@ -734,7 +735,6 @@ fn test_tasks_appear_without_terminal_windows() {
     );
 
     // Verify the worktree was created
-    let worktree_path = format!("{}/{}", worktrees_dir, task_branch);
     assert!(
         std::path::Path::new(&worktree_path).exists(),
         "Worktree directory should exist"
@@ -782,13 +782,14 @@ fn test_switch_to_project_when_task_exists() {
     // Create worktree directly with git (not via create_task)
     let worktrees_dir = format!("{}/.git/wormhole/worktrees", home_dir);
     std::fs::create_dir_all(&worktrees_dir).unwrap();
+    let task_dir = format!("{}/{}/{}", worktrees_dir, task_branch, home_proj);
     Command::new("git")
         .args([
             "worktree",
             "add",
             "-b",
             &task_branch,
-            &format!("{}/{}", worktrees_dir, task_branch),
+            &task_dir,
         ])
         .current_dir(&home_dir)
         .output()
@@ -806,7 +807,6 @@ fn test_switch_to_project_when_task_exists() {
     // Switch to the task first (so it's the most recent)
     let task_key = test.task_store_key(&task_branch, &home_proj);
     test.cli(&format!("wormhole open '{}'", task_key)).unwrap();
-    let task_dir = format!("{}/{}", worktrees_dir, task_branch);
     test.assert_tmux_cwd(&task_dir);
 
     // Now switch to the PROJECT by name (not the task)
@@ -883,7 +883,7 @@ fn test_file_opens_in_project_not_task() {
             "add",
             "-b",
             &task_branch,
-            &format!("{}/{}", worktrees_dir, task_branch),
+            &format!("{}/{}/{}", worktrees_dir, task_branch, home_proj),
         ])
         .current_dir(&home_dir)
         .output()
@@ -935,7 +935,7 @@ fn test_project_list_active_flag() {
             "add",
             "-b",
             &task_no_window,
-            &format!("{}/{}", worktrees_dir, task_no_window),
+            &format!("{}/{}/{}", worktrees_dir, task_no_window, home_proj),
         ])
         .current_dir(&home_dir)
         .output()
@@ -1066,7 +1066,7 @@ fn test_switch_creates_task_from_colon_syntax() {
     std::thread::sleep(std::time::Duration::from_millis(500));
 
     // Verify the worktree was created
-    let worktree_path = format!("{}/.git/wormhole/worktrees/{}", home_dir, task_branch);
+    let worktree_path = format!("{}/.git/wormhole/worktrees/{}/{}", home_dir, task_branch, home_proj);
     assert!(
         std::path::Path::new(&worktree_path).exists(),
         "Worktree should be created at {}",

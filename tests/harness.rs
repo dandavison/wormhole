@@ -357,6 +357,25 @@ impl WormholeTest {
         std::thread::sleep(std::time::Duration::from_millis(500));
     }
 
+    /// Create a worktree directly with git (bypassing wormhole), so no terminal
+    /// window is created. Returns the worktree path.
+    pub fn create_worktree_directly(&self, home_dir: &str, repo_name: &str, branch: &str) -> String {
+        let worktrees_dir = format!("{}/.git/wormhole/worktrees", home_dir);
+        std::fs::create_dir_all(&worktrees_dir).unwrap();
+        let worktree_path = format!("{}/{}/{}", worktrees_dir, branch, repo_name);
+        let output = Command::new("git")
+            .args(["worktree", "add", "-b", branch, &worktree_path])
+            .current_dir(home_dir)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "Failed to create worktree: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        worktree_path
+    }
+
     /// Get the store key for a task (repo:branch format)
     pub fn task_store_key(&self, branch: &str, repo: &str) -> String {
         format!("{}:{}", repo, branch)

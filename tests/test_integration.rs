@@ -372,8 +372,6 @@ fn test_task_switching() {
 
 #[test]
 fn test_task_in_submodule() {
-    use std::process::Command;
-
     let test = harness::WormholeTest::new(8939);
 
     let parent_name = format!("{}submod-parent", TEST_PREFIX);
@@ -696,57 +694,20 @@ fn test_neighbors_returns_project_key() {
 #[test]
 fn test_tasks_appear_without_terminal_windows() {
     // Tasks should appear in project list even without active terminal windows.
-    // This test creates worktrees directly with git (not via create_task which opens terminals),
-    // then verifies they appear in project list after refresh.
-    use std::process::Command;
-
     let test = harness::WormholeTest::new(8951);
 
     let home_proj = format!("{}tasks-no-term", TEST_PREFIX);
     let home_dir = format!("/tmp/{}", home_proj);
     let task_branch = format!("{}task-branch", TEST_PREFIX);
 
-    // Clean up and create home directory
     init_git_repo(&home_dir);
-
-    // Register home project (this creates a terminal window for the project)
     test.create_project(&home_dir, &home_proj);
 
-    // Create worktree directory and worktree using git directly
-    // (NOT via create_task, so no terminal window is created for the task)
-    let worktrees_dir = format!("{}/.git/wormhole/worktrees", home_dir);
-    std::fs::create_dir_all(&worktrees_dir).unwrap();
-    let worktree_path = format!("{}/{}/{}", worktrees_dir, task_branch, home_proj);
-    let output = Command::new("git")
-        .args([
-            "worktree",
-            "add",
-            "-b",
-            &task_branch,
-            &worktree_path,
-        ])
-        .current_dir(&home_dir)
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "Failed to create worktree: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    test.create_worktree_directly(&home_dir, &home_proj, &task_branch);
 
-    // Verify the worktree was created
-    assert!(
-        std::path::Path::new(&worktree_path).exists(),
-        "Worktree directory should exist"
-    );
-
-    // Refresh to discover the new task
     test.cli("wormhole refresh").unwrap();
-
-    // Give a moment for refresh to complete
     std::thread::sleep(std::time::Duration::from_millis(500));
 
-    // The task should appear in the list even though it has no terminal window
     assert!(
         test.task_in_list(&home_proj, &task_branch),
         "Task '{}:{}' should appear in project list even without terminal window",
@@ -759,43 +720,17 @@ fn test_tasks_appear_without_terminal_windows() {
 fn test_switch_to_project_when_task_exists() {
     // Regression test: switching to a project by name should open the PROJECT
     // directory, not a task directory, even when both exist for the same repo.
-    //
-    // Bug: resolve_project() added the project correctly but then called
-    // by_exact_path() to retrieve it. Since project and task share the same
-    // repo_path, by_exact_path()'s find() could return the task instead.
-    //
-    // Fix: use by_key() to retrieve the project by its key after adding it.
-    use std::process::Command;
-
     let test = harness::WormholeTest::new(8953);
 
     let home_proj = format!("{}switch-proj", TEST_PREFIX);
     let home_dir = format!("/tmp/{}", home_proj);
     let task_branch = format!("{}task-exists", TEST_PREFIX);
 
-    // Clean up and create home directory
     init_git_repo(&home_dir);
-
-    // Register the project first (so wormhole knows about this repo)
     test.create_project(&home_dir, &home_proj);
 
-    // Create worktree directly with git (not via create_task)
-    let worktrees_dir = format!("{}/.git/wormhole/worktrees", home_dir);
-    std::fs::create_dir_all(&worktrees_dir).unwrap();
-    let task_dir = format!("{}/{}/{}", worktrees_dir, task_branch, home_proj);
-    Command::new("git")
-        .args([
-            "worktree",
-            "add",
-            "-b",
-            &task_branch,
-            &task_dir,
-        ])
-        .current_dir(&home_dir)
-        .output()
-        .unwrap();
+    let task_dir = test.create_worktree_directly(&home_dir, &home_proj, &task_branch);
 
-    // Refresh to discover the task (use refresh-tasks to skip slow JIRA/GitHub cache)
     test.http_post("/project/refresh-tasks").unwrap();
 
     // Verify task is discovered
@@ -839,18 +774,8 @@ fn test_switch_to_project_when_task_exists() {
 
 #[test]
 fn test_file_opens_in_project_not_task() {
-    // Regression test: /file/ endpoint should open files in the correct project.
-    // When both a project and task exist for the same repo, a file in the main
-    // repo directory should open in the project, not the task.
-    //
-    // Bug: by_path() used max_by_key with worktree_path length to pick the
-    // "most specific" match. Since project and task share the same repo_path,
-    // both matched. The task's worktree_path was longer, so it incorrectly won.
-    //
-    // Fix: Use the length of the path that actually matched the query, not
-    // the theoretical working directory.
-    use std::process::Command;
-
+    // Regression test: /file/ endpoint should open files in the correct project,
+    // not a task from the same repo.
     let test = harness::WormholeTest::new(8954);
 
     let home_proj = format!("{}file-proj", TEST_PREFIX);
@@ -865,8 +790,6 @@ fn test_file_opens_in_project_not_task() {
 
     test.create_project(&home_dir, &home_proj);
 
-    let worktrees_dir = format!("{}/.git/wormhole/worktrees", home_dir);
-    std::fs::create_dir_all(&worktrees_dir).unwrap();
     Command::new("git")
         .args(["add", "."])
         .current_dir(&home_dir)
@@ -877,17 +800,8 @@ fn test_file_opens_in_project_not_task() {
         .current_dir(&home_dir)
         .output()
         .unwrap();
-    Command::new("git")
-        .args([
-            "worktree",
-            "add",
-            "-b",
-            &task_branch,
-            &format!("{}/{}/{}", worktrees_dir, task_branch, home_proj),
-        ])
-        .current_dir(&home_dir)
-        .output()
-        .unwrap();
+
+    test.create_worktree_directly(&home_dir, &home_proj, &task_branch);
 
     test.http_post("/project/refresh-tasks").unwrap();
 
@@ -909,8 +823,6 @@ fn test_file_opens_in_project_not_task() {
 fn test_project_list_active_flag() {
     // `wormhole project list --active` should only show projects with tmux windows.
     // Tasks without terminal windows should be excluded.
-    use std::process::Command;
-
     let test = harness::WormholeTest::new(8956);
 
     let home_proj = format!("{}active-home", TEST_PREFIX);
@@ -927,24 +839,7 @@ fn test_project_list_active_flag() {
     test.create_task(&task_with_window, &home_proj);
 
     // Create a worktree directly with git (no tmux window)
-    let worktrees_dir = format!("{}/.git/wormhole/worktrees", home_dir);
-    std::fs::create_dir_all(&worktrees_dir).unwrap();
-    let output = Command::new("git")
-        .args([
-            "worktree",
-            "add",
-            "-b",
-            &task_no_window,
-            &format!("{}/{}/{}", worktrees_dir, task_no_window, home_proj),
-        ])
-        .current_dir(&home_dir)
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "Failed to create worktree: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    test.create_worktree_directly(&home_dir, &home_proj, &task_no_window);
 
     // Refresh to discover the new task
     test.cli("wormhole refresh").unwrap();

@@ -934,3 +934,64 @@ fn test_switch_creates_task_from_colon_syntax() {
         task_key
     );
 }
+
+#[test]
+fn test_remove_task_deletes_worktree_from_disk() {
+    let test = harness::WormholeTest::new(8958);
+
+    let home_proj = format!("{}rm-task", TEST_PREFIX);
+    let home_dir = format!("/tmp/{}", home_proj);
+    let task_branch = format!("{}RM-BRANCH", TEST_PREFIX);
+
+    init_git_repo(&home_dir);
+    test.create_project(&home_dir, &home_proj);
+    test.create_task(&task_branch, &home_proj);
+
+    let store_key = test.task_store_key(&task_branch, &home_proj);
+    let worktree_path = format!(
+        "{}/.git/wormhole/worktrees/{}/{}",
+        home_dir, task_branch, home_proj
+    );
+    assert!(
+        std::path::Path::new(&worktree_path).exists(),
+        "Worktree should exist before removal"
+    );
+
+    test.http_post(&format!("/project/remove/{}", store_key))
+        .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+
+    assert!(
+        !std::path::Path::new(&worktree_path).exists(),
+        "Worktree directory should be deleted after removal"
+    );
+    assert!(
+        !test.task_in_list(&home_proj, &task_branch),
+        "Task should not appear in list after removal"
+    );
+}
+
+#[test]
+fn test_task_with_slash_in_branch() {
+    let test = harness::WormholeTest::new(8959);
+
+    let home_proj = format!("{}slash-home", TEST_PREFIX);
+    let home_dir = format!("/tmp/{}", home_proj);
+    let task_branch = format!("{}feat/slash-test", TEST_PREFIX);
+
+    init_git_repo(&home_dir);
+    test.create_project(&home_dir, &home_proj);
+    test.create_task(&task_branch, &home_proj);
+
+    let store_key = test.task_store_key(&task_branch, &home_proj);
+
+    // Task should be listed
+    assert!(
+        test.task_in_list(&home_proj, &task_branch),
+        "Task with / in branch should appear in list"
+    );
+
+    // Switch to task and verify focus
+    test.cli(&format!("wormhole open '{}'", store_key)).unwrap();
+    test.assert_focus(Editor(&task_branch));
+}

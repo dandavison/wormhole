@@ -410,22 +410,7 @@ pub fn tasks() -> HashMap<ProjectKey, Project> {
 }
 
 pub fn refresh_cache() {
-    refresh_cache_inner(|_| {});
-}
-
-pub fn refresh_cache_with_progress(on_progress: impl Fn(crate::progress::Event) + Sync) {
-    on_progress(crate::progress::Event::CacheStart {
-        total: task_count(),
-    });
-    refresh_cache_inner(on_progress);
-}
-
-fn task_count() -> usize {
-    lock().0.all.values().filter(|p| p.is_task()).count()
-}
-
-fn refresh_cache_inner(on_progress: impl Fn(crate::progress::Event) + Sync) {
-    use crate::{github, jira, progress::Event};
+    use crate::{github, jira};
 
     let task_info: Vec<_> = {
         let projects = lock();
@@ -445,16 +430,10 @@ fn refresh_cache_inner(on_progress: impl Fn(crate::progress::Event) + Sync) {
     let results: Vec<_> = task_info
         .par_iter()
         .map(|(key, jira_key, path)| {
-            on_progress(Event::TaskStart {
-                name: key.to_string(),
-            });
             let jira = jira_key
                 .as_ref()
                 .and_then(|k| jira::get_issue(k).ok().flatten());
             let pr = github::get_pr_status(path);
-            on_progress(Event::TaskDone {
-                name: key.to_string(),
-            });
             (key.clone(), jira, pr)
         })
         .collect();

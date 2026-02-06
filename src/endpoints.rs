@@ -131,67 +131,24 @@ pub fn close_project(name: &str) {
     projects.print();
 }
 
-/// Refresh all in-memory data from external sources (fs, github),
-/// streaming progress events as newline-delimited JSON.
-pub fn refresh_all_streaming() -> Response<Body> {
-    use crate::progress::Event;
-    use hyper::body::Bytes;
+/// Refresh all in-memory data from external sources (fs, github)
+pub fn refresh_all() {
+    // Refresh tasks from filesystem
+    projects::refresh_tasks();
 
-    let (tx, mut rx) = tokio::sync::mpsc::channel::<Event>(100);
-    let (mut body_tx, body) = Body::channel();
+    // Reload KV data from disk
+    {
+        let mut projects = projects::lock();
+        crate::kv::load_kv_data(&mut projects);
+    }
 
-    // Bridge: progress events -> HTTP body chunks
-    tokio::spawn(async move {
-        while let Some(event) = rx.recv().await {
-            let mut line = serde_json::to_string(&event).unwrap();
-            line.push('\n');
-            if body_tx.send_data(Bytes::from(line)).await.is_err() {
-                break;
-            }
-        }
-    });
+    // Refresh cached JIRA/PR status for all tasks (parallel via rayon)
+    projects::refresh_cache();
 
-    tokio::task::spawn_blocking(move || {
-        let send = |event: Event| {
-            tx.blocking_send(event).ok();
-        };
-
-        send(Event::Phase {
-            name: "worktrees".into(),
-        });
-        projects::refresh_tasks();
-        send(Event::PhaseDone {
-            name: "worktrees".into(),
-        });
-
-        send(Event::Phase {
-            name: "kv".into(),
-        });
-        {
-            let mut projects = projects::lock();
-            crate::kv::load_kv_data(&mut projects);
-        }
-        send(Event::PhaseDone {
-            name: "kv".into(),
-        });
-
-        let tx_cache = tx.clone();
-        projects::refresh_cache_with_progress(move |event| {
-            tx_cache.blocking_send(event).ok();
-        });
-
-        if debug() {
-            let projects = projects::lock();
-            projects.print();
-        }
-
-        send(Event::Done);
-    });
-
-    Response::builder()
-        .header("Content-Type", "application/x-ndjson")
-        .body(body)
-        .unwrap()
+    if debug() {
+        let projects = projects::lock();
+        projects.print();
+    }
 }
 
 pub fn pin_current() {

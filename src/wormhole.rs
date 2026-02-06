@@ -98,7 +98,10 @@ async fn route(
         "/project/describe" => {
             require_post_async(method, || async { endpoints::describe(req).await }).await
         }
-        "/project/refresh" => require_post(method, endpoints::refresh_all_streaming),
+        "/project/refresh" => require_post(method, || {
+            endpoints::refresh_all();
+            Response::new(Body::from(""))
+        }),
         "/project/refresh-tasks" => require_post(method, || {
             projects::refresh_tasks();
             Response::new(Body::from(""))

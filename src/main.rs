@@ -8,7 +8,6 @@ mod github;
 mod hammerspoon;
 mod jira;
 mod kv;
-mod progress;
 mod project;
 mod project_path;
 mod projects;

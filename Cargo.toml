@@ -22,7 +22,6 @@ toml = "0.8"
 glob = "0.3"
 rayon = "1.11.0"
 rustyline = "15"
-indicatif = "0.18.3"
 
 [dev-dependencies]
 tempfile = "3"

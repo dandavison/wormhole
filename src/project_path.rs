@@ -105,13 +105,17 @@ impl ProjectPath {
         }
     }
 
-    pub fn from_absolute_path(path: &str, projects: &Projects) -> Option<Self> {
+    pub fn from_absolute_path(
+        path: &str,
+        line: Option<usize>,
+        projects: &Projects,
+    ) -> Option<Self> {
         let re = Regex::new(r"^(.*):([^:]*)$").unwrap();
         let (path, line) = if let Some(captures) = re.captures(path) {
             let line = captures.get(2).unwrap().as_str().parse::<usize>().ok();
             (PathBuf::from(captures.get(1).unwrap().as_str()), line)
         } else {
-            (PathBuf::from(path), None)
+            (PathBuf::from(path), line)
         };
         if let Some(project) = projects.by_path(&path) {
             Some(ProjectPath {

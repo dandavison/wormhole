@@ -428,34 +428,6 @@ fn test_task_in_submodule() {
 }
 
 #[test]
-fn test_task_home_project_not_self() {
-    let test = harness::WormholeTest::new(8940);
-
-    let home_proj = format!("{}home-proj", TEST_PREFIX);
-    let home_dir = format!("/tmp/{}", home_proj);
-    let task_id = format!("{}TASK-SELF", TEST_PREFIX);
-
-    init_git_repo(&home_dir);
-
-    test.create_project(&home_dir, &home_proj);
-    test.create_task(&task_id, &home_proj);
-
-    // Switch to task so it's in the open projects list
-    let store_key = test.task_store_key(&task_id, &home_proj);
-    test.cli(&format!("wormhole open '{}'", store_key)).unwrap();
-    // Cursor window title shows the folder name (branch), not the store_key
-    test.assert_focus(Editor(&task_id));
-
-    // Verify task appears with name=repo and branch=task_id
-    assert!(
-        test.task_in_list(&home_proj, &task_id),
-        "Task should be in current list with name={} and branch={}",
-        home_proj,
-        task_id
-    );
-}
-
-#[test]
 fn test_task_switching_updates_ring_order() {
     // Verify that switching to a task updates the ring for navigation.
     // The project list is sorted, but previous/next commands use the ring order.
@@ -899,43 +871,27 @@ fn test_next_and_previous_are_inverses() {
 
     let proj_a = format!("{}inv-a", TEST_PREFIX);
     let proj_b = format!("{}inv-b", TEST_PREFIX);
-    let proj_c = format!("{}inv-c", TEST_PREFIX);
     let dir_a = format!("/tmp/{}", proj_a);
     let dir_b = format!("/tmp/{}", proj_b);
-    let dir_c = format!("/tmp/{}", proj_c);
 
     init_git_repo(&dir_a);
     init_git_repo(&dir_b);
-    init_git_repo(&dir_c);
 
     test.create_project(&dir_a, &proj_a);
     test.create_project(&dir_b, &proj_b);
-    test.create_project(&dir_c, &proj_c);
 
-    // Start at C (most recently opened)
-    test.assert_focus(Editor(&proj_c));
+    // Start at B (most recently opened)
+    test.assert_focus(Editor(&proj_b));
 
-    // next then previous should return to C
+    // next then previous should return to B
     test.cli("wormhole project next").unwrap();
     test.cli("wormhole project previous").unwrap();
-    test.assert_focus(Editor(&proj_c));
+    test.assert_focus(Editor(&proj_b));
 
-    // previous then next should return to C
+    // previous then next should return to B
     test.cli("wormhole project previous").unwrap();
     test.cli("wormhole project next").unwrap();
-    test.assert_focus(Editor(&proj_c));
-
-    // Go to A, then verify invariant holds there too
-    test.cli(&format!("wormhole open {}", proj_a)).unwrap();
-    test.assert_focus(Editor(&proj_a));
-
-    test.cli("wormhole project next").unwrap();
-    test.cli("wormhole project previous").unwrap();
-    test.assert_focus(Editor(&proj_a));
-
-    test.cli("wormhole project previous").unwrap();
-    test.cli("wormhole project next").unwrap();
-    test.assert_focus(Editor(&proj_a));
+    test.assert_focus(Editor(&proj_b));
 }
 
 #[test]

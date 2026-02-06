@@ -1015,10 +1015,10 @@ fn task_create_from_sprint(client: &Client) -> Result<(), String> {
             })
             .unwrap_or(false);
 
-        let emoji = jira::status_emoji(&issue.status);
+        let indicator = jira::status_indicator(&issue.status);
 
         if let Some(reason) = should_skip_issue(has_pr) {
-            println!("{} {} {} [{}]", emoji, issue.key, issue.summary, reason);
+            println!("{} {} {} [{}]", indicator, issue.key, issue.summary, reason);
             skipped_count += 1;
             continue;
         }
@@ -1028,7 +1028,7 @@ fn task_create_from_sprint(client: &Client) -> Result<(), String> {
         );
         println!(
             "{} {} {} [{}]",
-            emoji, issue.key, issue.summary, issue.status
+            indicator, issue.key, issue.summary, issue.status
         );
 
         // If task exists locally, show it and offer to confirm/skip
@@ -1515,12 +1515,12 @@ fn render_project_item(item: &serde_json::Value) -> String {
         jira_key.to_string()
     };
 
-    let emoji = jira::status_emoji(status);
+    let indicator = jira::status_indicator(status);
     let pad = 40_usize.saturating_sub(project_key_str.len());
 
     format!(
         "{} {}{} {}{}",
-        emoji,
+        indicator,
         task_display,
         " ".repeat(pad),
         jira_display,
@@ -1617,7 +1617,7 @@ fn render_task_status(status: &crate::status::TaskStatus) -> String {
     if let Some(ref jira) = status.jira {
         lines.push(format!(
             "JIRA:      {} {}",
-            crate::jira::status_emoji(&jira.status),
+            crate::jira::status_indicator(&jira.status),
             jira.status
         ));
     } else if status.branch.is_some() {
@@ -1661,7 +1661,7 @@ fn render_issue_status(issue: &crate::jira::IssueStatus) -> String {
     };
     format!(
         "{} {}: {}",
-        crate::jira::status_emoji(&issue.status),
+        crate::jira::status_indicator(&issue.status),
         key_display,
         issue.summary
     )
@@ -1735,8 +1735,8 @@ mod tests {
         assert!(rendered.contains("wormhole"), "Should contain project key");
         // Should not contain emoji (no JIRA)
         assert!(
-            !rendered.contains("⚫"),
-            "Should not have emoji without JIRA"
+            !rendered.contains("●"),
+            "Should not have indicator without JIRA"
         );
     }
 
@@ -1753,8 +1753,8 @@ mod tests {
             "Should show project_key"
         );
         assert!(
-            !rendered.contains("⚫"),
-            "Should not have emoji without JIRA"
+            !rendered.contains("●"),
+            "Should not have indicator without JIRA"
         );
     }
 
@@ -1772,8 +1772,8 @@ mod tests {
         });
         let rendered = render_project_item(&item);
         assert!(
-            rendered.starts_with("🔵"),
-            "Should start with In Progress emoji"
+            rendered.contains("●"),
+            "Should contain status indicator"
         );
         assert!(
             rendered.contains("cli:standalone-activity"),

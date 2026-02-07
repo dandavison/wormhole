@@ -280,7 +280,7 @@
   <body>
     <div class="grid">{{CARDS}}</div>
     <script>
-      document.querySelectorAll('.card[data-status="done"]').forEach((card) => {
+      document.querySelectorAll('.card:not(.current)').forEach((card) => {
         card.classList.add('folded');
       });
 

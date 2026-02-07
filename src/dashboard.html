@@ -284,16 +284,14 @@
         card.classList.add('folded');
       });
 
-      document
-        .querySelectorAll('.card[data-status="done"] .card-header')
-        .forEach((header) => {
-          header.style.cursor = 'pointer';
-          header.addEventListener('click', (e) => {
-            if (e.target.tagName === 'A') return;
-            e.stopPropagation();
-            header.closest('.card').classList.toggle('folded');
-          });
+      document.querySelectorAll('.card-header').forEach((header) => {
+        header.style.cursor = 'pointer';
+        header.addEventListener('click', (e) => {
+          if (e.target.tagName === 'A') return;
+          e.stopPropagation();
+          header.closest('.card').classList.toggle('folded');
         });
+      });
 
       document.querySelectorAll('.btn-vscode').forEach((btn) => {
         btn.addEventListener('click', (e) => {

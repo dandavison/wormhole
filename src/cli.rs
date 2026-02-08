@@ -137,6 +137,9 @@ pub enum ProjectCommand {
         /// List available projects (from WORMHOLE_PATH) instead of current
         #[arg(short, long)]
         available: bool,
+
+        // TODO : is this used? What are the respective roles of this and complete_projects at the
+        // top of this file?
         /// Output only project names (for shell completion)
         #[arg(long)]
         name_only: bool,
@@ -946,6 +949,10 @@ fn doctor_migrate_worktrees() -> Result<(), String> {
     }
     Ok(())
 }
+
+// TODO: cli.rs is a large file. I think I'd prefer to create a cli directory, with the API defined
+// in a single file, and then separate files for implementation of each top-level command, and
+// shared utilities in a separate file.
 
 fn task_create_from_sprint(client: &Client) -> Result<(), String> {
     use std::collections::HashMap;

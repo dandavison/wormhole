@@ -71,9 +71,28 @@ async fn route(
     path: &str,
     params: &QueryParams,
 ) -> Response<Body> {
+    // Before embarking on the rearrangements described below, I wonder if you can find any dead
+    // code in the repo? So I guess that would be unused pub fns? Or does rust have a way of making
+    // that impossible?
+
+    // I'd like the endpoints module to be split across multiple files, housed within an endpoints
+    // directory. Actually, perhaps `handlers` is a better name.  So, for example, dashboard code
+    // (which is all quite distinctive, containing as it does html formatting code) should all be in
+    // handlers/dashboard.rs. handlers/dashboard.html should be alongside it. So the handlers
+    // directory would more or less be defined as containing functions tha return an HTTP Response.
+    // /project/foo handlers in handlers/project.rs.
+
+    // What exaxtly is the /describe endpoint used for? I see the chrome extrension uses it. It
+    // currently has its own module crate::describe.rs, but perhaps in what I'm describing above it
+    // should be with the handlers. At the end of the day I'm asking for you to use some judgement
+    // here. To the extent that the call paths in the project are tree-like, I want a more modular
+    // structure, with some directory hierarchy isolating related code that reflects that tree
+    // structure. I wonder whether the core project/task data model should be grouped together.
+
     match path {
         "/project/list" => endpoints::list_projects(params.active),
         "/project/neighbors" => endpoints::neighbors(params.active),
+        // Is this used by any client code? I'm thinking it is an early thing that got suoerseded by the doctor command.
         "/project/debug" => endpoints::debug_projects(),
         "/dashboard" => endpoints::dashboard(),
         "/favicon.png" => endpoints::favicon(),

@@ -413,7 +413,7 @@
           const res = await fetch(
             '/project/current/poll?current=' +
               encodeURIComponent(current || ''),
-            { headers: { Prefer: 'wait=30' } },
+            { headers: { Prefer: 'wait=300' } },
           );
           const data = await res.json();
           if (data.changed && !isFirstPoll) {

@@ -102,7 +102,7 @@ pub fn status_emoji(status: &str) -> &'static str {
 /// ANSI-colored `●` for uniform terminal rendering.
 pub fn status_indicator(status: &str) -> String {
     let color = match status.to_lowercase().as_str() {
-        "done" | "closed" | "resolved" => "32",        // green
+        "done" | "closed" | "resolved" => "32",         // green
         "in progress" | "in development" => "34",       // blue
         "in review" | "code review" | "review" => "36", // cyan
         "blocked" => "31",                              // red

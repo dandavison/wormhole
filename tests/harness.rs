@@ -359,7 +359,12 @@ impl WormholeTest {
 
     /// Create a worktree directly with git (bypassing wormhole), so no terminal
     /// window is created. Returns the worktree path.
-    pub fn create_worktree_directly(&self, home_dir: &str, repo_name: &str, branch: &str) -> String {
+    pub fn create_worktree_directly(
+        &self,
+        home_dir: &str,
+        repo_name: &str,
+        branch: &str,
+    ) -> String {
         let worktrees_dir = format!("{}/.git/wormhole/worktrees", home_dir);
         std::fs::create_dir_all(&worktrees_dir).unwrap();
         let worktree_path = format!("{}/{}/{}", worktrees_dir, branch, repo_name);

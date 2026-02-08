@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -14,7 +14,8 @@
       body {
         font-family: 'SF Mono', 'Menlo', 'Monaco', monospace;
         background-color: #fdfeff;
-        background-image: linear-gradient(#eef1f4 1px, transparent 1px),
+        background-image:
+          linear-gradient(#eef1f4 1px, transparent 1px),
           linear-gradient(90deg, #eef1f4 1px, transparent 1px);
         background-size: 20px 20px;
         min-height: 100vh;
@@ -119,10 +120,20 @@
         line-height: 1.5;
         color: #333;
       }
-      .card-content p { margin: 0.25rem 0; }
-      .card-content a { color: #0066cc; text-decoration: none; }
-      .card-content a:hover { text-decoration: underline; }
-      .card-content ul, .card-content ol { margin: 0.25rem 0 0.25rem 1.25rem; }
+      .card-content p {
+        margin: 0.25rem 0;
+      }
+      .card-content a {
+        color: #0066cc;
+        text-decoration: none;
+      }
+      .card-content a:hover {
+        text-decoration: underline;
+      }
+      .card-content ul,
+      .card-content ol {
+        margin: 0.25rem 0 0.25rem 1.25rem;
+      }
       .card-content code {
         font-family: inherit;
         background: #e9ecef;
@@ -135,13 +146,22 @@
         overflow-x: auto;
         margin: 0.25rem 0;
       }
-      .card-content pre code { background: none; padding: 0; }
-      .card-content h1, .card-content h2, .card-content h3 {
+      .card-content pre code {
+        background: none;
+        padding: 0;
+      }
+      .card-content h1,
+      .card-content h2,
+      .card-content h3 {
         font-size: 0.85rem;
         margin: 0.5rem 0 0.25rem;
       }
-      .card-content table { border-collapse: collapse; margin: 0.25rem 0; }
-      .card-content th, .card-content td {
+      .card-content table {
+        border-collapse: collapse;
+        margin: 0.25rem 0;
+      }
+      .card-content th,
+      .card-content td {
         border: 1px solid #ccc;
         padding: 0.2rem 0.5rem;
         font-size: 0.75rem;
@@ -189,7 +209,10 @@
         background: #fff;
         color: #666;
         cursor: pointer;
-        transition: background 0.1s, color 0.1s, opacity 0.1s;
+        transition:
+          background 0.1s,
+          color 0.1s,
+          opacity 0.1s;
       }
       .btn:hover {
         background: #666;
@@ -327,7 +350,7 @@
           e.stopPropagation();
           const task = btn.closest('.card').dataset.task;
           fetch(
-            '/project/switch/' + task + '?skip-editor=true&focus-terminal=true'
+            '/project/switch/' + task + '?skip-editor=true&focus-terminal=true',
           );
         });
       });
@@ -390,7 +413,7 @@
           const res = await fetch(
             '/project/current/poll?current=' +
               encodeURIComponent(current || ''),
-            { headers: { Prefer: 'wait=30' } }
+            { headers: { Prefer: 'wait=30' } },
           );
           const data = await res.json();
           if (data.changed && !isFirstPoll) {

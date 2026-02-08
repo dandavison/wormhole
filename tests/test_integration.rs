@@ -350,8 +350,14 @@ fn test_task_switching() {
 
     let task_1_key = test.task_store_key(&task_1, &home_proj);
     let task_2_key = test.task_store_key(&task_2, &home_proj);
-    let task_1_dir = format!("{}/.git/wormhole/worktrees/{}/{}", home_dir, task_1, home_proj);
-    let task_2_dir = format!("{}/.git/wormhole/worktrees/{}/{}", home_dir, task_2, home_proj);
+    let task_1_dir = format!(
+        "{}/.git/wormhole/worktrees/{}/{}",
+        home_dir, task_1, home_proj
+    );
+    let task_2_dir = format!(
+        "{}/.git/wormhole/worktrees/{}/{}",
+        home_dir, task_2, home_proj
+    );
 
     // Table-driven: (switch_key, window_title, expected_cwd)
     let cases = [
@@ -917,7 +923,10 @@ fn test_switch_creates_task_from_colon_syntax() {
     std::thread::sleep(std::time::Duration::from_millis(500));
 
     // Verify the worktree was created
-    let worktree_path = format!("{}/.git/wormhole/worktrees/{}/{}", home_dir, task_branch, home_proj);
+    let worktree_path = format!(
+        "{}/.git/wormhole/worktrees/{}/{}",
+        home_dir, task_branch, home_proj
+    );
     assert!(
         std::path::Path::new(&worktree_path).exists(),
         "Worktree should be created at {}",

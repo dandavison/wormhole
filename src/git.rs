@@ -249,8 +249,14 @@ pub fn migrate_worktrees(repo_name: &str, repo_path: &Path) -> Result<usize, Str
         let new = old.join(repo_name);
         std::fs::create_dir_all(&old)
             .map_err(|e| format!("Failed to create dir {}: {}", old.display(), e))?;
-        std::fs::rename(&tmp, &new)
-            .map_err(|e| format!("Failed to rename {} -> {}: {}", tmp.display(), new.display(), e))?;
+        std::fs::rename(&tmp, &new).map_err(|e| {
+            format!(
+                "Failed to rename {} -> {}: {}",
+                tmp.display(),
+                new.display(),
+                e
+            )
+        })?;
         new_paths.push(new);
     }
     if !new_paths.is_empty() {

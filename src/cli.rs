@@ -1771,10 +1771,7 @@ mod tests {
             }
         });
         let rendered = render_project_item(&item);
-        assert!(
-            rendered.contains("●"),
-            "Should contain status indicator"
-        );
+        assert!(rendered.contains("●"), "Should contain status indicator");
         assert!(
             rendered.contains("cli:standalone-activity"),
             "Should contain project_key"

@@ -1,11 +1,10 @@
 mod cli;
 mod config;
-mod describe;
 mod editor;
-mod endpoints;
 mod git;
 mod github;
 mod hammerspoon;
+mod handlers;
 mod jira;
 mod kv;
 mod project;

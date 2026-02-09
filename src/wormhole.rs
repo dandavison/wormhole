@@ -1,7 +1,8 @@
 use std::convert::Infallible;
 use std::thread;
 
-use crate::endpoints;
+use crate::handlers;
+use crate::handlers::{dashboard, describe, project};
 use crate::project_path::ProjectPath;
 use crate::projects;
 use crate::projects::Mutation;
@@ -71,60 +72,41 @@ async fn route(
     path: &str,
     params: &QueryParams,
 ) -> Response<Body> {
-    // Before embarking on the rearrangements described below, I wonder if you can find any dead
-    // code in the repo? So I guess that would be unused pub fns? Or does rust have a way of making
-    // that impossible?
-
-    // I'd like the endpoints module to be split across multiple files, housed within an endpoints
-    // directory. Actually, perhaps `handlers` is a better name.  So, for example, dashboard code
-    // (which is all quite distinctive, containing as it does html formatting code) should all be in
-    // handlers/dashboard.rs. handlers/dashboard.html should be alongside it. So the handlers
-    // directory would more or less be defined as containing functions tha return an HTTP Response.
-    // /project/foo handlers in handlers/project.rs.
-
-    // What exaxtly is the /describe endpoint used for? I see the chrome extrension uses it. It
-    // currently has its own module crate::describe.rs, but perhaps in what I'm describing above it
-    // should be with the handlers. At the end of the day I'm asking for you to use some judgement
-    // here. To the extent that the call paths in the project are tree-like, I want a more modular
-    // structure, with some directory hierarchy isolating related code that reflects that tree
-    // structure. I wonder whether the core project/task data model should be grouped together.
-
     match path {
-        "/project/list" => endpoints::list_projects(params.active),
-        "/project/neighbors" => endpoints::neighbors(params.active),
-        // Is this used by any client code? I'm thinking it is an early thing that got suoerseded by the doctor command.
-        "/project/debug" => endpoints::debug_projects(),
-        "/dashboard" => endpoints::dashboard(),
-        "/favicon.png" => endpoints::favicon(),
-        "/shell" => endpoints::shell_env(params.pwd.as_deref()),
-        "/project/previous" => {
-            endpoints::navigate(endpoints::Direction::Previous, params);
-            Response::new(Body::from(""))
+        "/project/current/poll" => {
+            let wait = parse_prefer_wait(&req);
+            project::poll_current(params.current.as_deref(), wait).await
         }
+        "/project/debug" => project::debug_projects(),
+        "/project/describe" => {
+            require_post_async(method, || async { describe::describe(req).await }).await
+        }
+        "/project/list" => project::list_projects(params.active),
+        "/project/neighbors" => project::neighbors(params.active),
         "/project/next" => {
-            endpoints::navigate(endpoints::Direction::Next, params);
+            project::navigate(project::Direction::Next, params);
             Response::new(Body::from(""))
         }
         "/project/pin" => require_post(method, || {
-            thread::spawn(endpoints::pin_current);
+            thread::spawn(project::pin_current);
             Response::new(Body::from("Pinning current state..."))
         }),
-        "/project/show" => endpoints::show(None),
-        "/project/current/poll" => {
-            let wait = parse_prefer_wait(&req);
-            endpoints::poll_current(params.current.as_deref(), wait).await
-        }
-        "/project/describe" => {
-            require_post_async(method, || async { endpoints::describe(req).await }).await
+        "/project/previous" => {
+            project::navigate(project::Direction::Previous, params);
+            Response::new(Body::from(""))
         }
         "/project/refresh" => require_post(method, || {
-            endpoints::refresh_all();
+            project::refresh_all();
             Response::new(Body::from(""))
         }),
         "/project/refresh-tasks" => require_post(method, || {
             projects::refresh_tasks();
             Response::new(Body::from(""))
         }),
+        "/project/show" => project::show(None),
+        "/dashboard" => dashboard::dashboard(),
+        "/favicon.png" => handlers::favicon(),
+        "/shell" => project::shell_env(params.pwd.as_deref()),
         "/kv" => crate::kv::list_all_kv_fresh(),
         _ => route_with_params(req, method, path, params).await,
     }
@@ -137,28 +119,28 @@ async fn route_with_params(
     params: &QueryParams,
 ) -> Response<Body> {
     if let Some(name) = path.strip_prefix("/project/remove/") {
-        return require_post(method, || endpoints::remove(name));
+        return require_post(method, || project::remove(name));
     }
     if let Some(name) = path.strip_prefix("/project/close/") {
         return require_post(method, || {
-            endpoints::close(name);
+            project::close(name);
             Response::new(Body::from(""))
         });
     }
     if let Some(name) = path.strip_prefix("/project/show/") {
-        return endpoints::show(Some(name.trim()));
+        return project::show(Some(name.trim()));
     }
     if let Some(name) = path.strip_prefix("/project/refresh/") {
-        return require_post(method, || endpoints::refresh_project(name));
+        return require_post(method, || project::refresh_project(name));
     }
     if let Some(branch) = path.strip_prefix("/project/create/") {
-        return endpoints::create_task(branch, params.home_project.as_deref());
+        return project::create_task(branch, params.home_project.as_deref());
     }
     if let Some(name) = path.strip_prefix("/project/switch/") {
-        return cors_response(endpoints::switch(name, params, params.sync));
+        return cors_response(project::switch(name, params, params.sync));
     }
     if let Some(name) = path.strip_prefix("/project/vscode/") {
-        return cors_response(endpoints::vscode_url(name));
+        return cors_response(project::vscode_url(name));
     }
     if let Some(kv_path) = path.strip_prefix("/kv/") {
         return handle_kv_request(method, kv_path, req).await;
@@ -174,7 +156,7 @@ fn route_file_or_github(path: &str, params: &QueryParams) -> Response<Body> {
         thread::spawn(move || project_path.open(mutation, land_in));
         Response::builder()
             .header("Content-Type", "text/html")
-            .body(Body::from(endpoints::WORMHOLE_RESPONSE_HTML))
+            .body(Body::from(handlers::WORMHOLE_RESPONSE_HTML))
             .unwrap()
     } else {
         let redirect_to = format!(

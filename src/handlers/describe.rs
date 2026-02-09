@@ -1,3 +1,4 @@
+use hyper::{Body, Request, Response, StatusCode};
 use rayon::prelude::*;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -40,7 +41,27 @@ impl DescribeResponse {
     }
 }
 
-pub fn describe(req: &DescribeRequest) -> DescribeResponse {
+/// HTTP handler for POST /project/describe
+pub async fn describe(req: Request<Body>) -> Response<Body> {
+    let body_bytes = hyper::body::to_bytes(req.into_body()).await.unwrap();
+    let request: Result<DescribeRequest, _> = serde_json::from_slice(&body_bytes);
+    match request {
+        Ok(req) => {
+            let response = resolve(&req);
+            let json = serde_json::to_string_pretty(&response).unwrap_or_default();
+            Response::builder()
+                .header("Content-Type", "application/json")
+                .body(Body::from(json))
+                .unwrap()
+        }
+        Err(e) => Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body(Body::from(format!("Invalid JSON: {}", e)))
+            .unwrap(),
+    }
+}
+
+fn resolve(req: &DescribeRequest) -> DescribeResponse {
     if let Some(url) = &req.url {
         if let Some(gh) = parse_github_url(url) {
             return describe_github(&gh);

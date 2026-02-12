@@ -32,7 +32,8 @@ pub fn create_task(repo: &str, branch: &str) -> Result<Project, String> {
         .join(git::encode_branch_for_path(branch))
         .join(repo);
 
-    if !worktree_path.exists() {
+    let worktree_preexisted = worktree_path.exists();
+    if !worktree_preexisted {
         git::create_worktree(&repo_path, &worktree_path, branch)?;
         setup_task_worktree(&worktree_path, repo, branch)?;
     }
@@ -40,8 +41,9 @@ pub fn create_task(repo: &str, branch: &str) -> Result<Project, String> {
     // Refresh to pick up the new task
     projects::refresh_tasks();
 
-    let task = get_task_by_branch(repo, branch)
-        .ok_or_else(|| format!("Failed to create task '{}:{}'", repo, branch))?;
+    let task = get_task_by_branch(repo, branch).ok_or_else(|| {
+        diagnose_task_not_found(repo, branch, &repo_path, &worktree_path, worktree_preexisted)
+    })?;
 
     // Add to ring so it appears in project list
     {
@@ -193,6 +195,40 @@ fn ensure_gitattributes_entry(worktree_path: &Path) -> Result<(), String> {
 
     fs::write(&gitattributes_path, new_contents)
         .map_err(|e| format!("Failed to update .gitattributes: {}", e))
+}
+
+fn diagnose_task_not_found(
+    repo: &str,
+    branch: &str,
+    repo_path: &Path,
+    worktree_path: &Path,
+    worktree_preexisted: bool,
+) -> String {
+    let path = worktree_path.display();
+    let worktrees = git::list_worktrees(repo_path);
+    let git_knows = worktrees.iter().find(|wt| wt.path == worktree_path);
+
+    if worktree_preexisted {
+        match git_knows {
+            None => format!(
+                "Directory {} exists but is not a git worktree. \
+                 Remove it or run `git worktree prune` and retry.",
+                path
+            ),
+            Some(wt) => format!(
+                "Git worktree exists at {} with branch {:?}, \
+                 but expected branch '{}'. \
+                 Remove it or check it out on the correct branch.",
+                path, wt.branch, branch
+            ),
+        }
+    } else {
+        format!(
+            "Created git worktree at {} but it was not discovered as task '{}:{}'. \
+             This is a bug.",
+            path, repo, branch
+        )
+    }
 }
 
 fn parse_land_in(s: Option<&String>) -> Option<Application> {

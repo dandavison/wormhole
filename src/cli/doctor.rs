@@ -146,7 +146,8 @@ pub(super) fn doctor_persisted_data(output: &str) -> Result<(), String> {
 
 pub(super) fn doctor_migrate_worktrees() -> Result<(), String> {
     let available = config::available_projects();
-    let mut total = 0;
+    let mut worktrees_total = 0;
+    let mut workspaces_total = 0;
     for (name, path) in &available {
         if !crate::git::is_git_repo(path) {
             continue;
@@ -155,15 +156,28 @@ pub(super) fn doctor_migrate_worktrees() -> Result<(), String> {
             Ok(0) => {}
             Ok(n) => {
                 println!("{}: migrated {} worktree(s)", name, n);
-                total += n;
+                worktrees_total += n;
             }
-            Err(e) => eprintln!("{}: error: {}", name, e),
+            Err(e) => eprintln!("{}: worktree error: {}", name, e),
+        }
+        match crate::editor::migrate_workspace_files(path) {
+            Ok(0) => {}
+            Ok(n) => {
+                println!("{}: migrated {} workspace file(s)", name, n);
+                workspaces_total += n;
+            }
+            Err(e) => eprintln!("{}: workspace error: {}", name, e),
         }
     }
-    if total == 0 {
-        println!("No worktrees needed migration.");
+    if worktrees_total == 0 && workspaces_total == 0 {
+        println!("No worktrees or workspace files needed migration.");
     } else {
-        println!("\nMigrated {} worktree(s) total.", total);
+        if worktrees_total > 0 {
+            println!("\nMigrated {} worktree(s) total.", worktrees_total);
+        }
+        if workspaces_total > 0 {
+            println!("Migrated {} workspace file(s) total.", workspaces_total);
+        }
     }
     Ok(())
 }

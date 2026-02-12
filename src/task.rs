@@ -34,7 +34,7 @@ pub fn create_task(repo: &str, branch: &str) -> Result<Project, String> {
 
     if !worktree_path.exists() {
         git::create_worktree(&repo_path, &worktree_path, branch)?;
-        setup_task_directory(&worktree_path)?;
+        setup_task_worktree(&worktree_path, repo, branch)?;
     }
 
     // Refresh to pick up the new task
@@ -155,16 +155,25 @@ fn resolve_project_path(project_name: &str) -> Result<PathBuf, String> {
         .ok_or_else(|| format!("Project '{}' not found", project_name))
 }
 
-fn setup_task_directory(worktree_path: &Path) -> Result<(), String> {
+fn setup_task_worktree(worktree_path: &Path, repo: &str, branch: &str) -> Result<(), String> {
     let task_dir = worktree_path.join(".task");
     fs::create_dir_all(&task_dir)
         .map_err(|e| format!("Failed to create .task directory: {}", e))?;
 
-    fs::write(task_dir.join("plan.md"), "")
-        .map_err(|e| format!("Failed to create plan.md: {}", e))?;
-
     ensure_gitattributes_entry(worktree_path)?;
-    Ok(())
+
+    let project_key = format!("{}:{}", repo, branch);
+    let content = format!(
+        concat!(
+            "At the start of the conversation output the following ",
+            "so that I know you've read these instructions:\n",
+            "\n",
+            "\u{1F4D6} {}\n",
+        ),
+        project_key
+    );
+    fs::write(worktree_path.join("CLAUDE.md"), content)
+        .map_err(|e| format!("Failed to create CLAUDE.md: {}", e))
 }
 
 fn ensure_gitattributes_entry(worktree_path: &Path) -> Result<(), String> {

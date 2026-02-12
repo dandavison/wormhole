@@ -12,8 +12,8 @@ pub struct TaskStatus {
     pub branch: Option<String>,
     pub jira: Option<IssueStatus>,
     pub pr: Option<PrStatus>,
-    pub plan_exists: bool,
-    pub plan_url: Option<String>,
+    pub claude_md_exists: bool,
+    pub claude_md_url: Option<String>,
     pub aux_repos: Option<String>,
 }
 
@@ -23,9 +23,9 @@ pub fn get_status(project: &Project) -> TaskStatus {
     let path = project.working_tree();
     let kv = project.kv.clone();
 
-    let plan_exists = path.join(".task/plan.md").exists();
-    let plan_url = if plan_exists {
-        crate::git::github_file_url(&path, ".task/plan.md")
+    let claude_md_exists = path.join("CLAUDE.md").exists();
+    let claude_md_url = if claude_md_exists {
+        crate::git::github_file_url(&path, "CLAUDE.md")
     } else {
         None
     };
@@ -37,8 +37,8 @@ pub fn get_status(project: &Project) -> TaskStatus {
         branch,
         jira: project.cached.jira.clone(),
         pr: project.cached.pr.clone(),
-        plan_exists,
-        plan_url,
+        claude_md_exists,
+        claude_md_url,
         aux_repos,
     }
 }

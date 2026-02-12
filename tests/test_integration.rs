@@ -487,8 +487,7 @@ fn test_project_status() {
     let dir = format!("/tmp/{}", proj);
 
     init_git_repo(&dir);
-    std::fs::create_dir_all(format!("{}/.task", dir)).unwrap();
-    std::fs::write(format!("{}/.task/plan.md", dir), "# Plan").unwrap();
+    std::fs::write(format!("{}/CLAUDE.md", dir), "# Claude").unwrap();
 
     test.create_project(&dir, &proj);
     test.assert_focus(Editor(&proj));
@@ -512,8 +511,8 @@ fn test_project_status() {
         .unwrap();
     assert!(status.contains("\"name\""), "JSON should have name field");
     assert!(
-        status.contains("\"plan_exists\": true"),
-        "JSON should show plan_exists true, got: {}",
+        status.contains("\"claude_md_exists\": true"),
+        "JSON should show claude_md_exists true, got: {}",
         status
     );
 }

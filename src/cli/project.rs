@@ -150,11 +150,11 @@ pub(super) fn render_task_status(status: &crate::status::TaskStatus) -> String {
         lines.push("PR:        ✗".to_string());
     }
 
-    if let Some(ref url) = status.plan_url {
-        let plan_linked = crate::format_osc8_hyperlink(url, "✓ plan.md");
-        lines.push(format!("Plan:      {}", plan_linked));
+    if let Some(ref url) = status.claude_md_url {
+        let linked = crate::format_osc8_hyperlink(url, "✓ CLAUDE.md");
+        lines.push(format!("CLAUDE.md: {}", linked));
     } else {
-        lines.push("Plan:      ✗".to_string());
+        lines.push("CLAUDE.md: ✗".to_string());
     }
 
     if let Some(ref repos) = status.aux_repos {

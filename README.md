@@ -117,7 +117,7 @@ wormhole project close myapp            # Close project windows
 wormhole project remove myapp           # Remove project/task
 wormhole project pin                    # Pin current (project, app) state
 wormhole project debug                  # Debug info for all projects
-wormhole project show                   # Show task info (JIRA, PR, plan.md)
+wormhole project show                   # Show task info (JIRA, PR, CLAUDE.md)
 wormhole project show myrepo:ACT-1234   # Show info for specific project/task
 wormhole kv get myapp land-in           # Get KV
 wormhole kv set myapp land-in editor    # Set KV
@@ -148,7 +148,7 @@ wormhole completion bash                # Generate shell completions
 | POST   | `/project/remove/<name>`    | Remove project/task               |
 | POST   | `/project/pin`              | Pin current (project, app) state  |
 | GET    | `/project/debug`            | Debug info                        |
-| GET    | `/project/show[/<name>]`    | Task info (JIRA, PR, plan.md)     |
+| GET    | `/project/show[/<name>]`    | Task info (JIRA, PR, CLAUDE.md)   |
 | POST   | `/project/describe`         | Describe URL (JIRA/GitHub lookup) |
 | GET    | `/project/vscode/<name>`    | Get embedded VSCode URL           |
 | POST   | `/project/refresh`          | Refresh all in-memory data        |

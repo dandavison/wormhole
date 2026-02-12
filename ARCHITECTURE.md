@@ -88,7 +88,7 @@ pub fn create_task(repo: &str, branch: &str) -> Result<Project, String> {
     let worktree_base = git::worktree_base_path(&repo_path);
     let worktree_path = worktree_base.join(branch);
     git::create_worktree(&repo_path, branch, &worktree_path)?;
-    // ...creates .task/plan.md, .gitattributes
+    // ...creates .task/, CLAUDE.md, .gitattributes
 }
 ```
 
@@ -142,7 +142,7 @@ HTTP /project/switch/{name}
 HTTP /project/create/{branch}?home-project={repo}
   → task::create_task()
     → git::create_worktree()
-    → create .task/plan.md
+    → create .task/, CLAUDE.md
     → projects.add()
   → task::open_task()
 ```
@@ -328,7 +328,7 @@ pub fn get_status(project: &Project) -> TaskStatus {
         name, path, branch,
         jira: project.cached_jira.clone(),
         pr: project.cached_pr.clone(),
-        plan_exists, plan_url, aux_repos,
+        claude_md_exists, claude_md_url, aux_repos,
     }
 }
 ```

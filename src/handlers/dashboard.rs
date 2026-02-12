@@ -141,16 +141,6 @@ fn render_task_card(
         .unwrap_or_default();
 
     let path = task.working_tree();
-    let plan_path = path.join(".task/plan.md");
-    let plan_html = if plan_path.exists() {
-        let file_url = format!("/file/{}?land-in=editor", plan_path.to_string_lossy());
-        format!(
-            "<span class=\"meta-item\"><a href=\"javascript:void(0)\" class=\"plan-link\" data-url=\"{}\">Plan</a></span>",
-            file_url
-        )
-    } else {
-        String::new()
-    };
 
     let card_md_path = path.join(".task/card.md");
     let card_content_html = if card_md_path.exists() {
@@ -190,7 +180,7 @@ fn render_task_card(
     format!(
         r#"<div class="card{}" data-task="{}"{}>
 <div class="card-header">{}<span class="card-summary">{}</span>{}</div>
-<div class="card-meta">{}{}{}{}{}</div>
+<div class="card-meta">{}{}{}{}</div>
 {}{}
 </div>"#,
         current_class,
@@ -202,7 +192,6 @@ fn render_task_card(
         jira_html,
         sprint_html,
         pr_html,
-        plan_html,
         assignee_html,
         card_content_html,
         iframe_html
@@ -211,6 +200,7 @@ fn render_task_card(
 
 fn render_iframe(task: &crate::project::Project) -> String {
     let path = task.working_tree();
+    let claude_btn = claude_md_button(&path);
     match crate::serve_web::manager().get_or_start(task.repo_name.as_str(), &path) {
         Ok(port) => {
             let folder_encoded = super::url_encode(&path.to_string_lossy());
@@ -226,6 +216,7 @@ fn render_iframe(task: &crate::project::Project) -> String {
                     r#"<img src="data:image/png;base64,{}" alt="Cursor"></button>"#,
                     r#"<button class="btn btn-icon btn-vscode" title="VSCode">"#,
                     r#"<img src="data:image/png;base64,{}" alt="VSCode"></button>"#,
+                    r#"{}"#,
                     r#"<button class="btn btn-maximize">Maximize</button></div>"#,
                     "\n",
                     r#"<div class="iframe-container">"#,
@@ -234,11 +225,28 @@ fn render_iframe(task: &crate::project::Project) -> String {
                 terminal_icon.trim(),
                 cursor_icon.trim(),
                 vscode_icon.trim(),
+                claude_btn,
                 port,
                 folder_encoded
             )
         }
+        Err(_) if !claude_btn.is_empty() => {
+            format!(r#"<div class="card-actions">{}</div>"#, claude_btn)
+        }
         Err(_) => String::new(),
+    }
+}
+
+fn claude_md_button(path: &std::path::Path) -> String {
+    let claude_md = path.join("CLAUDE.md");
+    if claude_md.exists() {
+        let file_url = format!("/file/{}?land-in=editor", claude_md.to_string_lossy());
+        format!(
+            r#"<button class="btn btn-icon btn-claude" title="CLAUDE.md" data-url="{}">&#x1F4D6;</button>"#,
+            html_escape(&file_url)
+        )
+    } else {
+        String::new()
     }
 }
 

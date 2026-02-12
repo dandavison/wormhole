@@ -422,14 +422,22 @@ pub fn run(command: Command) -> Result<(), String> {
             let (path_str, line) = parse_path_and_line(&target);
             let target_path = std::path::Path::new(&path_str);
 
-            if target_path.exists() {
-                // File or directory - open in editor
+            if target_path.is_file() {
+                // File - open in editor
                 let abs_path = std::fs::canonicalize(target_path)
                     .map(|p| p.to_string_lossy().to_string())
                     .unwrap_or(path_str);
                 let query = build_query(&Some("editor".to_string()), &line);
                 let url_path = format!("/file/{}{}", abs_path, query);
                 client.get(&url_path)?;
+            } else if target_path.is_dir() {
+                // Directory - switch to project
+                let abs_path = std::fs::canonicalize(target_path)
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or(path_str);
+                let query = build_switch_query(&land_in, &None, &None, &None);
+                let path = format!("/project/switch/{}{}", abs_path, query);
+                client.get(&path)?;
             } else {
                 // Project name or task identifier - respects land-in KV
                 let query = build_switch_query(&land_in, &None, &None, &None);

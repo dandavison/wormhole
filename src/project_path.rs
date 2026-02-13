@@ -16,17 +16,6 @@ pub struct ProjectPath {
 }
 
 impl ProjectPath {
-    /// Open a file in the editor only: no terminal switch, no ring mutation.
-    pub fn open_in_editor(&self) {
-        if !self.project.is_open() {
-            editor::open_workspace(&self.project);
-        }
-        editor::open_path(self).unwrap_or_else(|err| {
-            util::warn(&format!("Error opening {:?} in editor: {}", self.relative_path, err))
-        });
-        config::editor().focus();
-    }
-
     pub fn open(&self, mutation: Mutation, land_in: Option<Application>) {
         self.open_with_options(mutation, land_in, false);
     }

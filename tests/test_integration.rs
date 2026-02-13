@@ -1039,3 +1039,68 @@ fn test_dashboard_renders_card_md() {
         "Dashboard should contain link text from card.md"
     );
 }
+
+#[test]
+fn test_task_worktree_agent_instructions() {
+    // Verify that task creation populates .task/AGENTS.md and symlinks
+    // CLAUDE.md and AGENTS.md to it. Also verify that a pre-existing
+    // tracked CLAUDE.md is replaced via assume-unchanged.
+    let test = harness::WormholeTest::new(8961);
+
+    let home_proj = format!("{}agent-inst", TEST_PREFIX);
+    let home_dir = format!("/tmp/{}", home_proj);
+    let task_branch = format!("{}AGENT-INST", TEST_PREFIX);
+
+    init_git_repo(&home_dir);
+
+    // Add a tracked CLAUDE.md to the repo before task creation
+    std::fs::write(format!("{}/CLAUDE.md", home_dir), "# Original").unwrap();
+    Command::new("git")
+        .args(["add", "CLAUDE.md"])
+        .current_dir(&home_dir)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["commit", "-m", "add CLAUDE.md"])
+        .current_dir(&home_dir)
+        .output()
+        .unwrap();
+
+    test.create_project(&home_dir, &home_proj);
+    test.create_task(&task_branch, &home_proj);
+
+    let worktree_path = format!(
+        "{}/.git/wormhole/worktrees/{}/{}",
+        home_dir, task_branch, home_proj
+    );
+    let store_key = test.task_store_key(&task_branch, &home_proj);
+
+    // .task/AGENTS.md should exist with project key
+    let agents_md = std::fs::read_to_string(format!("{}/.task/AGENTS.md", worktree_path)).unwrap();
+    assert!(
+        agents_md.contains(&store_key),
+        ".task/AGENTS.md should contain project key '{}', got: {}",
+        store_key,
+        agents_md
+    );
+
+    // CLAUDE.md should be a symlink to .task/AGENTS.md
+    let claude_link = std::fs::read_link(format!("{}/CLAUDE.md", worktree_path)).unwrap();
+    assert_eq!(
+        claude_link,
+        std::path::Path::new(".task/AGENTS.md"),
+        "CLAUDE.md should be a symlink to .task/AGENTS.md"
+    );
+
+    // AGENTS.md should be a symlink to .task/AGENTS.md
+    let agents_link = std::fs::read_link(format!("{}/AGENTS.md", worktree_path)).unwrap();
+    assert_eq!(
+        agents_link,
+        std::path::Path::new(".task/AGENTS.md"),
+        "AGENTS.md should be a symlink to .task/AGENTS.md"
+    );
+
+    // Reading through the symlink should give the same content
+    let claude_content = std::fs::read_to_string(format!("{}/CLAUDE.md", worktree_path)).unwrap();
+    assert_eq!(claude_content, agents_md, "CLAUDE.md symlink should resolve to .task/AGENTS.md content");
+}

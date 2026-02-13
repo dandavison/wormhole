@@ -174,8 +174,31 @@ fn setup_task_worktree(worktree_path: &Path, repo: &str, branch: &str) -> Result
         ),
         project_key
     );
-    fs::write(worktree_path.join("CLAUDE.md"), content)
-        .map_err(|e| format!("Failed to create CLAUDE.md: {}", e))
+    fs::write(task_dir.join("AGENTS.md"), &content)
+        .map_err(|e| format!("Failed to create .task/AGENTS.md: {}", e))?;
+
+    let target = Path::new(".task/AGENTS.md");
+    create_agent_symlink(worktree_path, "CLAUDE.md", target)?;
+    create_agent_symlink(worktree_path, "AGENTS.md", target)?;
+    Ok(())
+}
+
+fn create_agent_symlink(worktree_path: &Path, filename: &str, target: &Path) -> Result<(), String> {
+    let link_path = worktree_path.join(filename);
+    if link_path.symlink_metadata().is_ok() {
+        if link_path.read_link().ok().as_deref() == Some(target) {
+            return Ok(());
+        }
+        // Mark as assume-unchanged before replacing (no-op if untracked)
+        let _ = std::process::Command::new("git")
+            .args(["update-index", "--assume-unchanged", filename])
+            .current_dir(worktree_path)
+            .output();
+        fs::remove_file(&link_path)
+            .map_err(|e| format!("Failed to remove {}: {}", filename, e))?;
+    }
+    std::os::unix::fs::symlink(target, &link_path)
+        .map_err(|e| format!("Failed to create {} symlink: {}", filename, e))
 }
 
 fn ensure_gitattributes_entry(worktree_path: &Path) -> Result<(), String> {

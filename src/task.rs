@@ -42,7 +42,13 @@ pub fn create_task(repo: &str, branch: &str) -> Result<Project, String> {
     projects::refresh_tasks();
 
     let task = get_task_by_branch(repo, branch).ok_or_else(|| {
-        diagnose_task_not_found(repo, branch, &repo_path, &worktree_path, worktree_preexisted)
+        diagnose_task_not_found(
+            repo,
+            branch,
+            &repo_path,
+            &worktree_path,
+            worktree_preexisted,
+        )
     })?;
 
     // Add to ring so it appears in project list
@@ -157,7 +163,7 @@ fn resolve_project_path(project_name: &str) -> Result<PathBuf, String> {
         .ok_or_else(|| format!("Project '{}' not found", project_name))
 }
 
-fn setup_task_worktree(worktree_path: &Path, repo: &str, branch: &str) -> Result<(), String> {
+pub fn setup_task_worktree(worktree_path: &Path, repo: &str, branch: &str) -> Result<(), String> {
     let task_dir = worktree_path.join(".task");
     fs::create_dir_all(&task_dir)
         .map_err(|e| format!("Failed to create .task directory: {}", e))?;
@@ -194,8 +200,7 @@ fn create_agent_symlink(worktree_path: &Path, filename: &str, target: &Path) -> 
             .args(["update-index", "--assume-unchanged", filename])
             .current_dir(worktree_path)
             .output();
-        fs::remove_file(&link_path)
-            .map_err(|e| format!("Failed to remove {}: {}", filename, e))?;
+        fs::remove_file(&link_path).map_err(|e| format!("Failed to remove {}: {}", filename, e))?;
     }
     std::os::unix::fs::symlink(target, &link_path)
         .map_err(|e| format!("Failed to create {} symlink: {}", filename, e))

@@ -5,7 +5,6 @@ use crate::handlers;
 use crate::handlers::{dashboard, describe, project};
 use crate::project_path::ProjectPath;
 use crate::projects;
-use crate::projects::Mutation;
 use crate::ps;
 use hyper::{header, Body, Method, Request, Response, StatusCode};
 use url::form_urlencoded;
@@ -150,13 +149,17 @@ async fn route_with_params(
 }
 
 fn route_file_or_github(path: &str, params: &QueryParams) -> Response<Body> {
-    if let Some((Some(project_path), mutation, land_in)) =
-        determine_requested_operation(path, params.line, params.land_in.clone())
-    {
-        thread::spawn(move || project_path.open(mutation, land_in));
+    let project_path = resolve_file_or_github(path, params.line);
+    if let Some(project_path) = project_path {
+        thread::spawn(move || project_path.open_in_editor());
         Response::builder()
             .header("Content-Type", "text/html")
             .body(Body::from(handlers::WORMHOLE_RESPONSE_HTML))
+            .unwrap()
+    } else if path.starts_with("/file/") {
+        Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(Body::from("No matching project"))
             .unwrap()
     } else {
         let redirect_to = format!(
@@ -172,25 +175,12 @@ fn route_file_or_github(path: &str, params: &QueryParams) -> Response<Body> {
     }
 }
 
-fn determine_requested_operation(
-    url_path: &str,
-    line: Option<usize>,
-    land_in: Option<Application>,
-) -> Option<(Option<ProjectPath>, Mutation, Option<Application>)> {
+fn resolve_file_or_github(url_path: &str, line: Option<usize>) -> Option<ProjectPath> {
     let projects = projects::lock();
     if let Some(absolute_path) = url_path.strip_prefix("/file/") {
-        let p = ProjectPath::from_absolute_path(absolute_path, line, &projects);
-        Some((p, Mutation::Insert, land_in))
-    } else if let Some(project_path) = ProjectPath::from_github_url(url_path, line, &projects) {
-        if url_path.ends_with(".md") {
-            None
-        } else {
-            Some((
-                Some(project_path),
-                Mutation::Insert,
-                Some(Application::Editor),
-            ))
-        }
+        ProjectPath::from_absolute_path(absolute_path, line, &projects)
+    } else if !url_path.ends_with(".md") {
+        ProjectPath::from_github_url(url_path, line, &projects)
     } else {
         None
     }

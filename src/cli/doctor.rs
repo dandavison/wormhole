@@ -144,6 +144,50 @@ pub(super) fn doctor_persisted_data(output: &str) -> Result<(), String> {
     Ok(())
 }
 
+pub(super) fn doctor_conform() -> Result<(), String> {
+    use rayon::prelude::*;
+
+    let available = config::available_projects();
+    let repo_paths: Vec<_> = available.into_iter().collect();
+
+    let results: Vec<_> = repo_paths
+        .par_iter()
+        .filter(|(_, path)| crate::git::is_git_repo(path))
+        .flat_map(|(name, path)| {
+            let worktree_base = crate::git::worktree_base_path(path);
+            crate::git::list_worktrees(path)
+                .into_iter()
+                .filter(|wt| wt.path.starts_with(&worktree_base))
+                .filter_map(|wt| {
+                    let branch = wt.branch.as_deref()?;
+                    let key = ProjectKey::parse(&format!("{}:{}", name, branch));
+                    match crate::task::setup_task_worktree(&wt.path, name, branch) {
+                        Ok(()) => Some((key.to_string(), None)),
+                        Err(e) => Some((key.to_string(), Some(e))),
+                    }
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect();
+
+    let mut ok = 0;
+    let mut errs = 0;
+    for (key, err) in &results {
+        match err {
+            None => {
+                println!("  {}", key);
+                ok += 1;
+            }
+            Some(e) => {
+                eprintln!("  {} error: {}", key, e);
+                errs += 1;
+            }
+        }
+    }
+    println!("Conformed {} task(s), {} error(s).", ok, errs);
+    Ok(())
+}
+
 pub(super) fn doctor_migrate_worktrees() -> Result<(), String> {
     let available = config::available_projects();
     let mut worktrees_total = 0;

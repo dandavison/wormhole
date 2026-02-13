@@ -136,9 +136,6 @@ pub fn refresh_all() {
     // Refresh tasks from filesystem
     projects::refresh_tasks();
 
-    // Conform task worktrees to desired state
-    conform_task_worktrees();
-
     // Reload KV data from disk
     {
         let mut projects = projects::lock();
@@ -151,25 +148,6 @@ pub fn refresh_all() {
     if debug() {
         let projects = projects::lock();
         projects.print();
-    }
-}
-
-fn conform_task_worktrees() {
-    let tasks: Vec<_> = {
-        let projects = projects::lock();
-        projects
-            .all()
-            .iter()
-            .filter(|p| p.is_task())
-            .map(|p| (p.repo_name.to_string(), p.branch.clone(), p.working_tree()))
-            .collect()
-    };
-    for (repo, branch, path) in tasks {
-        if let Some(branch) = branch {
-            if let Err(e) = crate::task::setup_task_worktree(&path, &repo, &branch.to_string()) {
-                crate::util::warn(&format!("Failed to conform {}: {}", path.display(), e));
-            }
-        }
     }
 }
 

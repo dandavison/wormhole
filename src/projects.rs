@@ -244,14 +244,19 @@ fn best_project_for_path<'a>(
     query_path: &Path,
 ) -> Option<&'a Project> {
     projects
-        .filter(|p| {
+        .filter_map(|p| {
             if let Some(wt) = p.worktree_path() {
-                query_path.starts_with(&wt)
-            } else {
-                query_path.starts_with(&p.repo_path)
+                if query_path.starts_with(&wt) {
+                    return Some((p, wt.as_os_str().len()));
+                }
             }
+            if query_path.starts_with(&p.repo_path) {
+                return Some((p, p.repo_path.as_os_str().len()));
+            }
+            None
         })
-        .max_by_key(|p| p.working_tree().as_os_str().len())
+        .max_by_key(|(p, len)| (*len, !p.is_task()))
+        .map(|(p, _)| p)
 }
 
 pub fn load() {

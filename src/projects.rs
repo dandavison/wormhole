@@ -200,20 +200,7 @@ impl<'a> Projects<'a> {
     pub fn by_path(&self, query_path: &Path) -> Option<Project> {
         let query_path =
             std::fs::canonicalize(query_path).unwrap_or_else(|_| query_path.to_path_buf());
-        self.0
-            .all
-            .values()
-            .filter(|p| {
-                // For tasks, only match if path is inside the worktree.
-                // For non-tasks, match if path is inside repo_path.
-                if let Some(wt) = p.worktree_path() {
-                    query_path.starts_with(&wt)
-                } else {
-                    query_path.starts_with(&p.repo_path)
-                }
-            })
-            .max_by_key(|p| p.working_tree().as_os_str().len())
-            .cloned()
+        best_project_for_path(self.0.all.values(), &query_path).cloned()
     }
 
     pub fn by_key(&self, key: &ProjectKey) -> Option<Project> {
@@ -250,6 +237,21 @@ impl<'a> Projects<'a> {
             ps!("..., {}, {}*, {}, ... ({})", previous, current, next, len,);
         });
     }
+}
+
+fn best_project_for_path<'a>(
+    projects: impl Iterator<Item = &'a Project>,
+    query_path: &Path,
+) -> Option<&'a Project> {
+    projects
+        .filter(|p| {
+            if let Some(wt) = p.worktree_path() {
+                query_path.starts_with(&wt)
+            } else {
+                query_path.starts_with(&p.repo_path)
+            }
+        })
+        .max_by_key(|p| p.working_tree().as_os_str().len())
 }
 
 pub fn load() {
@@ -466,4 +468,94 @@ pub fn cache_needs_refresh() -> bool {
             let pr_missing = p.cached.pr.is_none();
             jira_missing || pr_missing
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::project::{BranchName, Cached, Project, RepoName};
+
+    fn make_project(name: &str, repo_path: &str) -> Project {
+        Project {
+            repo_name: RepoName::new(name),
+            repo_path: PathBuf::from(repo_path),
+            branch: None,
+            kv: HashMap::new(),
+            cached: Cached::default(),
+        }
+    }
+
+    fn make_task(name: &str, repo_path: &str, branch: &str, git_common_dir: &str) -> Project {
+        Project {
+            repo_name: RepoName::new(name),
+            repo_path: PathBuf::from(repo_path),
+            branch: Some(BranchName::new(branch)),
+            kv: HashMap::new(),
+            cached: Cached {
+                git_common_dir: Some(PathBuf::from(git_common_dir)),
+                ..Default::default()
+            },
+        }
+    }
+
+    fn find(projects: &[Project], path: &str) -> Option<String> {
+        best_project_for_path(projects.iter(), Path::new(path))
+            .map(|p| p.store_key().to_string())
+    }
+
+    #[test]
+    fn test_by_path_matches_task_by_repo_path() {
+        // A file in the base repo should match a task for that repo
+        // (by repo_path), not just the parent project.
+        let projects = vec![
+            make_project("temporal-all", "/repos/temporal-all"),
+            make_task(
+                "temporal",
+                "/repos/temporal-all/repos/temporal",
+                "feature-x",
+                "/repos/temporal-all/.git/modules/repos/temporal",
+            ),
+        ];
+        assert_eq!(
+            find(&projects, "/repos/temporal-all/repos/temporal/tests/test.go"),
+            Some("temporal:feature-x".into())
+        );
+    }
+
+    #[test]
+    fn test_by_path_prefers_non_task_over_task_for_repo_path() {
+        let projects = vec![
+            make_project("temporal", "/repos/temporal-all/repos/temporal"),
+            make_task(
+                "temporal",
+                "/repos/temporal-all/repos/temporal",
+                "feature-x",
+                "/repos/temporal-all/.git/modules/repos/temporal",
+            ),
+        ];
+        assert_eq!(
+            find(&projects, "/repos/temporal-all/repos/temporal/tests/test.go"),
+            Some("temporal".into())
+        );
+    }
+
+    #[test]
+    fn test_by_path_worktree_match_beats_repo_path_match() {
+        let task = make_task(
+            "temporal",
+            "/repos/temporal-all/repos/temporal",
+            "feature-x",
+            "/repos/temporal-all/.git/modules/repos/temporal",
+        );
+        let worktree = task.worktree_path().unwrap();
+        let file = worktree.join("tests/test.go");
+        let projects = vec![
+            make_project("temporal-all", "/repos/temporal-all"),
+            task,
+        ];
+        assert_eq!(
+            find(&projects, file.to_str().unwrap()),
+            Some("temporal:feature-x".into())
+        );
+    }
 }

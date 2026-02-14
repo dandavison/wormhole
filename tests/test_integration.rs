@@ -1000,8 +1000,10 @@ fn test_task_with_slash_in_branch() {
     );
 
     // Switch to task and verify focus
+    // Window title uses workspace filename where / is encoded as %2F
+    let expected_window = task_branch.replace('/', "%2F");
     test.cli(&format!("wormhole open '{}'", store_key)).unwrap();
-    test.assert_focus(Editor(&task_branch));
+    test.assert_focus(Editor(&expected_window));
 }
 
 #[test]

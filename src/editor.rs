@@ -118,7 +118,7 @@ impl Editor {
 
 fn wormhole_workspace_path(project: &Project) -> std::path::PathBuf {
     let store_key = project.store_key().to_string();
-    let filename = format!("{}.code-workspace", store_key);
+    let filename = format!("{}.code-workspace", store_key.replace('/', "%2F"));
     let gitdir = crate::git::git_common_dir(&project.repo_path);
     gitdir.join("wormhole/workspaces").join(filename)
 }

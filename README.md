@@ -226,3 +226,7 @@ wormhole-open /path      # open specified path in wormhole
 wormhole-shell-switch /path  # switch shell session to different project
 wormhole-shell-reset     # re-fetch env vars from wormhole server
 ```
+
+
+## Agent instructions
+- Prefer commands from the Makefile over direct `cargo` commands

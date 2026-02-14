@@ -180,8 +180,11 @@ pub fn setup_task_worktree(worktree_path: &Path, repo: &str, branch: &str) -> Re
         ),
         project_key
     );
-    fs::write(task_dir.join("AGENTS.md"), &content)
-        .map_err(|e| format!("Failed to create .task/AGENTS.md: {}", e))?;
+    let agents_path = task_dir.join("AGENTS.md");
+    if !agents_path.exists() {
+        fs::write(&agents_path, &content)
+            .map_err(|e| format!("Failed to create .task/AGENTS.md: {}", e))?;
+    }
 
     let target = Path::new(".task/AGENTS.md");
     create_agent_symlink(worktree_path, "CLAUDE.md", target)?;
@@ -256,6 +259,30 @@ fn diagnose_task_not_found(
              This is a bug.",
             path, repo, branch
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn setup_task_worktree_preserves_existing_agents_md() {
+        let dir = tempfile::tempdir().unwrap();
+        let worktree = dir.path();
+
+        // First call seeds .task/AGENTS.md
+        setup_task_worktree(worktree, "repo", "branch").unwrap();
+        let seeded = fs::read_to_string(worktree.join(".task/AGENTS.md")).unwrap();
+        assert!(seeded.contains("repo:branch"));
+
+        // Write custom content
+        fs::write(worktree.join(".task/AGENTS.md"), "# Custom\n").unwrap();
+
+        // Second call should not overwrite
+        setup_task_worktree(worktree, "repo", "branch").unwrap();
+        let preserved = fs::read_to_string(worktree.join(".task/AGENTS.md")).unwrap();
+        assert_eq!(preserved, "# Custom\n");
     }
 }
 

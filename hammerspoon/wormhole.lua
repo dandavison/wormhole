@@ -8,7 +8,7 @@
 local M = {}
 local ring = require("ring")
 
-M.host = "http://wormhole:7117"
+M.host = "http://localhost:7117"
 M.selectRepeatInterval = 0.08 -- seconds between cycles when holding key
 M.selectDebounce = 0.02       -- minimum seconds between down arrows
 

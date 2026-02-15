@@ -81,6 +81,11 @@ thin HTTP client. This ensures that, in the future, the wormhole client can mana
 the terminal and editor sessions are hosted on a remote machine or VM. Presentation-only operations
 (window focus, app activation via Hammerspoon, opening a local editor) remain client-side.
 
+**CLI is a thin wrapper with JSON and unstructured text output options**: CLI commands should all
+support -o json. They should all model their output data via a struct that can be rendered to JSON
+by serde, and also has a method to be rendered as pretty-formatted unstructured text for humans (the
+default) (this may be markdown in some cases; if so -o md should be explicitly offered).
+
 
 ## Installation
 

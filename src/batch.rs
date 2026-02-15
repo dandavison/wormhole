@@ -269,7 +269,11 @@ impl BatchListResponse {
 /// Does not start execution — call `spawn_batch` after.
 pub fn create_batch(req: BatchRequest) -> String {
     let id = format!("b{}", NEXT_ID.fetch_add(1, Ordering::Relaxed));
-    let output_dir = std::env::temp_dir().join(format!("wormhole-batch-{}", id));
+    let output_dir = std::env::temp_dir().join(format!(
+        "wormhole-batch-{}-{}",
+        std::process::id(),
+        id
+    ));
     let _ = fs::create_dir_all(&output_dir);
 
     let runs = req
@@ -487,13 +491,18 @@ pub fn gc(max_age: std::time::Duration) {
         if batch.created_at > cutoff {
             return true;
         }
-        // Clean up output files
+        // Clean up output files and directory
+        let mut output_dir = None;
         for run in &batch.runs {
+            if output_dir.is_none() {
+                output_dir = run.stdout_path.parent().map(|p| p.to_path_buf());
+            }
             let _ = fs::remove_file(&run.stdout_path);
             let _ = fs::remove_file(&run.stderr_path);
         }
-        let output_dir = std::env::temp_dir().join(format!("wormhole-batch-{}", batch.id));
-        let _ = fs::remove_dir(&output_dir);
+        if let Some(dir) = output_dir {
+            let _ = fs::remove_dir(&dir);
+        }
         false
     });
 }
@@ -556,59 +565,8 @@ mod tests {
         assert!(!batch.is_done());
     }
 
-    #[test]
-    fn test_spawn_batch_real_command() {
-        let dir = std::env::temp_dir();
-        let req = BatchRequest {
-            command: vec!["echo".into(), "hello".into()],
-            runs: vec![RunSpec {
-                key: "test".into(),
-                dir: dir.clone(),
-            }],
-        };
-        let id = create_batch(req);
-        spawn_batch(&id);
-
-        // Wait for completion
-        for _ in 0..100 {
-            std::thread::sleep(std::time::Duration::from_millis(50));
-            let store = lock();
-            let batch = store.get(&id).unwrap();
-            if batch.is_done() {
-                assert_eq!(batch.runs[0].status, RunStatus::Succeeded);
-                assert_eq!(batch.runs[0].exit_code, Some(0));
-                let stdout = std::fs::read_to_string(&batch.runs[0].stdout_path).unwrap();
-                assert_eq!(stdout.trim(), "hello");
-                return;
-            }
-        }
-        panic!("batch did not complete in time");
-    }
-
-    #[test]
-    fn test_spawn_batch_failed_command() {
-        let dir = std::env::temp_dir();
-        let req = BatchRequest {
-            command: vec!["false".into()],
-            runs: vec![RunSpec {
-                key: "test".into(),
-                dir,
-            }],
-        };
-        let id = create_batch(req);
-        spawn_batch(&id);
-
-        for _ in 0..100 {
-            std::thread::sleep(std::time::Duration::from_millis(50));
-            let store = lock();
-            let batch = store.get(&id).unwrap();
-            if batch.is_done() {
-                assert_eq!(batch.runs[0].status, RunStatus::Failed);
-                return;
-            }
-        }
-        panic!("batch did not complete in time");
-    }
+    // Spawn/execution tests (real command, failed command, shell features,
+    // bad command) are covered by integration tests in tests/test_batch.rs.
 
     #[test]
     fn test_gc_removes_old_batches() {
@@ -630,56 +588,6 @@ mod tests {
         gc(std::time::Duration::from_secs(1));
         let store = lock();
         assert!(store.get(&id).is_none(), "old batch should be evicted");
-    }
-
-    #[test]
-    fn test_spawn_shell_features() {
-        let dir = std::env::temp_dir();
-        // Single-string command with shell pipe, as if user typed:
-        //   wormhole project for-each 'echo hello world | tr a-z A-Z'
-        let req = BatchRequest {
-            command: vec!["echo hello world | tr a-z A-Z".into()],
-            runs: vec![RunSpec { key: "test".into(), dir }],
-        };
-        let id = create_batch(req);
-        spawn_batch(&id);
-
-        for _ in 0..100 {
-            std::thread::sleep(std::time::Duration::from_millis(50));
-            let store = lock();
-            let batch = store.get(&id).unwrap();
-            if batch.is_done() {
-                assert_eq!(batch.runs[0].status, RunStatus::Succeeded);
-                let stdout = std::fs::read_to_string(&batch.runs[0].stdout_path).unwrap();
-                assert_eq!(stdout.trim(), "HELLO WORLD");
-                return;
-            }
-        }
-        panic!("batch did not complete in time");
-    }
-
-    #[test]
-    fn test_spawn_bad_command_reports_error() {
-        let dir = std::env::temp_dir();
-        let req = BatchRequest {
-            command: vec!["nonexistent_command_xyz".into()],
-            runs: vec![RunSpec { key: "test".into(), dir }],
-        };
-        let id = create_batch(req);
-        spawn_batch(&id);
-
-        for _ in 0..100 {
-            std::thread::sleep(std::time::Duration::from_millis(50));
-            let store = lock();
-            let batch = store.get(&id).unwrap();
-            if batch.is_done() {
-                assert_eq!(batch.runs[0].status, RunStatus::Failed);
-                let stderr = std::fs::read_to_string(&batch.runs[0].stderr_path).unwrap();
-                assert!(!stderr.is_empty(), "stderr should contain error message");
-                return;
-            }
-        }
-        panic!("batch did not complete in time");
     }
 
     #[test]

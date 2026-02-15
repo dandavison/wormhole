@@ -182,6 +182,14 @@ pub(super) fn render_issue_status(issue: &crate::jira::IssueStatus) -> String {
     )
 }
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
+static INTERRUPTED: AtomicBool = AtomicBool::new(false);
+
+extern "C" fn sigint_handler(_: libc::c_int) {
+    INTERRUPTED.store(true, Ordering::Relaxed);
+}
+
 pub(super) fn for_each(
     client: &super::util::Client,
     tasks_only: bool,
@@ -261,11 +269,14 @@ pub(super) fn for_each(
         eprintln!("Starting batch: {} across {} projects", command.join(" "), total);
     }
 
+    unsafe { libc::signal(libc::SIGINT, sigint_handler as *const () as libc::sighandler_t); }
+
     let response = client.post_json("/batch", &batch_req)?;
     let mut batch: BatchResponse =
         serde_json::from_str(&response).map_err(|e| e.to_string())?;
 
     let mut seen_completed = batch.completed;
+    let mut cancelled = false;
 
     loop {
         if batch.completed > seen_completed {
@@ -279,9 +290,27 @@ pub(super) fn for_each(
             break;
         }
 
+        if !cancelled && INTERRUPTED.load(Ordering::Relaxed) {
+            cancelled = true;
+            eprintln!("Cancelling batch {}...", batch.id);
+            let _ = client.post(&format!("/batch/{}/cancel", batch.id));
+            // Continue polling so we get final status for output
+        }
+
         let poll_path = format!("/batch/{}?completed={}", batch.id, seen_completed);
-        let response = client.get_with_wait(&poll_path, 30)?;
-        batch = serde_json::from_str(&response).map_err(|e| e.to_string())?;
+        match client.get_with_wait(&poll_path, 30) {
+            Ok(response) => {
+                batch = serde_json::from_str(&response).map_err(|e| e.to_string())?;
+            }
+            Err(_) if INTERRUPTED.load(Ordering::Relaxed) && !cancelled => {
+                // SIGINT interrupted the HTTP call; cancel and retry
+                cancelled = true;
+                eprintln!("Cancelling batch {}...", batch.id);
+                let _ = client.post(&format!("/batch/{}/cancel", batch.id));
+                continue;
+            }
+            Err(e) => return Err(e),
+        }
     }
 
     if output == "json" {

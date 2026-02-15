@@ -184,6 +184,7 @@ pub(super) fn render_issue_status(issue: &crate::jira::IssueStatus) -> String {
 
 pub(super) fn for_each(
     client: &super::util::Client,
+    tasks_only: bool,
     active: bool,
     status_only: bool,
     cancel: Option<String>,
@@ -238,6 +239,9 @@ pub(super) fn for_each(
         .iter()
         .filter_map(|p| {
             let key = p["project_key"].as_str()?;
+            if tasks_only && !key.contains(':') {
+                return None;
+            }
             let dir = p["path"].as_str()?;
             Some(serde_json::json!({ "key": key, "dir": dir }))
         })

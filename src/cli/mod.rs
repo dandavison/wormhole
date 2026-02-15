@@ -160,6 +160,9 @@ pub enum ProjectCommand {
     },
     /// Run a command in each project directory
     ForEach {
+        /// Only run on tasks (not plain repos)
+        #[arg(long)]
+        tasks: bool,
         /// Only run on projects with a tmux window
         #[arg(long)]
         active: bool,
@@ -420,13 +423,14 @@ pub fn run(command: Command) -> Result<(), String> {
                 Ok(())
             }
             ProjectCommand::ForEach {
+                tasks,
                 active,
                 status,
                 cancel,
                 output,
                 verbose,
                 command,
-            } => project::for_each(&client, active, status, cancel, &command, &output, verbose),
+            } => project::for_each(&client, tasks, active, status, cancel, &command, &output, verbose),
             ProjectCommand::Show { name, output } => {
                 let path = match name {
                     Some(n) => format!("/project/show/{}", n),

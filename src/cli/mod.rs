@@ -575,7 +575,7 @@ pub fn run(command: Command) -> Result<(), String> {
         Command::Doctor { command } => match command {
             DoctorCommand::PersistedData { output } => doctor::doctor_persisted_data(&output),
             DoctorCommand::MigrateWorktrees => doctor::doctor_migrate_worktrees(),
-            DoctorCommand::Conform => doctor::doctor_conform(),
+            DoctorCommand::Conform => doctor::doctor_conform(&client),
         },
 
         Command::Refresh => {

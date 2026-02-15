@@ -2,7 +2,7 @@ use std::convert::Infallible;
 use std::thread;
 
 use crate::handlers;
-use crate::handlers::{batch, dashboard, describe, project};
+use crate::handlers::{batch, dashboard, describe, doctor, project};
 use crate::project_path::ProjectPath;
 use crate::projects;
 use crate::projects::Mutation;
@@ -102,6 +102,7 @@ async fn route(
             projects::refresh_tasks();
             Response::new(Body::from(""))
         }),
+        "/doctor/conform" => require_post(method, doctor::conform),
         "/project/show" => project::show(None),
         "/batch" => match *method {
             Method::POST => batch::start_batch(req).await,

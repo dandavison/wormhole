@@ -1,8 +1,11 @@
 use serde::Serialize;
 
 use crate::config;
+use crate::handlers::doctor::ConformResult;
 use crate::project::ProjectKey;
 use crate::pst::TerminalHyperlink;
+
+use super::util::Client;
 
 #[derive(Serialize)]
 struct PersistedDataReport {
@@ -144,42 +147,21 @@ pub(super) fn doctor_persisted_data(output: &str) -> Result<(), String> {
     Ok(())
 }
 
-pub(super) fn doctor_conform() -> Result<(), String> {
-    use rayon::prelude::*;
-
-    let available = config::available_projects();
-    let repo_paths: Vec<_> = available.into_iter().collect();
-
-    let results: Vec<_> = repo_paths
-        .par_iter()
-        .filter(|(_, path)| crate::git::is_git_repo(path))
-        .flat_map(|(name, path)| {
-            let worktree_base = crate::git::worktree_base_path(path);
-            crate::git::list_worktrees(path)
-                .into_iter()
-                .filter(|wt| wt.path.starts_with(&worktree_base))
-                .filter_map(|wt| {
-                    let branch = wt.branch.as_deref()?;
-                    let key = ProjectKey::parse(&format!("{}:{}", name, branch));
-                    match crate::task::setup_task_worktree(&wt.path, name, branch) {
-                        Ok(()) => Some((key.to_string(), None)),
-                        Err(e) => Some((key.to_string(), Some(e))),
-                    }
-                })
-                .collect::<Vec<_>>()
-        })
-        .collect();
+pub(super) fn doctor_conform(client: &Client) -> Result<(), String> {
+    let response = client.post("/doctor/conform")?;
+    let result: ConformResult = serde_json::from_str(&response).map_err(|e| e.to_string())?;
 
     let mut ok = 0;
     let mut errs = 0;
-    for (key, err) in &results {
-        match err {
+    for r in &result.results {
+        match &r.error {
             None => {
-                println!("  {}", key);
+                let key = ProjectKey::parse(&r.task);
+                println!("  {}", key.hyperlink());
                 ok += 1;
             }
             Some(e) => {
-                eprintln!("  {} error: {}", key, e);
+                eprintln!("  {} error: {}", r.task, e);
                 errs += 1;
             }
         }

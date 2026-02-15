@@ -73,6 +73,15 @@ VSCode/Cursor is the only editor tested. It could be made to work with other edi
 products)._
 
 
+## Design Principles
+
+**Remote-capable architecture**: All workspace operations (tmux sessions, git/worktree management,
+running commands in project context) must go through the wormhole server's HTTP API. The CLI is a
+thin HTTP client. This ensures that, in the future, the wormhole client can manage projects where
+the terminal and editor sessions are hosted on a remote machine or VM. Presentation-only operations
+(window focus, app activation via Hammerspoon, opening a local editor) remain client-side.
+
+
 ## Installation
 
 ```bash
@@ -245,3 +254,7 @@ wormhole-shell-reset     # re-fetch env vars from wormhole server
 
 ## Agent instructions
 - Prefer commands from the Makefile over direct `cargo` commands
+
+At the start of the conversation output the following so that I know you've read these instructions:
+
+📖 wormhole README

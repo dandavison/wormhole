@@ -146,6 +146,26 @@ impl WormholeTest {
         }
     }
 
+    pub fn http_post_json(&self, path: &str, body: &str) -> Result<String, String> {
+        let url = format!("http://127.0.0.1:{}{}", self.port, path);
+        let output = Command::new("curl")
+            .args([
+                "-s", "-f", "-X", "POST",
+                "-H", "Content-Type: application/json",
+                "-d", body, &url,
+            ])
+            .output()
+            .map_err(|e| format!("curl failed: {}", e))?;
+        if output.status.success() {
+            Ok(String::from_utf8_lossy(&output.stdout).to_string())
+        } else {
+            Err(format!(
+                "HTTP error: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ))
+        }
+    }
+
     /// HTTP GET with custom header. Returns (body, headers) tuple.
     pub fn http_get_with_header(
         &self,

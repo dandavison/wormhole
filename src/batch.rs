@@ -206,17 +206,11 @@ impl BatchResponse {
         sorted.sort_by(|a, b| a.key.cmp(&b.key));
         let mut out = String::new();
         for run in &sorted {
-            let indicator = match run.status {
-                RunStatus::Succeeded => "+",
-                RunStatus::Failed => "x",
-                RunStatus::Cancelled => "-",
-                _ => "?",
-            };
             let exit_str = run.exit_code
                 .filter(|&c| c != 0)
                 .map(|c| format!(" (exit {})", c))
                 .unwrap_or_default();
-            out.push_str(&format!("## {} {}{}\n", indicator, run.key, exit_str));
+            out.push_str(&format!("## {}{}\n", run.key, exit_str));
             if let Some(ref s) = run.stdout {
                 if !s.is_empty() {
                     out.push_str(s);

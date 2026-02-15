@@ -82,7 +82,7 @@ ln -s /Applications/Hammerspoon.app/Contents/Frameworks/hs/hs ~/bin/
 
 # Build
 cargo build --release
-ln -s target/release/wormhole ~/bin/
+ln -s $PWD/target/release/wormhole ~/bin/
 
 # Run server
 wormhole server start
@@ -95,6 +95,21 @@ ln -fs $PWD/gui/dist/Wormhole/Wormhole.app /Applications/
 
 # Chrome extension (optional)
 # Load web/chrome-extension as unpacked extension
+```
+
+### Shell completions
+
+Add one of the following to your shell config:
+
+```bash
+# bash (~/.bashrc)
+eval "$(wormhole completion bash)"
+
+# zsh (~/.zshrc)
+eval "$(wormhole completion zsh)"
+
+# fish (~/.config/fish/config.fish)
+wormhole completion fish | source
 ```
 
 ## CLI

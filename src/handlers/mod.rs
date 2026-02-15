@@ -1,3 +1,4 @@
+pub mod batch;
 pub mod dashboard;
 pub mod describe;
 pub mod project;

@@ -158,6 +158,30 @@ pub enum ProjectCommand {
         #[arg(short, long, default_value = "text")]
         output: String,
     },
+    /// Run a command in each project directory
+    ForEach {
+        /// Only run on tasks (not plain repos)
+        #[arg(long)]
+        tasks: bool,
+        /// Only run on projects with a tmux window
+        #[arg(long)]
+        active: bool,
+        /// Show status of running/recent batches
+        #[arg(long)]
+        status: bool,
+        /// Cancel a running batch
+        #[arg(long)]
+        cancel: Option<String>,
+        /// Output format: text (default) or json
+        #[arg(short, long, default_value = "text")]
+        output: String,
+        /// Show progress on stderr
+        #[arg(short, long)]
+        verbose: bool,
+        /// Command to run in each project directory
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        command: Vec<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -398,6 +422,15 @@ pub fn run(command: Command) -> Result<(), String> {
                 }
                 Ok(())
             }
+            ProjectCommand::ForEach {
+                tasks,
+                active,
+                status,
+                cancel,
+                output,
+                verbose,
+                command,
+            } => project::for_each(&client, tasks, active, status, cancel, &command, &output, verbose),
             ProjectCommand::Show { name, output } => {
                 let path = match name {
                     Some(n) => format!("/project/show/{}", n),

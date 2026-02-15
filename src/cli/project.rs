@@ -182,6 +182,120 @@ pub(super) fn render_issue_status(issue: &crate::jira::IssueStatus) -> String {
     )
 }
 
+pub(super) fn for_each(
+    client: &super::util::Client,
+    tasks_only: bool,
+    active: bool,
+    status_only: bool,
+    cancel: Option<String>,
+    command: &[String],
+    output: &str,
+    verbose: bool,
+) -> Result<(), String> {
+    use crate::batch::{BatchResponse, BatchListResponse};
+
+    if let Some(batch_id) = cancel {
+        let response = client.post(&format!("/batch/{}/cancel", batch_id))?;
+        if output == "json" {
+            println!("{}", response);
+        } else {
+            let batch: BatchResponse =
+                serde_json::from_str(&response).map_err(|e| e.to_string())?;
+            println!("Cancelled batch {}", batch.id);
+        }
+        return Ok(());
+    }
+
+    if status_only {
+        let response = client.get("/batch")?;
+        if output == "json" {
+            println!("{}", response);
+        } else {
+            let list: BatchListResponse =
+                serde_json::from_str(&response).map_err(|e| e.to_string())?;
+            print!("{}", list.render_terminal());
+        }
+        return Ok(());
+    }
+
+    if command.is_empty() {
+        return Err("No command specified. Use -- <command...> or --status to list batches.".into());
+    }
+
+    // Fetch project list
+    let path = if active {
+        "/project/list?active=true"
+    } else {
+        "/project/list"
+    };
+    let response = client.get(path)?;
+    let json: serde_json::Value = serde_json::from_str(&response).map_err(|e| e.to_string())?;
+
+    let projects = json["current"]
+        .as_array()
+        .ok_or("No projects found")?;
+
+    let runs: Vec<serde_json::Value> = projects
+        .iter()
+        .filter_map(|p| {
+            let key = p["project_key"].as_str()?;
+            if tasks_only && !key.contains(':') {
+                return None;
+            }
+            let dir = p["path"].as_str()?;
+            Some(serde_json::json!({ "key": key, "dir": dir }))
+        })
+        .collect();
+
+    if runs.is_empty() {
+        return Err("No projects to run command in".into());
+    }
+
+    let batch_req = serde_json::json!({
+        "command": command,
+        "runs": runs,
+    });
+
+    let total = runs.len();
+    if verbose {
+        eprintln!("Starting batch: {} across {} projects", command.join(" "), total);
+    }
+
+    let response = client.post_json("/batch", &batch_req)?;
+    let mut batch: BatchResponse =
+        serde_json::from_str(&response).map_err(|e| e.to_string())?;
+
+    let mut seen_completed = batch.completed;
+
+    loop {
+        if batch.completed > seen_completed {
+            if verbose {
+                eprintln!("[{}/{}]", batch.completed, total);
+            }
+            seen_completed = batch.completed;
+        }
+
+        if batch.done {
+            break;
+        }
+
+        let poll_path = format!("/batch/{}?completed={}", batch.id, seen_completed);
+        let response = client.get_with_wait(&poll_path, 30)?;
+        batch = serde_json::from_str(&response).map_err(|e| e.to_string())?;
+    }
+
+    if output == "json" {
+        println!("{}", serde_json::to_string_pretty(&batch).map_err(|e| e.to_string())?);
+    } else {
+        print!("{}", batch.render_terminal());
+    }
+
+    if batch.runs.iter().any(|r| matches!(r.status, crate::batch::RunStatus::Failed | crate::batch::RunStatus::Cancelled)) {
+        std::process::exit(1);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

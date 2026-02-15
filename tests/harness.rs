@@ -327,6 +327,19 @@ impl WormholeTest {
         }
     }
 
+    pub fn assert_editor_window(&self, expected_window: &str) {
+        if editor_is_none() {
+            return;
+        }
+        let expected = expected_window.to_string();
+        assert!(
+            self.wait_until(|| self.focused_window_contains(&expected), 5),
+            "Expected Cursor window containing '{}' to have focus, got '{}'",
+            expected_window,
+            self.get_focused_window_title()
+        );
+    }
+
     pub fn focus_terminal(&self) {
         if editor_is_none() {
             return;

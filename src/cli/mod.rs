@@ -553,7 +553,7 @@ pub fn run(command: Command) -> Result<(), String> {
             JiraCommand::Sprint { command } => match command {
                 None => jira::sprint_list(&client, "text"),
                 Some(SprintCommand::List { output }) => jira::sprint_list(&client, &output),
-                Some(SprintCommand::Show { output }) => jira::sprint_show(&output),
+                Some(SprintCommand::Show { output }) => jira::sprint_show(&client, &output),
             },
         },
 
@@ -580,8 +580,10 @@ pub fn run(command: Command) -> Result<(), String> {
         }
 
         Command::Doctor { command } => match command {
-            DoctorCommand::PersistedData { output } => doctor::doctor_persisted_data(&output),
-            DoctorCommand::MigrateWorktrees => doctor::doctor_migrate_worktrees(),
+            DoctorCommand::PersistedData { output } => {
+                doctor::doctor_persisted_data(&client, &output)
+            }
+            DoctorCommand::MigrateWorktrees => doctor::doctor_migrate_worktrees(&client),
             DoctorCommand::Conform { dry_run, output } => {
                 doctor::doctor_conform(&client, dry_run, &output)
             }

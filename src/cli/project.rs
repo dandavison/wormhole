@@ -35,16 +35,6 @@ impl KvValue {
     }
 }
 
-pub(super) fn status_sort_order(status: Option<&str>) -> u8 {
-    match status.map(|s| s.to_lowercase()).as_deref() {
-        Some("done") | Some("closed") | Some("resolved") => 0,
-        Some("in review") => 1,
-        Some("in progress") => 2,
-        Some("to do") => 3,
-        _ => 4,
-    }
-}
-
 /// Render a project item from /project/list response
 pub(super) fn render_project_item(item: &serde_json::Value) -> String {
     let project_key_str = item

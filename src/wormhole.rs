@@ -2,7 +2,7 @@ use std::convert::Infallible;
 use std::thread;
 
 use crate::handlers;
-use crate::handlers::{batch, dashboard, describe, doctor, project};
+use crate::handlers::{batch, dashboard, describe, doctor, jira, project};
 use crate::project_path::ProjectPath;
 use crate::projects;
 use crate::projects::Mutation;
@@ -104,6 +104,10 @@ async fn route(
             Response::new(Body::from(""))
         }),
         "/doctor/conform" => require_post(method, || doctor::conform(params.dry_run)),
+        "/doctor/persisted-data" => doctor::persisted_data(),
+        "/doctor/migrate-worktrees" => require_post(method, doctor::migrate_worktrees),
+        "/jira/sprint/list" => jira::sprint_list(),
+        "/jira/sprint/show" => jira::sprint_show(),
         "/project/show" => project::show(None),
         "/batch" => match *method {
             Method::POST => batch::start_batch(req).await,

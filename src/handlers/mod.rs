@@ -2,6 +2,7 @@ pub mod batch;
 pub mod dashboard;
 pub mod describe;
 pub mod doctor;
+pub mod jira;
 pub mod project;
 
 use hyper::{Body, Response, StatusCode};

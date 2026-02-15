@@ -200,7 +200,7 @@ function M.focusDashboard()
         dashboardPreviousApp = frontApp
     end
 
-    local dashboardUrl = M.host .. "/dashboard"
+    local dashboardUrl = M.host .. "/"
     local script = [[
         (() => {
             const island = Application("Island");
@@ -209,7 +209,7 @@ function M.focusDashboard()
             for (const win of windows) {
                 const tabs = win.tabs();
                 for (let i = 0; i < tabs.length; i++) {
-                    if (tabs[i].url().includes("wormhole") && tabs[i].url().includes("/dashboard")) {
+                    if (tabs[i].url().includes("localhost:7117")) {
                         win.activeTabIndex = i + 1;
                         return true;
                     }

@@ -1033,7 +1033,7 @@ fn test_dashboard_renders_card_md() {
     let card_md = format!("{}/.task/card.md", worktree_path);
     std::fs::write(&card_md, "[my link](https://example.com)\n").unwrap();
 
-    let html = test.http_get("/dashboard").unwrap();
+    let html = test.http_get("/").unwrap();
 
     assert!(
         html.contains("card-content"),

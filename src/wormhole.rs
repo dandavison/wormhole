@@ -102,7 +102,7 @@ async fn route(
             Response::new(Body::from(""))
         }),
         "/project/show" => project::show(None),
-        "/dashboard" => dashboard::dashboard(),
+        "/" => dashboard::dashboard(),
         "/favicon.png" => handlers::favicon(),
         "/shell" => project::shell_env(params.pwd.as_deref()),
         "/kv" => crate::kv::list_all_kv_fresh(),

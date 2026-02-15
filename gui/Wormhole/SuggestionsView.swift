@@ -18,6 +18,7 @@ struct ProjectView<V: Equatable>: View {
             .background(ZStack {
                 Color.black.ignoresSafeArea()
                 RoundedRectangle(cornerRadius: 5)
+                    .fill(Color.black)
                     .border(isHighlighted ? Color.green : Color.clear)
                 }
             )

@@ -206,11 +206,17 @@ impl BatchResponse {
         sorted.sort_by(|a, b| a.key.cmp(&b.key));
         let mut out = String::new();
         for run in &sorted {
-            let exit_str = run.exit_code
-                .filter(|&c| c != 0)
-                .map(|c| format!(" (exit {})", c))
-                .unwrap_or_default();
-            out.push_str(&format!("## {}{}\n", run.key, exit_str));
+            let status_str = match run.status {
+                RunStatus::Failed => {
+                    let code = run.exit_code
+                        .map(|c| format!(" (exit {})", c))
+                        .unwrap_or_default();
+                    format!(" FAILED{}", code)
+                }
+                RunStatus::Cancelled => " CANCELLED".to_string(),
+                _ => String::new(),
+            };
+            out.push_str(&format!("## {}{}\n", run.key, status_str));
             if let Some(ref s) = run.stdout {
                 if !s.is_empty() {
                     out.push_str(s);
@@ -352,8 +358,9 @@ fn run_command(
     let stdout_file = fs::File::create(stdout_path).ok();
     let stderr_file = fs::File::create(stderr_path).ok();
 
-    let result = std::process::Command::new(&command[0])
-        .args(&command[1..])
+    let shell_cmd = shell_command_line(command);
+    let result = std::process::Command::new("sh")
+        .args(["-c", &shell_cmd])
         .current_dir(dir)
         .stdout(
             stdout_file
@@ -369,7 +376,6 @@ fn run_command(
 
     match result {
         Ok(mut child) => {
-            // Store PID
             {
                 let mut store = lock();
                 if let Some(batch) = store.get_mut(batch_id) {
@@ -394,16 +400,18 @@ fn run_command(
                             };
                         }
                     }
-                    Err(_) => {
+                    Err(e) => {
                         if run.status == RunStatus::Running {
                             run.status = RunStatus::Failed;
                         }
+                        let _ = fs::write(stderr_path, format!("wait error: {}\n", e));
                     }
                 }
             }
             notify_change();
         }
-        Err(_) => {
+        Err(e) => {
+            let _ = fs::write(stderr_path, format!("spawn error: {}\n", e));
             let mut store = lock();
             if let Some(batch) = store.get_mut(batch_id) {
                 let run = &mut batch.runs[idx];
@@ -412,6 +420,28 @@ fn run_command(
             }
             notify_change();
         }
+    }
+}
+
+/// Build a string to pass to `sh -c`. Single-element commands are passed
+/// verbatim (the user supplied a shell command string). Multi-element
+/// commands have each arg shell-escaped so word boundaries are preserved.
+fn shell_command_line(command: &[String]) -> String {
+    if command.len() == 1 {
+        return command[0].clone();
+    }
+    command
+        .iter()
+        .map(|arg| shell_escape(arg))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn shell_escape(s: &str) -> String {
+    if s.chars().all(|c| c.is_alphanumeric() || "-_./=:@%+,".contains(c)) {
+        s.to_string()
+    } else {
+        format!("'{}'", s.replace('\'', "'\\''"))
     }
 }
 
@@ -603,6 +633,56 @@ mod tests {
     }
 
     #[test]
+    fn test_spawn_shell_features() {
+        let dir = std::env::temp_dir();
+        // Single-string command with shell pipe, as if user typed:
+        //   wormhole project for-each 'echo hello world | tr a-z A-Z'
+        let req = BatchRequest {
+            command: vec!["echo hello world | tr a-z A-Z".into()],
+            runs: vec![RunSpec { key: "test".into(), dir }],
+        };
+        let id = create_batch(req);
+        spawn_batch(&id);
+
+        for _ in 0..100 {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            let store = lock();
+            let batch = store.get(&id).unwrap();
+            if batch.is_done() {
+                assert_eq!(batch.runs[0].status, RunStatus::Succeeded);
+                let stdout = std::fs::read_to_string(&batch.runs[0].stdout_path).unwrap();
+                assert_eq!(stdout.trim(), "HELLO WORLD");
+                return;
+            }
+        }
+        panic!("batch did not complete in time");
+    }
+
+    #[test]
+    fn test_spawn_bad_command_reports_error() {
+        let dir = std::env::temp_dir();
+        let req = BatchRequest {
+            command: vec!["nonexistent_command_xyz".into()],
+            runs: vec![RunSpec { key: "test".into(), dir }],
+        };
+        let id = create_batch(req);
+        spawn_batch(&id);
+
+        for _ in 0..100 {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            let store = lock();
+            let batch = store.get(&id).unwrap();
+            if batch.is_done() {
+                assert_eq!(batch.runs[0].status, RunStatus::Failed);
+                let stderr = std::fs::read_to_string(&batch.runs[0].stderr_path).unwrap();
+                assert!(!stderr.is_empty(), "stderr should contain error message");
+                return;
+            }
+        }
+        panic!("batch did not complete in time");
+    }
+
+    #[test]
     fn test_cancel_batch() {
         let req = BatchRequest {
             command: vec!["sleep".into(), "999".into()],
@@ -629,5 +709,69 @@ mod tests {
         let batch = store.get(&id).unwrap();
         assert_eq!(batch.runs[0].status, RunStatus::Cancelled);
         assert_eq!(batch.runs[1].status, RunStatus::Cancelled);
+    }
+
+    #[test]
+    fn test_render_terminal_shows_failure_info() {
+        let batch = BatchResponse {
+            id: "b1".into(),
+            command: vec!["test".into()],
+            created_at: 0.0,
+            total: 2,
+            completed: 2,
+            done: true,
+            runs: vec![
+                RunResponse {
+                    key: "alpha".into(),
+                    dir: "/tmp".into(),
+                    status: RunStatus::Succeeded,
+                    exit_code: Some(0),
+                    started_at: Some(0.0),
+                    finished_at: Some(1.0),
+                    stdout: Some("ok\n".into()),
+                    stderr: None,
+                },
+                RunResponse {
+                    key: "beta".into(),
+                    dir: "/tmp".into(),
+                    status: RunStatus::Failed,
+                    exit_code: Some(127),
+                    started_at: Some(0.0),
+                    finished_at: Some(1.0),
+                    stdout: None,
+                    stderr: Some("sh: bad_cmd: command not found\n".into()),
+                },
+            ],
+        };
+        let out = batch.render_terminal();
+        assert!(out.contains("## alpha\n"), "succeeded run has plain heading");
+        assert!(out.contains("## beta FAILED (exit 127)\n"), "failed run shows FAILED and exit code");
+        assert!(out.contains("command not found"), "stderr from failed run is shown");
+        assert!(out.contains("1/2 succeeded, 1 failed"), "summary line present");
+    }
+
+    #[test]
+    fn test_render_terminal_failed_no_exit_code() {
+        let batch = BatchResponse {
+            id: "b1".into(),
+            command: vec!["test".into()],
+            created_at: 0.0,
+            total: 1,
+            completed: 1,
+            done: true,
+            runs: vec![RunResponse {
+                key: "proj".into(),
+                dir: "/tmp".into(),
+                status: RunStatus::Failed,
+                exit_code: None,
+                started_at: Some(0.0),
+                finished_at: Some(1.0),
+                stdout: None,
+                stderr: Some("spawn error: No such file or directory\n".into()),
+            }],
+        };
+        let out = batch.render_terminal();
+        assert!(out.contains("## proj FAILED\n"), "FAILED without exit code");
+        assert!(out.contains("spawn error"), "spawn error shown");
     }
 }

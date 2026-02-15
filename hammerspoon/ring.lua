@@ -1,7 +1,7 @@
 -- Ring switcher: ctrl+cmd+left/right navigation with overlay
 local M = {}
 
-M.host = "http://wormhole:7117"
+M.host = "http://localhost:7117"
 
 local alertId = nil
 local tap = nil

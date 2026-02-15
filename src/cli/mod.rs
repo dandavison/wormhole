@@ -270,7 +270,14 @@ pub enum DoctorCommand {
     /// Migrate worktrees from old layout ($branch) to new layout ($branch/$repo_name)
     MigrateWorktrees,
     /// Conform task worktrees to desired state (.task/AGENTS.md, symlinks, etc.)
-    Conform,
+    Conform {
+        /// Show what would be done without making changes
+        #[arg(long)]
+        dry_run: bool,
+        /// Output format: text (default) or json
+        #[arg(short, long, default_value = "text")]
+        output: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -575,7 +582,9 @@ pub fn run(command: Command) -> Result<(), String> {
         Command::Doctor { command } => match command {
             DoctorCommand::PersistedData { output } => doctor::doctor_persisted_data(&output),
             DoctorCommand::MigrateWorktrees => doctor::doctor_migrate_worktrees(),
-            DoctorCommand::Conform => doctor::doctor_conform(&client),
+            DoctorCommand::Conform { dry_run, output } => {
+                doctor::doctor_conform(&client, dry_run, &output)
+            }
         },
 
         Command::Refresh => {

@@ -164,68 +164,117 @@ fn resolve_project_path(project_name: &str) -> Result<PathBuf, String> {
 }
 
 pub fn setup_task_worktree(worktree_path: &Path, repo: &str, branch: &str) -> Result<(), String> {
+    conform_task_worktree(worktree_path, repo, branch, false).map(|_| ())
+}
+
+/// Check/fix task worktree conformance. Returns list of actions taken (or
+/// that would be taken if `dry_run` is true).
+pub fn conform_task_worktree(
+    worktree_path: &Path,
+    repo: &str,
+    branch: &str,
+    dry_run: bool,
+) -> Result<Vec<String>, String> {
+    let mut actions = Vec::new();
+
     let task_dir = worktree_path.join(".task");
-    fs::create_dir_all(&task_dir)
-        .map_err(|e| format!("Failed to create .task directory: {}", e))?;
+    if !task_dir.is_dir() {
+        actions.push("create .task/".into());
+        if !dry_run {
+            fs::create_dir_all(&task_dir)
+                .map_err(|e| format!("Failed to create .task directory: {}", e))?;
+        }
+    }
 
-    ensure_gitattributes_entry(worktree_path)?;
+    if let Some(action) = check_gitattributes_entry(worktree_path, dry_run)? {
+        actions.push(action);
+    }
 
-    let project_key = format!("{}:{}", repo, branch);
-    let content = format!(
-        concat!(
-            "At the start of the conversation output the following ",
-            "so that I know you've read these instructions:\n",
-            "\n",
-            "\u{1F4D6} {}\n",
-        ),
-        project_key
-    );
     let agents_path = task_dir.join("AGENTS.md");
     if !agents_path.exists() {
-        fs::write(&agents_path, &content)
-            .map_err(|e| format!("Failed to create .task/AGENTS.md: {}", e))?;
+        actions.push("create .task/AGENTS.md".into());
+        if !dry_run {
+            let project_key = format!("{}:{}", repo, branch);
+            let content = format!(
+                concat!(
+                    "At the start of the conversation output the following ",
+                    "so that I know you've read these instructions:\n",
+                    "\n",
+                    "\u{1F4D6} {}\n",
+                ),
+                project_key
+            );
+            fs::write(&agents_path, &content)
+                .map_err(|e| format!("Failed to create .task/AGENTS.md: {}", e))?;
+        }
     }
 
     let target = Path::new(".task/AGENTS.md");
-    create_agent_symlink(worktree_path, "CLAUDE.md", target)?;
-    create_agent_symlink(worktree_path, "AGENTS.md", target)?;
-    Ok(())
+    if let Some(action) = check_agent_symlink(worktree_path, "CLAUDE.md", target, dry_run)? {
+        actions.push(action);
+    }
+    if let Some(action) = check_agent_symlink(worktree_path, "AGENTS.md", target, dry_run)? {
+        actions.push(action);
+    }
+
+    Ok(actions)
 }
 
-fn create_agent_symlink(worktree_path: &Path, filename: &str, target: &Path) -> Result<(), String> {
+/// Returns Some(action) if the symlink needed creating/fixing, None if already correct.
+fn check_agent_symlink(
+    worktree_path: &Path,
+    filename: &str,
+    target: &Path,
+    dry_run: bool,
+) -> Result<Option<String>, String> {
     let link_path = worktree_path.join(filename);
     if link_path.symlink_metadata().is_ok() {
         if link_path.read_link().ok().as_deref() == Some(target) {
-            return Ok(());
+            return Ok(None);
         }
-        // Mark as assume-unchanged before replacing (no-op if untracked)
-        let _ = std::process::Command::new("git")
-            .args(["update-index", "--assume-unchanged", filename])
-            .current_dir(worktree_path)
-            .output();
-        fs::remove_file(&link_path).map_err(|e| format!("Failed to remove {}: {}", filename, e))?;
+        if !dry_run {
+            let _ = std::process::Command::new("git")
+                .args(["update-index", "--assume-unchanged", filename])
+                .current_dir(worktree_path)
+                .output();
+            fs::remove_file(&link_path)
+                .map_err(|e| format!("Failed to remove {}: {}", filename, e))?;
+        }
     }
-    std::os::unix::fs::symlink(target, &link_path)
-        .map_err(|e| format!("Failed to create {} symlink: {}", filename, e))
+    let action = format!("symlink {} -> {}", filename, target.display());
+    if !dry_run {
+        std::os::unix::fs::symlink(target, &link_path)
+            .map_err(|e| format!("Failed to create {} symlink: {}", filename, e))?;
+    }
+    Ok(Some(action))
 }
 
-fn ensure_gitattributes_entry(worktree_path: &Path) -> Result<(), String> {
+/// Returns Some(action) if .gitattributes needed updating, None if already correct.
+fn check_gitattributes_entry(
+    worktree_path: &Path,
+    dry_run: bool,
+) -> Result<Option<String>, String> {
     let gitattributes_path = worktree_path.join(".gitattributes");
     let entry = ".task/ linguist-generated";
 
     let contents = fs::read_to_string(&gitattributes_path).unwrap_or_default();
     if contents.lines().any(|line| line.trim() == entry) {
-        return Ok(());
+        return Ok(None);
     }
 
-    let new_contents = if contents.is_empty() || contents.ends_with('\n') {
-        format!("{}{}\n", contents, entry)
-    } else {
-        format!("{}\n{}\n", contents, entry)
-    };
+    if !dry_run {
+        let new_contents = if contents.is_empty() || contents.ends_with('\n') {
+            format!("{}{}\n", contents, entry)
+        } else {
+            format!("{}\n{}\n", contents, entry)
+        };
+        fs::write(&gitattributes_path, new_contents)
+            .map_err(|e| format!("Failed to update .gitattributes: {}", e))?;
+    }
 
-    fs::write(&gitattributes_path, new_contents)
-        .map_err(|e| format!("Failed to update .gitattributes: {}", e))
+    Ok(Some(
+        "add .task/ linguist-generated to .gitattributes".into(),
+    ))
 }
 
 fn diagnose_task_not_found(
@@ -283,6 +332,42 @@ mod tests {
         setup_task_worktree(worktree, "repo", "branch").unwrap();
         let preserved = fs::read_to_string(worktree.join(".task/AGENTS.md")).unwrap();
         assert_eq!(preserved, "# Custom\n");
+    }
+
+    #[test]
+    fn conform_reports_actions_on_fresh_worktree() {
+        let dir = tempfile::tempdir().unwrap();
+        let worktree = dir.path();
+
+        let actions = conform_task_worktree(worktree, "repo", "branch", false).unwrap();
+        assert!(actions.iter().any(|a| a.contains(".task/")));
+        assert!(actions.iter().any(|a| a.contains("CLAUDE.md")));
+        assert!(actions.iter().any(|a| a.contains("AGENTS.md")));
+    }
+
+    #[test]
+    fn conform_dry_run_makes_no_changes() {
+        let dir = tempfile::tempdir().unwrap();
+        let worktree = dir.path();
+
+        let actions = conform_task_worktree(worktree, "repo", "branch", true).unwrap();
+        assert!(!actions.is_empty());
+        assert!(!worktree.join(".task").exists());
+        assert!(!worktree.join("CLAUDE.md").exists());
+    }
+
+    #[test]
+    fn conform_already_conformed_reports_no_actions() {
+        let dir = tempfile::tempdir().unwrap();
+        let worktree = dir.path();
+
+        conform_task_worktree(worktree, "repo", "branch", false).unwrap();
+        let actions = conform_task_worktree(worktree, "repo", "branch", false).unwrap();
+        assert!(
+            actions.is_empty(),
+            "expected no actions, got: {:?}",
+            actions
+        );
     }
 }
 

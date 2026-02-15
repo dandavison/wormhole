@@ -147,26 +147,19 @@ pub(super) fn doctor_persisted_data(output: &str) -> Result<(), String> {
     Ok(())
 }
 
-pub(super) fn doctor_conform(client: &Client) -> Result<(), String> {
-    let response = client.post("/doctor/conform")?;
-    let result: ConformResult = serde_json::from_str(&response).map_err(|e| e.to_string())?;
-
-    let mut ok = 0;
-    let mut errs = 0;
-    for r in &result.results {
-        match &r.error {
-            None => {
-                let key = ProjectKey::parse(&r.task);
-                println!("  {}", key.hyperlink());
-                ok += 1;
-            }
-            Some(e) => {
-                eprintln!("  {} error: {}", r.task, e);
-                errs += 1;
-            }
-        }
+pub(super) fn doctor_conform(client: &Client, dry_run: bool, output: &str) -> Result<(), String> {
+    let path = if dry_run {
+        "/doctor/conform?dry-run=true"
+    } else {
+        "/doctor/conform"
+    };
+    let response = client.post(path)?;
+    if output == "json" {
+        println!("{}", response);
+    } else {
+        let result: ConformResult = serde_json::from_str(&response).map_err(|e| e.to_string())?;
+        println!("{}", result.render_terminal());
     }
-    println!("Conformed {} task(s), {} error(s).", ok, errs);
     Ok(())
 }
 

@@ -38,6 +38,7 @@ pub struct QueryParams {
     pub active: bool,
     pub current: Option<String>,
     pub completed: Option<usize>,
+    pub dry_run: bool,
 }
 
 pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
@@ -102,7 +103,7 @@ async fn route(
             projects::refresh_tasks();
             Response::new(Body::from(""))
         }),
-        "/doctor/conform" => require_post(method, doctor::conform),
+        "/doctor/conform" => require_post(method, || doctor::conform(params.dry_run)),
         "/project/show" => project::show(None),
         "/batch" => match *method {
             Method::POST => batch::start_batch(req).await,
@@ -303,6 +304,7 @@ impl QueryParams {
             active: false,
             current: None,
             completed: None,
+            dry_run: false,
         };
         if let Some(query) = query {
             for (key, val) in form_urlencoded::parse(query.as_bytes()) {
@@ -330,6 +332,7 @@ impl QueryParams {
                         }
                     }
                     "completed" => params.completed = val.parse().ok(),
+                    "dry-run" => params.dry_run = val == "true" || val == "1",
                     _ => {}
                 }
             }

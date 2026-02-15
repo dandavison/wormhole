@@ -1,9 +1,4 @@
--- Wormhole Hammerspoon integration
--- Usage in init.lua:
---   local wormhole = require("wormhole")
---   wormhole.bindSelect({ "cmd" }, "f13")
---   hs.hotkey.bind({ "cmd", "control" }, "left", wormhole.previous)
---   etc.
+-- Wormhole Hammerspoon module
 
 local M = {}
 local ring = require("ring")

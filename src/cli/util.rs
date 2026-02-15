@@ -34,6 +34,25 @@ impl Client {
             .map_err(|e| format!("Failed to read response: {}", e))
     }
 
+    pub(super) fn post_json(&self, path: &str, body: &serde_json::Value) -> Result<String, String> {
+        ureq::post(&format!("{}{}", self.base_url, path))
+            .set("Content-Type", "application/json")
+            .send_string(&body.to_string())
+            .map_err(map_ureq_error)?
+            .into_string()
+            .map_err(|e| format!("Failed to read response: {}", e))
+    }
+
+    pub(super) fn get_with_wait(&self, path: &str, wait_secs: u64) -> Result<String, String> {
+        ureq::get(&format!("{}{}", self.base_url, path))
+            .set("Prefer", &format!("wait={}", wait_secs))
+            .timeout(std::time::Duration::from_secs(wait_secs + 10))
+            .call()
+            .map_err(map_ureq_error)?
+            .into_string()
+            .map_err(|e| format!("Failed to read response: {}", e))
+    }
+
     pub(super) fn put(&self, path: &str, body: &str) -> Result<String, String> {
         ureq::put(&format!("{}{}", self.base_url, path))
             .send_string(body)

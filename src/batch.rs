@@ -1,0 +1,482 @@
+use lazy_static::lazy_static;
+use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Mutex, MutexGuard};
+use std::time::SystemTime;
+use tokio::sync::watch;
+
+static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+
+lazy_static! {
+    static ref STORE: Mutex<Vec<Batch>> = Mutex::new(Vec::new());
+    static ref VERSION: (watch::Sender<u64>, watch::Receiver<u64>) = watch::channel(0);
+}
+
+pub fn notify_change() {
+    VERSION.0.send_modify(|v| *v = v.wrapping_add(1));
+}
+
+pub fn subscribe() -> watch::Receiver<u64> {
+    VERSION.1.clone()
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RunStatus {
+    Pending,
+    Running,
+    Succeeded,
+    Failed,
+    Cancelled,
+}
+
+#[derive(Debug, Serialize)]
+pub struct Run {
+    pub key: String,
+    pub dir: PathBuf,
+    pub status: RunStatus,
+    pub exit_code: Option<i32>,
+    pub stdout_path: PathBuf,
+    pub stderr_path: PathBuf,
+    #[serde(skip)]
+    pub pid: Option<u32>,
+    pub started_at: Option<SystemTime>,
+    pub finished_at: Option<SystemTime>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct Batch {
+    pub id: String,
+    pub command: Vec<String>,
+    pub created_at: SystemTime,
+    pub runs: Vec<Run>,
+}
+
+impl Batch {
+    pub fn completed_count(&self) -> usize {
+        self.runs
+            .iter()
+            .filter(|r| {
+                matches!(
+                    r.status,
+                    RunStatus::Succeeded | RunStatus::Failed | RunStatus::Cancelled
+                )
+            })
+            .count()
+    }
+
+    pub fn is_done(&self) -> bool {
+        self.completed_count() == self.runs.len()
+    }
+}
+
+#[derive(Deserialize)]
+pub struct RunSpec {
+    pub key: String,
+    pub dir: PathBuf,
+}
+
+#[derive(Deserialize)]
+pub struct BatchRequest {
+    pub command: Vec<String>,
+    pub runs: Vec<RunSpec>,
+}
+
+pub struct Store<'a>(MutexGuard<'a, Vec<Batch>>);
+
+pub fn lock() -> Store<'static> {
+    Store(STORE.lock().unwrap())
+}
+
+impl<'a> Store<'a> {
+    pub fn get(&self, id: &str) -> Option<&Batch> {
+        self.0.iter().find(|b| b.id == id)
+    }
+
+    pub fn get_mut(&mut self, id: &str) -> Option<&mut Batch> {
+        self.0.iter_mut().find(|b| b.id == id)
+    }
+
+    pub fn all(&self) -> &[Batch] {
+        &self.0
+    }
+
+    pub fn insert(&mut self, batch: Batch) {
+        self.0.push(batch);
+    }
+}
+
+/// Create a new batch from a request, returning the batch ID.
+/// Does not start execution — call `spawn_batch` after.
+pub fn create_batch(req: BatchRequest) -> String {
+    let id = format!("b{}", NEXT_ID.fetch_add(1, Ordering::Relaxed));
+    let output_dir = std::env::temp_dir().join(format!("wormhole-batch-{}", id));
+    let _ = fs::create_dir_all(&output_dir);
+
+    let runs = req
+        .runs
+        .into_iter()
+        .enumerate()
+        .map(|(i, spec)| Run {
+            key: spec.key,
+            dir: spec.dir,
+            status: RunStatus::Pending,
+            exit_code: None,
+            stdout_path: output_dir.join(format!("{}.stdout", i)),
+            stderr_path: output_dir.join(format!("{}.stderr", i)),
+            pid: None,
+            started_at: None,
+            finished_at: None,
+        })
+        .collect();
+
+    let batch = Batch {
+        id: id.clone(),
+        command: req.command,
+        created_at: SystemTime::now(),
+        runs,
+    };
+    lock().insert(batch);
+    id
+}
+
+/// Spawn all runs in a batch. Each run gets its own thread.
+pub fn spawn_batch(batch_id: &str) {
+    let store = lock();
+    let batch = match store.get(batch_id) {
+        Some(b) => b,
+        None => return,
+    };
+
+    let command = batch.command.clone();
+    let run_specs: Vec<(usize, PathBuf, PathBuf, PathBuf)> = batch
+        .runs
+        .iter()
+        .enumerate()
+        .map(|(i, r)| {
+            (
+                i,
+                r.dir.clone(),
+                r.stdout_path.clone(),
+                r.stderr_path.clone(),
+            )
+        })
+        .collect();
+    let id = batch_id.to_string();
+    drop(store);
+
+    for (idx, dir, stdout_path, stderr_path) in run_specs {
+        let cmd = command.clone();
+        let batch_id = id.clone();
+        std::thread::spawn(move || {
+            run_command(&batch_id, idx, &cmd, &dir, &stdout_path, &stderr_path)
+        });
+    }
+}
+
+fn run_command(
+    batch_id: &str,
+    idx: usize,
+    command: &[String],
+    dir: &PathBuf,
+    stdout_path: &PathBuf,
+    stderr_path: &PathBuf,
+) {
+    // Mark running
+    {
+        let mut store = lock();
+        if let Some(batch) = store.get_mut(batch_id) {
+            let run = &mut batch.runs[idx];
+            if run.status == RunStatus::Cancelled {
+                return;
+            }
+            run.status = RunStatus::Running;
+            run.started_at = Some(SystemTime::now());
+        }
+        notify_change();
+    }
+
+    let stdout_file = fs::File::create(stdout_path).ok();
+    let stderr_file = fs::File::create(stderr_path).ok();
+
+    let result = std::process::Command::new(&command[0])
+        .args(&command[1..])
+        .current_dir(dir)
+        .stdout(
+            stdout_file
+                .map(std::process::Stdio::from)
+                .unwrap_or(std::process::Stdio::null()),
+        )
+        .stderr(
+            stderr_file
+                .map(std::process::Stdio::from)
+                .unwrap_or(std::process::Stdio::null()),
+        )
+        .spawn();
+
+    match result {
+        Ok(mut child) => {
+            // Store PID
+            {
+                let mut store = lock();
+                if let Some(batch) = store.get_mut(batch_id) {
+                    batch.runs[idx].pid = Some(child.id());
+                }
+            }
+
+            let exit = child.wait();
+            let mut store = lock();
+            if let Some(batch) = store.get_mut(batch_id) {
+                let run = &mut batch.runs[idx];
+                run.finished_at = Some(SystemTime::now());
+                run.pid = None;
+                match exit {
+                    Ok(status) => {
+                        run.exit_code = status.code();
+                        if run.status == RunStatus::Running {
+                            run.status = if status.success() {
+                                RunStatus::Succeeded
+                            } else {
+                                RunStatus::Failed
+                            };
+                        }
+                    }
+                    Err(_) => {
+                        if run.status == RunStatus::Running {
+                            run.status = RunStatus::Failed;
+                        }
+                    }
+                }
+            }
+            notify_change();
+        }
+        Err(_) => {
+            let mut store = lock();
+            if let Some(batch) = store.get_mut(batch_id) {
+                let run = &mut batch.runs[idx];
+                run.status = RunStatus::Failed;
+                run.finished_at = Some(SystemTime::now());
+            }
+            notify_change();
+        }
+    }
+}
+
+/// Cancel a batch: SIGTERM running processes, mark pending/running as Cancelled.
+pub fn cancel_batch(batch_id: &str) -> bool {
+    let mut store = lock();
+    let batch = match store.get_mut(batch_id) {
+        Some(b) => b,
+        None => return false,
+    };
+    for run in &mut batch.runs {
+        match run.status {
+            RunStatus::Pending => {
+                run.status = RunStatus::Cancelled;
+                run.finished_at = Some(SystemTime::now());
+            }
+            RunStatus::Running => {
+                if let Some(pid) = run.pid {
+                    unsafe {
+                        libc::kill(pid as i32, libc::SIGTERM);
+                    }
+                }
+                // Status will be updated to Cancelled when the process exits,
+                // but mark it now so the API reflects it immediately.
+                run.status = RunStatus::Cancelled;
+            }
+            _ => {}
+        }
+    }
+    notify_change();
+    true
+}
+
+/// Remove completed batches older than the given duration.
+#[allow(dead_code)]
+pub fn gc(max_age: std::time::Duration) {
+    let cutoff = SystemTime::now() - max_age;
+    let mut store = lock();
+    store.0.retain(|batch| {
+        if !batch.is_done() {
+            return true;
+        }
+        if batch.created_at > cutoff {
+            return true;
+        }
+        // Clean up output files
+        for run in &batch.runs {
+            let _ = fs::remove_file(&run.stdout_path);
+            let _ = fs::remove_file(&run.stderr_path);
+        }
+        let output_dir = std::env::temp_dir().join(format!("wormhole-batch-{}", batch.id));
+        let _ = fs::remove_dir(&output_dir);
+        false
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_create_and_get_batch() {
+        let req = BatchRequest {
+            command: vec!["echo".into(), "hello".into()],
+            runs: vec![
+                RunSpec {
+                    key: "proj-a".into(),
+                    dir: "/tmp".into(),
+                },
+                RunSpec {
+                    key: "proj-b".into(),
+                    dir: "/tmp".into(),
+                },
+            ],
+        };
+        let id = create_batch(req);
+        let store = lock();
+        let batch = store.get(&id).unwrap();
+        assert_eq!(batch.command, vec!["echo", "hello"]);
+        assert_eq!(batch.runs.len(), 2);
+        assert_eq!(batch.runs[0].status, RunStatus::Pending);
+        assert_eq!(batch.runs[1].key, "proj-b");
+        assert_eq!(batch.completed_count(), 0);
+        assert!(!batch.is_done());
+    }
+
+    #[test]
+    fn test_completed_count() {
+        let req = BatchRequest {
+            command: vec!["true".into()],
+            runs: vec![
+                RunSpec {
+                    key: "a".into(),
+                    dir: "/tmp".into(),
+                },
+                RunSpec {
+                    key: "b".into(),
+                    dir: "/tmp".into(),
+                },
+            ],
+        };
+        let id = create_batch(req);
+        {
+            let mut store = lock();
+            let batch = store.get_mut(&id).unwrap();
+            batch.runs[0].status = RunStatus::Succeeded;
+            batch.runs[1].status = RunStatus::Running;
+        }
+        let store = lock();
+        let batch = store.get(&id).unwrap();
+        assert_eq!(batch.completed_count(), 1);
+        assert!(!batch.is_done());
+    }
+
+    #[test]
+    fn test_spawn_batch_real_command() {
+        let dir = std::env::temp_dir();
+        let req = BatchRequest {
+            command: vec!["echo".into(), "hello".into()],
+            runs: vec![RunSpec {
+                key: "test".into(),
+                dir: dir.clone(),
+            }],
+        };
+        let id = create_batch(req);
+        spawn_batch(&id);
+
+        // Wait for completion
+        for _ in 0..100 {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            let store = lock();
+            let batch = store.get(&id).unwrap();
+            if batch.is_done() {
+                assert_eq!(batch.runs[0].status, RunStatus::Succeeded);
+                assert_eq!(batch.runs[0].exit_code, Some(0));
+                let stdout = std::fs::read_to_string(&batch.runs[0].stdout_path).unwrap();
+                assert_eq!(stdout.trim(), "hello");
+                return;
+            }
+        }
+        panic!("batch did not complete in time");
+    }
+
+    #[test]
+    fn test_spawn_batch_failed_command() {
+        let dir = std::env::temp_dir();
+        let req = BatchRequest {
+            command: vec!["false".into()],
+            runs: vec![RunSpec {
+                key: "test".into(),
+                dir,
+            }],
+        };
+        let id = create_batch(req);
+        spawn_batch(&id);
+
+        for _ in 0..100 {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            let store = lock();
+            let batch = store.get(&id).unwrap();
+            if batch.is_done() {
+                assert_eq!(batch.runs[0].status, RunStatus::Failed);
+                return;
+            }
+        }
+        panic!("batch did not complete in time");
+    }
+
+    #[test]
+    fn test_gc_removes_old_batches() {
+        let req = BatchRequest {
+            command: vec!["true".into()],
+            runs: vec![RunSpec {
+                key: "gc-test".into(),
+                dir: "/tmp".into(),
+            }],
+        };
+        let id = create_batch(req);
+        {
+            let mut store = lock();
+            let batch = store.get_mut(&id).unwrap();
+            batch.runs[0].status = RunStatus::Succeeded;
+            // Backdate creation
+            batch.created_at = std::time::SystemTime::UNIX_EPOCH;
+        }
+        gc(std::time::Duration::from_secs(1));
+        let store = lock();
+        assert!(store.get(&id).is_none(), "old batch should be evicted");
+    }
+
+    #[test]
+    fn test_cancel_batch() {
+        let req = BatchRequest {
+            command: vec!["sleep".into(), "999".into()],
+            runs: vec![
+                RunSpec {
+                    key: "a".into(),
+                    dir: "/tmp".into(),
+                },
+                RunSpec {
+                    key: "b".into(),
+                    dir: "/tmp".into(),
+                },
+            ],
+        };
+        let id = create_batch(req);
+        {
+            let mut store = lock();
+            let batch = store.get_mut(&id).unwrap();
+            batch.runs[0].status = RunStatus::Running;
+            // runs[1] stays Pending
+        }
+        assert!(cancel_batch(&id));
+        let store = lock();
+        let batch = store.get(&id).unwrap();
+        assert_eq!(batch.runs[0].status, RunStatus::Cancelled);
+        assert_eq!(batch.runs[1].status, RunStatus::Cancelled);
+    }
+}

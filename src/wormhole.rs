@@ -2,7 +2,7 @@ use std::convert::Infallible;
 use std::thread;
 
 use crate::handlers;
-use crate::handlers::{dashboard, describe, project};
+use crate::handlers::{batch, dashboard, describe, project};
 use crate::project_path::ProjectPath;
 use crate::projects;
 use crate::projects::Mutation;
@@ -37,6 +37,7 @@ pub struct QueryParams {
     pub pwd: Option<String>,
     pub active: bool,
     pub current: Option<String>,
+    pub completed: Option<usize>,
 }
 
 pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
@@ -102,6 +103,11 @@ async fn route(
             Response::new(Body::from(""))
         }),
         "/project/show" => project::show(None),
+        "/batch" => match *method {
+            Method::POST => batch::start_batch(req).await,
+            Method::GET => batch::list_batches(),
+            _ => method_not_allowed(),
+        },
         "/" => dashboard::dashboard(),
         "/favicon.png" => handlers::favicon(),
         "/shell" => project::shell_env(params.pwd.as_deref()),
@@ -116,6 +122,12 @@ async fn route_with_params(
     path: &str,
     params: &QueryParams,
 ) -> Response<Body> {
+    if let Some(rest) = path.strip_prefix("/batch/") {
+        if let Some(id) = rest.strip_suffix("/cancel") {
+            return require_post(method, || batch::cancel(id));
+        }
+        return batch::batch_status(rest, &req, params.completed).await;
+    }
     if let Some(name) = path.strip_prefix("/project/remove/") {
         return require_post(method, || project::remove(name));
     }
@@ -195,6 +207,13 @@ fn determine_requested_operation(
     } else {
         None
     }
+}
+
+fn method_not_allowed() -> Response<Body> {
+    Response::builder()
+        .status(StatusCode::METHOD_NOT_ALLOWED)
+        .body(Body::from("Method not allowed"))
+        .unwrap()
 }
 
 fn require_post<F>(method: &Method, handler: F) -> Response<Body>
@@ -282,6 +301,7 @@ impl QueryParams {
             pwd: None,
             active: false,
             current: None,
+            completed: None,
         };
         if let Some(query) = query {
             for (key, val) in form_urlencoded::parse(query.as_bytes()) {
@@ -308,6 +328,7 @@ impl QueryParams {
                             Some(val.to_string())
                         }
                     }
+                    "completed" => params.completed = val.parse().ok(),
                     _ => {}
                 }
             }

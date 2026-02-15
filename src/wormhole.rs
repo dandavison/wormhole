@@ -140,6 +140,9 @@ async fn route_with_params(
     if let Some(name) = path.strip_prefix("/project/vscode/") {
         return cors_response(project::vscode_url(name));
     }
+    if let Some(asset_path) = path.strip_prefix("/asset/") {
+        return handlers::serve_asset(asset_path);
+    }
     if let Some(kv_path) = path.strip_prefix("/kv/") {
         return handle_kv_request(method, kv_path, req).await;
     }

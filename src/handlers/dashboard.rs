@@ -292,7 +292,31 @@ fn render_markdown(md: &str) -> String {
     let parser = Parser::new_ext(md, Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TABLES);
     let mut html_output = String::new();
     html::push_html(&mut html_output, parser);
+    // Rewrite absolute image paths so the browser fetches them via /asset/.
+    rewrite_img_src(&mut html_output);
     html_output
+}
+
+/// Rewrite `<img src="/absolute/path">` to `<img src="/asset/absolute/path">`
+/// so local images in card.md are served through the asset endpoint.
+fn rewrite_img_src(html: &mut String) {
+    let needle = "src=\"/";
+    let mut result = String::with_capacity(html.len());
+    let mut rest = html.as_str();
+    while let Some(idx) = rest.find(needle) {
+        let after = &rest[idx + needle.len()..]; // text after src="/
+        // Don't rewrite URLs that are already routed (e.g. src="/asset/...")
+        if after.starts_with("asset/") {
+            result.push_str(&rest[..idx + needle.len()]);
+            rest = after;
+            continue;
+        }
+        result.push_str(&rest[..idx]);
+        result.push_str("src=\"/asset/");
+        rest = after;
+    }
+    result.push_str(rest);
+    *html = result;
 }
 
 fn status_sort_order(status: Option<&str>) -> u8 {
@@ -302,5 +326,49 @@ fn status_sort_order(status: Option<&str>) -> u8 {
         Some("in progress") => 2,
         Some("to do") => 3,
         _ => 4,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_rewrite_img_src_absolute_path() {
+        let mut html = r#"<img src="/Users/me/pic.png" alt="pic">"#.to_string();
+        rewrite_img_src(&mut html);
+        assert_eq!(html, r#"<img src="/asset/Users/me/pic.png" alt="pic">"#);
+    }
+
+    #[test]
+    fn test_rewrite_img_src_already_asset() {
+        let mut html = r#"<img src="/asset/Users/me/pic.png">"#.to_string();
+        rewrite_img_src(&mut html);
+        assert_eq!(html, r#"<img src="/asset/Users/me/pic.png">"#);
+    }
+
+    #[test]
+    fn test_rewrite_img_src_no_images() {
+        let mut html = "<p>hello world</p>".to_string();
+        rewrite_img_src(&mut html);
+        assert_eq!(html, "<p>hello world</p>");
+    }
+
+    #[test]
+    fn test_rewrite_img_src_multiple_images() {
+        let mut html =
+            r#"<img src="/a/b.png"><img src="/c/d.jpg">"#.to_string();
+        rewrite_img_src(&mut html);
+        assert_eq!(
+            html,
+            r#"<img src="/asset/a/b.png"><img src="/asset/c/d.jpg">"#
+        );
+    }
+
+    #[test]
+    fn test_rewrite_img_src_relative_untouched() {
+        let mut html = r#"<img src="relative/pic.png">"#.to_string();
+        rewrite_img_src(&mut html);
+        assert_eq!(html, r#"<img src="relative/pic.png">"#);
     }
 }

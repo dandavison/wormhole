@@ -200,41 +200,51 @@ fn render_task_card(
 
 fn render_iframe(task: &crate::project::Project) -> String {
     let path = task.working_tree();
+    let terminal_icon = include_str!("icons/terminal.b64");
+    let cursor_icon = include_str!("icons/cursor.b64");
     let claude_btn = claude_md_button(&path);
-    match crate::serve_web::manager().get_or_start(task.repo_name.as_str(), &path) {
-        Ok(port) => {
-            let folder_encoded = super::url_encode(&path.to_string_lossy());
-            let terminal_icon = include_str!("icons/terminal.b64");
-            let cursor_icon = include_str!("icons/cursor.b64");
-            let vscode_icon = include_str!("icons/vscode.b64");
-            format!(
-                concat!(
-                    r#"<div class="card-actions">"#,
-                    r#"<button class="btn btn-icon btn-terminal" title="Terminal">"#,
-                    r#"<img src="data:image/png;base64,{}" alt="Terminal"></button>"#,
-                    r#"<button class="btn btn-icon btn-cursor" title="Cursor">"#,
-                    r#"<img src="data:image/png;base64,{}" alt="Cursor"></button>"#,
-                    r#"<button class="btn btn-icon btn-vscode" title="VSCode">"#,
-                    r#"<img src="data:image/png;base64,{}" alt="VSCode"></button>"#,
-                    r#"{}"#,
-                    r#"<button class="btn btn-maximize">Maximize</button></div>"#,
-                    "\n",
-                    r#"<div class="iframe-container">"#,
-                    r#"<iframe data-src="http://localhost:{}/?folder={}"></iframe></div>"#,
-                ),
-                terminal_icon.trim(),
-                cursor_icon.trim(),
-                vscode_icon.trim(),
-                claude_btn,
-                port,
-                folder_encoded
-            )
-        }
-        Err(_) if !claude_btn.is_empty() => {
-            format!(r#"<div class="card-actions">{}</div>"#, claude_btn)
-        }
-        Err(_) => String::new(),
+
+    // Terminal and Cursor buttons are always available — they don't depend on serve-web.
+    let mut actions = format!(
+        concat!(
+            r#"<button class="btn btn-icon btn-terminal" title="Terminal">"#,
+            r#"<img src="data:image/png;base64,{}" alt="Terminal"></button>"#,
+            r#"<button class="btn btn-icon btn-cursor" title="Cursor">"#,
+            r#"<img src="data:image/png;base64,{}" alt="Cursor"></button>"#,
+        ),
+        terminal_icon.trim(),
+        cursor_icon.trim(),
+    );
+
+    // VSCode button + iframe only appear when serve-web starts successfully.
+    let mut iframe_html = String::new();
+    if let Ok(port) = crate::serve_web::manager().get_or_start(task.repo_name.as_str(), &path) {
+        let folder_encoded = super::url_encode(&path.to_string_lossy());
+        let vscode_icon = include_str!("icons/vscode.b64");
+        actions.push_str(&format!(
+            concat!(
+                r#"<button class="btn btn-icon btn-vscode" title="VSCode">"#,
+                r#"<img src="data:image/png;base64,{}" alt="VSCode"></button>"#,
+            ),
+            vscode_icon.trim(),
+        ));
+        iframe_html = format!(
+            concat!(
+                "\n",
+                r#"<div class="iframe-container">"#,
+                r#"<iframe data-src="http://localhost:{}/?folder={}"></iframe></div>"#,
+            ),
+            port,
+            folder_encoded,
+        );
     }
+
+    actions.push_str(&claude_btn);
+    if !iframe_html.is_empty() {
+        actions.push_str(r#"<button class="btn btn-maximize">Maximize</button>"#);
+    }
+
+    format!(r#"<div class="card-actions">{}</div>{}"#, actions, iframe_html)
 }
 
 fn claude_md_button(path: &std::path::Path) -> String {

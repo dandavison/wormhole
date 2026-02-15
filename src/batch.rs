@@ -186,7 +186,10 @@ impl Batch {
 
 impl Run {
     fn to_response(&self) -> RunResponse {
-        let is_done = matches!(self.status, RunStatus::Succeeded | RunStatus::Failed | RunStatus::Cancelled);
+        let is_done = matches!(
+            self.status,
+            RunStatus::Succeeded | RunStatus::Failed | RunStatus::Cancelled
+        );
         RunResponse {
             key: self.key.clone(),
             dir: self.dir.clone(),
@@ -194,8 +197,16 @@ impl Run {
             exit_code: self.exit_code,
             started_at: self.started_at.map(system_time_to_epoch),
             finished_at: self.finished_at.map(system_time_to_epoch),
-            stdout: if is_done { fs::read_to_string(&self.stdout_path).ok() } else { None },
-            stderr: if is_done { fs::read_to_string(&self.stderr_path).ok() } else { None },
+            stdout: if is_done {
+                fs::read_to_string(&self.stdout_path).ok()
+            } else {
+                None
+            },
+            stderr: if is_done {
+                fs::read_to_string(&self.stderr_path).ok()
+            } else {
+                None
+            },
         }
     }
 }
@@ -208,7 +219,8 @@ impl BatchResponse {
         for run in &sorted {
             let status_str = match run.status {
                 RunStatus::Failed => {
-                    let code = run.exit_code
+                    let code = run
+                        .exit_code
                         .map(|c| format!(" (exit {})", c))
                         .unwrap_or_default();
                     format!(" FAILED{}", code)
@@ -235,10 +247,19 @@ impl BatchResponse {
             }
             out.push('\n');
         }
-        let failed = sorted.iter().filter(|r| r.status == RunStatus::Failed).count();
-        let cancelled = sorted.iter().filter(|r| r.status == RunStatus::Cancelled).count();
+        let failed = sorted
+            .iter()
+            .filter(|r| r.status == RunStatus::Failed)
+            .count();
+        let cancelled = sorted
+            .iter()
+            .filter(|r| r.status == RunStatus::Cancelled)
+            .count();
         if failed > 0 || cancelled > 0 {
-            let succeeded = sorted.iter().filter(|r| r.status == RunStatus::Succeeded).count();
+            let succeeded = sorted
+                .iter()
+                .filter(|r| r.status == RunStatus::Succeeded)
+                .count();
             out.push_str(&format!(
                 "{}/{} succeeded, {} failed, {} cancelled\n",
                 succeeded, self.total, failed, cancelled
@@ -258,7 +279,11 @@ impl BatchListResponse {
             let status_str = if b.done { "done" } else { "running" };
             out.push_str(&format!(
                 "{} ({}/{}) [{}] {}\n",
-                b.id, b.completed, b.total, status_str, b.command.join(" ")
+                b.id,
+                b.completed,
+                b.total,
+                status_str,
+                b.command.join(" ")
             ));
         }
         out
@@ -269,11 +294,8 @@ impl BatchListResponse {
 /// Does not start execution — call `spawn_batch` after.
 pub fn create_batch(req: BatchRequest) -> String {
     let id = format!("b{}", NEXT_ID.fetch_add(1, Ordering::Relaxed));
-    let output_dir = std::env::temp_dir().join(format!(
-        "wormhole-batch-{}-{}",
-        std::process::id(),
-        id
-    ));
+    let output_dir =
+        std::env::temp_dir().join(format!("wormhole-batch-{}-{}", std::process::id(), id));
     let _ = fs::create_dir_all(&output_dir);
 
     let runs = req
@@ -442,7 +464,9 @@ fn shell_command_line(command: &[String]) -> String {
 }
 
 fn shell_escape(s: &str) -> String {
-    if s.chars().all(|c| c.is_alphanumeric() || "-_./=:@%+,".contains(c)) {
+    if s.chars()
+        .all(|c| c.is_alphanumeric() || "-_./=:@%+,".contains(c))
+    {
         s.to_string()
     } else {
         format!("'{}'", s.replace('\'', "'\\''"))
@@ -652,10 +676,22 @@ mod tests {
             ],
         };
         let out = batch.render_terminal();
-        assert!(out.contains("## alpha\n"), "succeeded run has plain heading");
-        assert!(out.contains("## beta FAILED (exit 127)\n"), "failed run shows FAILED and exit code");
-        assert!(out.contains("command not found"), "stderr from failed run is shown");
-        assert!(out.contains("1/2 succeeded, 1 failed"), "summary line present");
+        assert!(
+            out.contains("## alpha\n"),
+            "succeeded run has plain heading"
+        );
+        assert!(
+            out.contains("## beta FAILED (exit 127)\n"),
+            "failed run shows FAILED and exit code"
+        );
+        assert!(
+            out.contains("command not found"),
+            "stderr from failed run is shown"
+        );
+        assert!(
+            out.contains("1/2 succeeded, 1 failed"),
+            "summary line present"
+        );
     }
 
     #[test]

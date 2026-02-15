@@ -200,7 +200,7 @@ pub(super) fn for_each(
     output: &str,
     verbose: bool,
 ) -> Result<(), String> {
-    use crate::batch::{BatchResponse, BatchListResponse};
+    use crate::batch::{BatchListResponse, BatchResponse};
 
     if let Some(batch_id) = cancel {
         let response = client.post(&format!("/batch/{}/cancel", batch_id))?;
@@ -227,7 +227,9 @@ pub(super) fn for_each(
     }
 
     if command.is_empty() {
-        return Err("No command specified. Use -- <command...> or --status to list batches.".into());
+        return Err(
+            "No command specified. Use -- <command...> or --status to list batches.".into(),
+        );
     }
 
     // Fetch project list
@@ -239,9 +241,7 @@ pub(super) fn for_each(
     let response = client.get(path)?;
     let json: serde_json::Value = serde_json::from_str(&response).map_err(|e| e.to_string())?;
 
-    let projects = json["current"]
-        .as_array()
-        .ok_or("No projects found")?;
+    let projects = json["current"].as_array().ok_or("No projects found")?;
 
     let runs: Vec<serde_json::Value> = projects
         .iter()
@@ -266,14 +266,22 @@ pub(super) fn for_each(
 
     let total = runs.len();
     if verbose {
-        eprintln!("Starting batch: {} across {} projects", command.join(" "), total);
+        eprintln!(
+            "Starting batch: {} across {} projects",
+            command.join(" "),
+            total
+        );
     }
 
-    unsafe { libc::signal(libc::SIGINT, sigint_handler as *const () as libc::sighandler_t); }
+    unsafe {
+        libc::signal(
+            libc::SIGINT,
+            sigint_handler as *const () as libc::sighandler_t,
+        );
+    }
 
     let response = client.post_json("/batch", &batch_req)?;
-    let mut batch: BatchResponse =
-        serde_json::from_str(&response).map_err(|e| e.to_string())?;
+    let mut batch: BatchResponse = serde_json::from_str(&response).map_err(|e| e.to_string())?;
 
     let mut seen_completed = batch.completed;
     let mut cancelled = false;
@@ -314,12 +322,20 @@ pub(super) fn for_each(
     }
 
     if output == "json" {
-        println!("{}", serde_json::to_string_pretty(&batch).map_err(|e| e.to_string())?);
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&batch).map_err(|e| e.to_string())?
+        );
     } else {
         print!("{}", batch.render_terminal());
     }
 
-    if batch.runs.iter().any(|r| matches!(r.status, crate::batch::RunStatus::Failed | crate::batch::RunStatus::Cancelled)) {
+    if batch.runs.iter().any(|r| {
+        matches!(
+            r.status,
+            crate::batch::RunStatus::Failed | crate::batch::RunStatus::Cancelled
+        )
+    }) {
         std::process::exit(1);
     }
     Ok(())

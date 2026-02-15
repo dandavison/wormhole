@@ -234,8 +234,7 @@ fn render_iframe(task: &crate::project::Project) -> String {
                 r#"<div class="iframe-container">"#,
                 r#"<iframe data-src="http://localhost:{}/?folder={}"></iframe></div>"#,
             ),
-            port,
-            folder_encoded,
+            port, folder_encoded,
         );
     }
 
@@ -244,7 +243,10 @@ fn render_iframe(task: &crate::project::Project) -> String {
         actions.push_str(r#"<button class="btn btn-maximize">Maximize</button>"#);
     }
 
-    format!(r#"<div class="card-actions">{}</div>{}"#, actions, iframe_html)
+    format!(
+        r#"<div class="card-actions">{}</div>{}"#,
+        actions, iframe_html
+    )
 }
 
 fn claude_md_button(path: &std::path::Path) -> String {
@@ -305,7 +307,7 @@ fn rewrite_img_src(html: &mut String) {
     let mut rest = html.as_str();
     while let Some(idx) = rest.find(needle) {
         let after = &rest[idx + needle.len()..]; // text after src="/
-        // Don't rewrite URLs that are already routed (e.g. src="/asset/...")
+                                                 // Don't rewrite URLs that are already routed (e.g. src="/asset/...")
         if after.starts_with("asset/") {
             result.push_str(&rest[..idx + needle.len()]);
             rest = after;
@@ -356,8 +358,7 @@ mod tests {
 
     #[test]
     fn test_rewrite_img_src_multiple_images() {
-        let mut html =
-            r#"<img src="/a/b.png"><img src="/c/d.jpg">"#.to_string();
+        let mut html = r#"<img src="/a/b.png"><img src="/c/d.jpg">"#.to_string();
         rewrite_img_src(&mut html);
         assert_eq!(
             html,

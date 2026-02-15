@@ -430,7 +430,9 @@ pub fn run(command: Command) -> Result<(), String> {
                 output,
                 verbose,
                 command,
-            } => project::for_each(&client, tasks, active, status, cancel, &command, &output, verbose),
+            } => project::for_each(
+                &client, tasks, active, status, cancel, &command, &output, verbose,
+            ),
             ProjectCommand::Show { name, output } => {
                 let path = match name {
                     Some(n) => format!("/project/show/{}", n),

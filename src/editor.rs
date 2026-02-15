@@ -226,19 +226,21 @@ pub fn migrate_workspace_files(repo_path: &Path) -> Result<usize, String> {
         let mut changed = false;
         if let Some(folders) = doc.get_mut("folders").and_then(|f| f.as_array_mut()) {
             for folder in folders.iter_mut() {
-                let p = folder.get("path").and_then(|p| p.as_str()).map(String::from);
+                let p = folder
+                    .get("path")
+                    .and_then(|p| p.as_str())
+                    .map(String::from);
                 if let Some(ref p) = p {
                     if let Some(child) = sole_worktree_child(Path::new(p)) {
-                        folder["path"] =
-                            serde_json::Value::String(child.display().to_string());
+                        folder["path"] = serde_json::Value::String(child.display().to_string());
                         changed = true;
                     }
                 }
             }
         }
         if changed {
-            let new_content = serde_json::to_string(&doc)
-                .map_err(|e| format!("Failed to serialize: {}", e))?;
+            let new_content =
+                serde_json::to_string(&doc).map_err(|e| format!("Failed to serialize: {}", e))?;
             fs::write(&path, &new_content)
                 .map_err(|e| format!("Failed to write {}: {}", path.display(), e))?;
             count += 1;
@@ -347,10 +349,7 @@ mod tests {
 
         // Write a stale workspace file pointing to the branch-level directory
         let ws_file = ws_dir.join("myrepo:sa-status.code-workspace");
-        let old_content = format!(
-            r#"{{"folders":[{{"path":"{}"}}]}}"#,
-            branch_dir.display()
-        );
+        let old_content = format!(r#"{{"folders":[{{"path":"{}"}}]}}"#, branch_dir.display());
         fs::write(&ws_file, &old_content).unwrap();
 
         let count = migrate_workspace_files(&repo).unwrap();
@@ -411,6 +410,9 @@ mod tests {
         assert_eq!(sole_worktree_child(&parent), Option::None);
 
         // Non-existent directory
-        assert_eq!(sole_worktree_child(temp.path().join("nope").as_path()), Option::None);
+        assert_eq!(
+            sole_worktree_child(temp.path().join("nope").as_path()),
+            Option::None
+        );
     }
 }

@@ -16,9 +16,7 @@ fn test_batch_create_and_poll() {
             { "key": "b", "dir": "/tmp" },
         ]
     });
-    let response = test
-        .http_post_json("/batch", &body.to_string())
-        .unwrap();
+    let response = test.http_post_json("/batch", &body.to_string()).unwrap();
     let batch: Value = serde_json::from_str(&response).unwrap();
 
     assert!(batch["id"].is_string(), "batch should have an id");
@@ -78,9 +76,7 @@ fn test_batch_failed_command_shows_stderr() {
         "command": ["nonexistent_cmd_xyz"],
         "runs": [{ "key": "proj", "dir": "/tmp" }]
     });
-    let response = test
-        .http_post_json("/batch", &body.to_string())
-        .unwrap();
+    let response = test.http_post_json("/batch", &body.to_string()).unwrap();
     let batch: Value = serde_json::from_str(&response).unwrap();
     let id = batch["id"].as_str().unwrap();
 
@@ -114,9 +110,7 @@ fn test_batch_shell_features() {
         "command": ["echo hello | tr a-z A-Z"],
         "runs": [{ "key": "proj", "dir": "/tmp" }]
     });
-    let response = test
-        .http_post_json("/batch", &body.to_string())
-        .unwrap();
+    let response = test.http_post_json("/batch", &body.to_string()).unwrap();
     let batch: Value = serde_json::from_str(&response).unwrap();
     let id = batch["id"].as_str().unwrap();
 
@@ -145,9 +139,7 @@ fn test_batch_cancel() {
         "command": ["sleep", "999"],
         "runs": [{ "key": "a", "dir": "/tmp" }]
     });
-    let response = test
-        .http_post_json("/batch", &body.to_string())
-        .unwrap();
+    let response = test.http_post_json("/batch", &body.to_string()).unwrap();
     let batch: Value = serde_json::from_str(&response).unwrap();
     let id = batch["id"].as_str().unwrap();
 
@@ -163,9 +155,7 @@ fn test_batch_cancel() {
     assert!(started, "run should start");
 
     // Cancel
-    let resp = test
-        .http_post(&format!("/batch/{}/cancel", id))
-        .unwrap();
+    let resp = test.http_post(&format!("/batch/{}/cancel", id)).unwrap();
     let _batch: Value = serde_json::from_str(&resp).unwrap();
 
     // Wait for completion
@@ -196,9 +186,7 @@ fn test_batch_long_poll() {
         "command": ["echo", "done"],
         "runs": [{ "key": "a", "dir": "/tmp" }]
     });
-    let response = test
-        .http_post_json("/batch", &body.to_string())
-        .unwrap();
+    let response = test.http_post_json("/batch", &body.to_string()).unwrap();
     let batch: Value = serde_json::from_str(&response).unwrap();
     let id = batch["id"].as_str().unwrap();
 
@@ -215,10 +203,7 @@ fn test_batch_long_poll() {
 
     let start = std::time::Instant::now();
     let (body, _) = test
-        .http_get_with_header(
-            &format!("/batch/{}?completed=0", id),
-            "Prefer: wait=5",
-        )
+        .http_get_with_header(&format!("/batch/{}?completed=0", id), "Prefer: wait=5")
         .unwrap();
     let elapsed = start.elapsed();
 

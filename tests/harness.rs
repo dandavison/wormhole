@@ -150,9 +150,15 @@ impl WormholeTest {
         let url = format!("http://127.0.0.1:{}{}", self.port, path);
         let output = Command::new("curl")
             .args([
-                "-s", "-f", "-X", "POST",
-                "-H", "Content-Type: application/json",
-                "-d", body, &url,
+                "-s",
+                "-f",
+                "-X",
+                "POST",
+                "-H",
+                "Content-Type: application/json",
+                "-d",
+                body,
+                &url,
             ])
             .output()
             .map_err(|e| format!("curl failed: {}", e))?;

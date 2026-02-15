@@ -1111,5 +1111,8 @@ fn test_task_worktree_agent_instructions() {
 
     // Reading through the symlink should give the same content
     let claude_content = std::fs::read_to_string(format!("{}/CLAUDE.md", worktree_path)).unwrap();
-    assert_eq!(claude_content, agents_md, "CLAUDE.md symlink should resolve to .task/AGENTS.md content");
+    assert_eq!(
+        claude_content, agents_md,
+        "CLAUDE.md symlink should resolve to .task/AGENTS.md content"
+    );
 }

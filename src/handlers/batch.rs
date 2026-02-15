@@ -37,7 +37,11 @@ pub fn list_batches() -> Response<Body> {
     json_response(StatusCode::OK, &response)
 }
 
-pub async fn batch_status(id: &str, req: &Request<Body>, completed: Option<usize>) -> Response<Body> {
+pub async fn batch_status(
+    id: &str,
+    req: &Request<Body>,
+    completed: Option<usize>,
+) -> Response<Body> {
     let wait = parse_prefer_wait(req);
 
     if wait > 0 {
@@ -98,8 +102,6 @@ fn error_response(status: StatusCode, msg: &str) -> Response<Body> {
     Response::builder()
         .status(status)
         .header("Content-Type", "application/json")
-        .body(Body::from(
-            serde_json::json!({ "error": msg }).to_string(),
-        ))
+        .body(Body::from(serde_json::json!({ "error": msg }).to_string()))
         .unwrap()
 }

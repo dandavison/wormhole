@@ -270,11 +270,8 @@ pub(super) fn for_each(
         "runs": runs,
     });
 
-    eprintln!(
-        "Starting batch: {} across {} projects",
-        command.join(" "),
-        runs.len()
-    );
+    let total = runs.len();
+    eprintln!("Starting batch: {} across {} projects", command.join(" "), total);
 
     let response = client.post_json("/batch", &batch_req)?;
     let mut batch: serde_json::Value =
@@ -290,40 +287,26 @@ pub(super) fn for_each(
         let completed = batch["completed"].as_u64().unwrap_or(0) as usize;
         let done = batch["done"].as_bool().unwrap_or(false);
 
-        // Print newly completed runs
         if completed > seen_completed {
-            if let Some(runs) = batch["runs"].as_array() {
-                for run in runs {
-                    let status = run["status"].as_str().unwrap_or("");
-                    if !matches!(status, "succeeded" | "failed" | "cancelled") {
-                        continue;
-                    }
-                    // We print all completed runs each time; could track indices
-                    // but for simplicity just re-render on completion
-                }
-            }
-            if output == "json" {
-                println!("{}", serde_json::to_string_pretty(&batch).unwrap());
-            } else {
-                render_batch_progress(&batch, seen_completed);
-            }
+            eprintln!("[{}/{}]", completed, total);
             seen_completed = completed;
         }
 
         if done {
-            if output != "json" {
-                render_batch_summary(&batch);
-            }
             break;
         }
 
-        // Long-poll for more completions
         let poll_path = format!("/batch/{}?completed={}", batch_id, seen_completed);
         let response = client.get_with_wait(&poll_path, 30)?;
         batch = serde_json::from_str(&response).map_err(|e| e.to_string())?;
     }
 
-    // Exit with non-zero if any run failed
+    if output == "json" {
+        println!("{}", serde_json::to_string_pretty(&batch).unwrap());
+    } else {
+        render_batch_result(&batch);
+    }
+
     if let Some(runs) = batch["runs"].as_array() {
         if runs
             .iter()
@@ -335,35 +318,24 @@ pub(super) fn for_each(
     Ok(())
 }
 
-fn render_batch_progress(batch: &serde_json::Value, prev_completed: usize) {
+fn render_batch_result(batch: &serde_json::Value) {
     let runs = match batch["runs"].as_array() {
         Some(r) => r,
         None => return,
     };
-    let mut completed: Vec<&serde_json::Value> = runs
-        .iter()
-        .filter(|r| {
-            matches!(
-                r["status"].as_str(),
-                Some("succeeded") | Some("failed") | Some("cancelled")
-            )
-        })
-        .collect();
-    // Sort by finished_at to show in order
-    completed.sort_by(|a, b| {
-        let ta = a["finished_at"].as_f64().unwrap_or(0.0);
-        let tb = b["finished_at"].as_f64().unwrap_or(0.0);
-        ta.partial_cmp(&tb).unwrap_or(std::cmp::Ordering::Equal)
+    let mut sorted: Vec<&serde_json::Value> = runs.iter().collect();
+    sorted.sort_by(|a, b| {
+        let ka = a["key"].as_str().unwrap_or("");
+        let kb = b["key"].as_str().unwrap_or("");
+        ka.cmp(kb)
     });
-    // Only print newly completed (skip first prev_completed)
-    let total = runs.len();
-    for (i, run) in completed.iter().enumerate() {
-        if i < prev_completed {
-            continue;
-        }
+    for run in &sorted {
         let key = run["key"].as_str().unwrap_or("?");
         let status = run["status"].as_str().unwrap_or("?");
         let exit_code = run["exit_code"].as_i64();
+        let stdout = run["stdout"].as_str().unwrap_or("");
+        let stderr = run["stderr"].as_str().unwrap_or("");
+
         let indicator = match status {
             "succeeded" => "+",
             "failed" => "x",
@@ -371,55 +343,31 @@ fn render_batch_progress(batch: &serde_json::Value, prev_completed: usize) {
             _ => "?",
         };
         let exit_str = exit_code
+            .filter(|&c| c != 0)
             .map(|c| format!(" (exit {})", c))
             .unwrap_or_default();
-        eprintln!(
-            "[{}/{}] {} {}{}",
-            i + 1,
-            total,
-            indicator,
-            key,
-            exit_str,
-        );
-        if let Some(stdout) = run["stdout"].as_str() {
-            if !stdout.is_empty() {
-                print!("{}", stdout);
-                if !stdout.ends_with('\n') {
-                    println!();
-                }
+        println!("## {} {}{}", indicator, key, exit_str);
+        if !stdout.is_empty() {
+            print!("{}", stdout);
+            if !stdout.ends_with('\n') {
+                println!();
             }
         }
-        if let Some(stderr) = run["stderr"].as_str() {
-            if !stderr.is_empty() {
-                eprint!("{}", stderr);
-                if !stderr.ends_with('\n') {
-                    eprintln!();
-                }
+        if !stderr.is_empty() {
+            eprint!("{}", stderr);
+            if !stderr.ends_with('\n') {
+                eprintln!();
             }
         }
+        println!();
     }
-}
-
-fn render_batch_summary(batch: &serde_json::Value) {
-    let runs = match batch["runs"].as_array() {
-        Some(r) => r,
-        None => return,
-    };
-    let succeeded = runs
-        .iter()
-        .filter(|r| r["status"].as_str() == Some("succeeded"))
-        .count();
-    let failed = runs
-        .iter()
-        .filter(|r| r["status"].as_str() == Some("failed"))
-        .count();
-    let cancelled = runs
-        .iter()
-        .filter(|r| r["status"].as_str() == Some("cancelled"))
-        .count();
-    let total = runs.len();
+    // Summary
+    let succeeded = sorted.iter().filter(|r| r["status"].as_str() == Some("succeeded")).count();
+    let failed = sorted.iter().filter(|r| r["status"].as_str() == Some("failed")).count();
+    let cancelled = sorted.iter().filter(|r| r["status"].as_str() == Some("cancelled")).count();
+    let total = sorted.len();
     eprintln!(
-        "Batch complete: {}/{} succeeded, {} failed, {} cancelled",
+        "{}/{} succeeded, {} failed, {} cancelled",
         succeeded, total, failed, cancelled
     );
 }

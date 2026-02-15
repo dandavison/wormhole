@@ -107,6 +107,14 @@ fn batch_to_json(batch: &batch::Batch) -> serde_json::Value {
             if let Some(t) = r.finished_at {
                 obj["finished_at"] = serde_json::json!(system_time_to_epoch(t));
             }
+            if matches!(r.status, batch::RunStatus::Succeeded | batch::RunStatus::Failed | batch::RunStatus::Cancelled) {
+                if let Ok(s) = std::fs::read_to_string(&r.stdout_path) {
+                    obj["stdout"] = serde_json::json!(s);
+                }
+                if let Ok(s) = std::fs::read_to_string(&r.stderr_path) {
+                    obj["stderr"] = serde_json::json!(s);
+                }
+            }
             obj
         })
         .collect();

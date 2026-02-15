@@ -374,13 +374,29 @@ fn render_batch_progress(batch: &serde_json::Value, prev_completed: usize) {
             .map(|c| format!(" (exit {})", c))
             .unwrap_or_default();
         eprintln!(
-            "[{}/{}] {} {}{} ",
+            "[{}/{}] {} {}{}",
             i + 1,
             total,
             indicator,
             key,
             exit_str,
         );
+        if let Some(stdout) = run["stdout"].as_str() {
+            if !stdout.is_empty() {
+                print!("{}", stdout);
+                if !stdout.ends_with('\n') {
+                    println!();
+                }
+            }
+        }
+        if let Some(stderr) = run["stderr"].as_str() {
+            if !stderr.is_empty() {
+                eprint!("{}", stderr);
+                if !stderr.ends_with('\n') {
+                    eprintln!();
+                }
+            }
+        }
     }
 }
 

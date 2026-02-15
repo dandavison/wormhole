@@ -26,26 +26,15 @@ pub async fn start_batch(req: Request<Body>) -> Response<Body> {
 
     let store = batch::lock();
     let batch = store.get(&id).unwrap();
-    json_response(StatusCode::CREATED, &batch_to_json(batch))
+    json_response(StatusCode::CREATED, &batch.to_response())
 }
 
 pub fn list_batches() -> Response<Body> {
     let store = batch::lock();
-    let batches: Vec<serde_json::Value> = store
-        .all()
-        .iter()
-        .map(|b| {
-            serde_json::json!({
-                "id": b.id,
-                "command": b.command,
-                "created_at": system_time_to_epoch(b.created_at),
-                "total": b.runs.len(),
-                "completed": b.completed_count(),
-                "done": b.is_done(),
-            })
-        })
-        .collect();
-    json_response(StatusCode::OK, &serde_json::json!({ "batches": batches }))
+    let response = batch::BatchListResponse {
+        batches: store.all().iter().map(|b| b.to_summary()).collect(),
+    };
+    json_response(StatusCode::OK, &response)
 }
 
 pub async fn batch_status(id: &str, req: &Request<Body>, completed: Option<usize>) -> Response<Body> {
@@ -71,7 +60,7 @@ pub async fn batch_status(id: &str, req: &Request<Body>, completed: Option<usize
 
     let store = batch::lock();
     match store.get(id) {
-        Some(batch) => json_response(StatusCode::OK, &batch_to_json(batch)),
+        Some(batch) => json_response(StatusCode::OK, &batch.to_response()),
         None => error_response(StatusCode::NOT_FOUND, "batch not found"),
     }
 }
@@ -80,60 +69,12 @@ pub fn cancel(id: &str) -> Response<Body> {
     if batch::cancel_batch(id) {
         let store = batch::lock();
         match store.get(id) {
-            Some(batch) => json_response(StatusCode::OK, &batch_to_json(batch)),
+            Some(batch) => json_response(StatusCode::OK, &batch.to_response()),
             None => error_response(StatusCode::NOT_FOUND, "batch not found"),
         }
     } else {
         error_response(StatusCode::NOT_FOUND, "batch not found")
     }
-}
-
-fn batch_to_json(batch: &batch::Batch) -> serde_json::Value {
-    let runs: Vec<serde_json::Value> = batch
-        .runs
-        .iter()
-        .map(|r| {
-            let mut obj = serde_json::json!({
-                "key": r.key,
-                "dir": r.dir,
-                "status": r.status,
-            });
-            if let Some(code) = r.exit_code {
-                obj["exit_code"] = serde_json::json!(code);
-            }
-            if let Some(t) = r.started_at {
-                obj["started_at"] = serde_json::json!(system_time_to_epoch(t));
-            }
-            if let Some(t) = r.finished_at {
-                obj["finished_at"] = serde_json::json!(system_time_to_epoch(t));
-            }
-            if matches!(r.status, batch::RunStatus::Succeeded | batch::RunStatus::Failed | batch::RunStatus::Cancelled) {
-                if let Ok(s) = std::fs::read_to_string(&r.stdout_path) {
-                    obj["stdout"] = serde_json::json!(s);
-                }
-                if let Ok(s) = std::fs::read_to_string(&r.stderr_path) {
-                    obj["stderr"] = serde_json::json!(s);
-                }
-            }
-            obj
-        })
-        .collect();
-
-    serde_json::json!({
-        "id": batch.id,
-        "command": batch.command,
-        "created_at": system_time_to_epoch(batch.created_at),
-        "total": batch.runs.len(),
-        "completed": batch.completed_count(),
-        "done": batch.is_done(),
-        "runs": runs,
-    })
-}
-
-fn system_time_to_epoch(t: std::time::SystemTime) -> f64 {
-    t.duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs_f64()
 }
 
 fn parse_prefer_wait(req: &Request<Body>) -> u64 {
@@ -145,7 +86,7 @@ fn parse_prefer_wait(req: &Request<Body>) -> u64 {
         .unwrap_or(0)
 }
 
-fn json_response(status: StatusCode, value: &serde_json::Value) -> Response<Body> {
+fn json_response(status: StatusCode, value: &impl serde::Serialize) -> Response<Body> {
     Response::builder()
         .status(status)
         .header("Content-Type", "application/json")

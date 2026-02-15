@@ -108,6 +108,163 @@ impl<'a> Store<'a> {
     }
 }
 
+// -- API response types --
+
+#[derive(Serialize, Deserialize)]
+pub struct RunResponse {
+    pub key: String,
+    pub dir: PathBuf,
+    pub status: RunStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exit_code: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub finished_at: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stdout: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stderr: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct BatchResponse {
+    pub id: String,
+    pub command: Vec<String>,
+    pub created_at: f64,
+    pub total: usize,
+    pub completed: usize,
+    pub done: bool,
+    pub runs: Vec<RunResponse>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct BatchListResponse {
+    pub batches: Vec<BatchSummary>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct BatchSummary {
+    pub id: String,
+    pub command: Vec<String>,
+    pub created_at: f64,
+    pub total: usize,
+    pub completed: usize,
+    pub done: bool,
+}
+
+fn system_time_to_epoch(t: SystemTime) -> f64 {
+    t.duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs_f64()
+}
+
+impl Batch {
+    pub fn to_response(&self) -> BatchResponse {
+        BatchResponse {
+            id: self.id.clone(),
+            command: self.command.clone(),
+            created_at: system_time_to_epoch(self.created_at),
+            total: self.runs.len(),
+            completed: self.completed_count(),
+            done: self.is_done(),
+            runs: self.runs.iter().map(Run::to_response).collect(),
+        }
+    }
+
+    pub fn to_summary(&self) -> BatchSummary {
+        BatchSummary {
+            id: self.id.clone(),
+            command: self.command.clone(),
+            created_at: system_time_to_epoch(self.created_at),
+            total: self.runs.len(),
+            completed: self.completed_count(),
+            done: self.is_done(),
+        }
+    }
+}
+
+impl Run {
+    fn to_response(&self) -> RunResponse {
+        let is_done = matches!(self.status, RunStatus::Succeeded | RunStatus::Failed | RunStatus::Cancelled);
+        RunResponse {
+            key: self.key.clone(),
+            dir: self.dir.clone(),
+            status: self.status,
+            exit_code: self.exit_code,
+            started_at: self.started_at.map(system_time_to_epoch),
+            finished_at: self.finished_at.map(system_time_to_epoch),
+            stdout: if is_done { fs::read_to_string(&self.stdout_path).ok() } else { None },
+            stderr: if is_done { fs::read_to_string(&self.stderr_path).ok() } else { None },
+        }
+    }
+}
+
+impl BatchResponse {
+    pub fn render_terminal(&self) -> String {
+        let mut sorted: Vec<&RunResponse> = self.runs.iter().collect();
+        sorted.sort_by(|a, b| a.key.cmp(&b.key));
+        let mut out = String::new();
+        for run in &sorted {
+            let indicator = match run.status {
+                RunStatus::Succeeded => "+",
+                RunStatus::Failed => "x",
+                RunStatus::Cancelled => "-",
+                _ => "?",
+            };
+            let exit_str = run.exit_code
+                .filter(|&c| c != 0)
+                .map(|c| format!(" (exit {})", c))
+                .unwrap_or_default();
+            out.push_str(&format!("## {} {}{}\n", indicator, run.key, exit_str));
+            if let Some(ref s) = run.stdout {
+                if !s.is_empty() {
+                    out.push_str(s);
+                    if !s.ends_with('\n') {
+                        out.push('\n');
+                    }
+                }
+            }
+            if let Some(ref s) = run.stderr {
+                if !s.is_empty() {
+                    out.push_str(s);
+                    if !s.ends_with('\n') {
+                        out.push('\n');
+                    }
+                }
+            }
+            out.push('\n');
+        }
+        let failed = sorted.iter().filter(|r| r.status == RunStatus::Failed).count();
+        let cancelled = sorted.iter().filter(|r| r.status == RunStatus::Cancelled).count();
+        if failed > 0 || cancelled > 0 {
+            let succeeded = sorted.iter().filter(|r| r.status == RunStatus::Succeeded).count();
+            out.push_str(&format!(
+                "{}/{} succeeded, {} failed, {} cancelled\n",
+                succeeded, self.total, failed, cancelled
+            ));
+        }
+        out
+    }
+}
+
+impl BatchListResponse {
+    pub fn render_terminal(&self) -> String {
+        if self.batches.is_empty() {
+            return "No batches\n".to_string();
+        }
+        let mut out = String::new();
+        for b in &self.batches {
+            let status_str = if b.done { "done" } else { "running" };
+            out.push_str(&format!(
+                "{} ({}/{}) [{}] {}\n",
+                b.id, b.completed, b.total, status_str, b.command.join(" ")
+            ));
+        }
+        out
+    }
+}
+
 /// Create a new batch from a request, returning the batch ID.
 /// Does not start execution — call `spawn_batch` after.
 pub fn create_batch(req: BatchRequest) -> String {

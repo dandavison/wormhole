@@ -191,14 +191,16 @@ pub(super) fn for_each(
     output: &str,
     verbose: bool,
 ) -> Result<(), String> {
+    use crate::batch::{BatchResponse, BatchListResponse};
+
     if let Some(batch_id) = cancel {
         let response = client.post(&format!("/batch/{}/cancel", batch_id))?;
         if output == "json" {
             println!("{}", response);
         } else {
-            let json: serde_json::Value =
+            let batch: BatchResponse =
                 serde_json::from_str(&response).map_err(|e| e.to_string())?;
-            println!("Cancelled batch {}", json["id"].as_str().unwrap_or(&batch_id));
+            println!("Cancelled batch {}", batch.id);
         }
         return Ok(());
     }
@@ -208,30 +210,9 @@ pub(super) fn for_each(
         if output == "json" {
             println!("{}", response);
         } else {
-            let json: serde_json::Value =
+            let list: BatchListResponse =
                 serde_json::from_str(&response).map_err(|e| e.to_string())?;
-            if let Some(batches) = json["batches"].as_array() {
-                if batches.is_empty() {
-                    println!("No batches");
-                }
-                for b in batches {
-                    let id = b["id"].as_str().unwrap_or("?");
-                    let cmd = b["command"]
-                        .as_array()
-                        .map(|a| {
-                            a.iter()
-                                .filter_map(|v| v.as_str())
-                                .collect::<Vec<_>>()
-                                .join(" ")
-                        })
-                        .unwrap_or_default();
-                    let completed = b["completed"].as_u64().unwrap_or(0);
-                    let total = b["total"].as_u64().unwrap_or(0);
-                    let done = b["done"].as_bool().unwrap_or(false);
-                    let status_str = if done { "done" } else { "running" };
-                    println!("{} ({}/{}) [{}] {}", id, completed, total, status_str, cmd);
-                }
-            }
+            print!("{}", list.render_terminal());
         }
         return Ok(());
     }
@@ -277,105 +258,38 @@ pub(super) fn for_each(
     }
 
     let response = client.post_json("/batch", &batch_req)?;
-    let mut batch: serde_json::Value =
+    let mut batch: BatchResponse =
         serde_json::from_str(&response).map_err(|e| e.to_string())?;
-    let batch_id = batch["id"]
-        .as_str()
-        .ok_or("Missing batch id")?
-        .to_string();
 
-    let mut seen_completed: usize = 0;
+    let mut seen_completed = batch.completed;
 
     loop {
-        let completed = batch["completed"].as_u64().unwrap_or(0) as usize;
-        let done = batch["done"].as_bool().unwrap_or(false);
-
-        if completed > seen_completed {
+        if batch.completed > seen_completed {
             if verbose {
-                eprintln!("[{}/{}]", completed, total);
+                eprintln!("[{}/{}]", batch.completed, total);
             }
-            seen_completed = completed;
+            seen_completed = batch.completed;
         }
 
-        if done {
+        if batch.done {
             break;
         }
 
-        let poll_path = format!("/batch/{}?completed={}", batch_id, seen_completed);
+        let poll_path = format!("/batch/{}?completed={}", batch.id, seen_completed);
         let response = client.get_with_wait(&poll_path, 30)?;
         batch = serde_json::from_str(&response).map_err(|e| e.to_string())?;
     }
 
     if output == "json" {
-        println!("{}", serde_json::to_string_pretty(&batch).unwrap());
+        println!("{}", serde_json::to_string_pretty(&batch).map_err(|e| e.to_string())?);
     } else {
-        render_batch_result(&batch);
+        print!("{}", batch.render_terminal());
     }
 
-    if let Some(runs) = batch["runs"].as_array() {
-        if runs
-            .iter()
-            .any(|r| matches!(r["status"].as_str(), Some("failed") | Some("cancelled")))
-        {
-            std::process::exit(1);
-        }
+    if batch.runs.iter().any(|r| matches!(r.status, crate::batch::RunStatus::Failed | crate::batch::RunStatus::Cancelled)) {
+        std::process::exit(1);
     }
     Ok(())
-}
-
-fn render_batch_result(batch: &serde_json::Value) {
-    let runs = match batch["runs"].as_array() {
-        Some(r) => r,
-        None => return,
-    };
-    let mut sorted: Vec<&serde_json::Value> = runs.iter().collect();
-    sorted.sort_by(|a, b| {
-        let ka = a["key"].as_str().unwrap_or("");
-        let kb = b["key"].as_str().unwrap_or("");
-        ka.cmp(kb)
-    });
-    for run in &sorted {
-        let key = run["key"].as_str().unwrap_or("?");
-        let status = run["status"].as_str().unwrap_or("?");
-        let exit_code = run["exit_code"].as_i64();
-        let stdout = run["stdout"].as_str().unwrap_or("");
-        let stderr = run["stderr"].as_str().unwrap_or("");
-
-        let indicator = match status {
-            "succeeded" => "+",
-            "failed" => "x",
-            "cancelled" => "-",
-            _ => "?",
-        };
-        let exit_str = exit_code
-            .filter(|&c| c != 0)
-            .map(|c| format!(" (exit {})", c))
-            .unwrap_or_default();
-        println!("## {} {}{}", indicator, key, exit_str);
-        if !stdout.is_empty() {
-            print!("{}", stdout);
-            if !stdout.ends_with('\n') {
-                println!();
-            }
-        }
-        if !stderr.is_empty() {
-            eprint!("{}", stderr);
-            if !stderr.ends_with('\n') {
-                eprintln!();
-            }
-        }
-        println!();
-    }
-    let failed = sorted.iter().filter(|r| r["status"].as_str() == Some("failed")).count();
-    let cancelled = sorted.iter().filter(|r| r["status"].as_str() == Some("cancelled")).count();
-    if failed > 0 || cancelled > 0 {
-        let succeeded = sorted.iter().filter(|r| r["status"].as_str() == Some("succeeded")).count();
-        let total = sorted.len();
-        eprintln!(
-            "{}/{} succeeded, {} failed, {} cancelled",
-            succeeded, total, failed, cancelled
-        );
-    }
 }
 
 #[cfg(test)]

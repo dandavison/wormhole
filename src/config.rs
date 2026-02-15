@@ -296,6 +296,8 @@ mod tests {
         std::fs::create_dir_all(&repos_dir).unwrap();
         Command::new("git")
             .args([
+                "-c",
+                "protocol.file.allow=always",
                 "submodule",
                 "add",
                 child_src.to_str().unwrap(),

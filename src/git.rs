@@ -409,7 +409,14 @@ detached
             .output()
             .unwrap();
         Command::new("git")
-            .args(["submodule", "add", child_src.to_str().unwrap(), "child"])
+            .args([
+                "-c",
+                "protocol.file.allow=always",
+                "submodule",
+                "add",
+                child_src.to_str().unwrap(),
+                "child",
+            ])
             .current_dir(&parent)
             .output()
             .unwrap();

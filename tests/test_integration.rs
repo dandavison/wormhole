@@ -397,7 +397,14 @@ fn test_task_in_submodule() {
 
     // Add as submodule with name matching our project name
     Command::new("git")
-        .args(["submodule", "add", &child_src, &submodule_dirname])
+        .args([
+            "-c",
+            "protocol.file.allow=always",
+            "submodule",
+            "add",
+            &child_src,
+            &submodule_dirname,
+        ])
         .current_dir(&parent_dir)
         .output()
         .unwrap();

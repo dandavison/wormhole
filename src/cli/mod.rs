@@ -172,6 +172,9 @@ pub enum ProjectCommand {
         /// Output format: text (default) or json
         #[arg(short, long, default_value = "text")]
         output: String,
+        /// Show progress on stderr
+        #[arg(short, long)]
+        verbose: bool,
         /// Command to run in each project directory
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         command: Vec<String>,
@@ -421,8 +424,9 @@ pub fn run(command: Command) -> Result<(), String> {
                 status,
                 cancel,
                 output,
+                verbose,
                 command,
-            } => project::for_each(&client, active, status, cancel, &command, &output),
+            } => project::for_each(&client, active, status, cancel, &command, &output, verbose),
             ProjectCommand::Show { name, output } => {
                 let path = match name {
                     Some(n) => format!("/project/show/{}", n),

@@ -189,6 +189,7 @@ pub(super) fn for_each(
     cancel: Option<String>,
     command: &[String],
     output: &str,
+    verbose: bool,
 ) -> Result<(), String> {
     if let Some(batch_id) = cancel {
         let response = client.post(&format!("/batch/{}/cancel", batch_id))?;
@@ -271,7 +272,9 @@ pub(super) fn for_each(
     });
 
     let total = runs.len();
-    eprintln!("Starting batch: {} across {} projects", command.join(" "), total);
+    if verbose {
+        eprintln!("Starting batch: {} across {} projects", command.join(" "), total);
+    }
 
     let response = client.post_json("/batch", &batch_req)?;
     let mut batch: serde_json::Value =
@@ -288,7 +291,9 @@ pub(super) fn for_each(
         let done = batch["done"].as_bool().unwrap_or(false);
 
         if completed > seen_completed {
-            eprintln!("[{}/{}]", completed, total);
+            if verbose {
+                eprintln!("[{}/{}]", completed, total);
+            }
             seen_completed = completed;
         }
 
@@ -361,15 +366,16 @@ fn render_batch_result(batch: &serde_json::Value) {
         }
         println!();
     }
-    // Summary
-    let succeeded = sorted.iter().filter(|r| r["status"].as_str() == Some("succeeded")).count();
     let failed = sorted.iter().filter(|r| r["status"].as_str() == Some("failed")).count();
     let cancelled = sorted.iter().filter(|r| r["status"].as_str() == Some("cancelled")).count();
-    let total = sorted.len();
-    eprintln!(
-        "{}/{} succeeded, {} failed, {} cancelled",
-        succeeded, total, failed, cancelled
-    );
+    if failed > 0 || cancelled > 0 {
+        let succeeded = sorted.iter().filter(|r| r["status"].as_str() == Some("succeeded")).count();
+        let total = sorted.len();
+        eprintln!(
+            "{}/{} succeeded, {} failed, {} cancelled",
+            succeeded, total, failed, cancelled
+        );
+    }
 }
 
 #[cfg(test)]

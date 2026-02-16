@@ -84,15 +84,7 @@ pub async fn notify_agent(req: Request<Body>) -> Response<Body> {
 
     // Create batch-of-1
     let batch_id = batch::create_batch(batch::BatchRequest {
-        command: vec![
-            "claude".to_string(),
-            "--print".to_string(),
-            "--verbose".to_string(),
-            "--output-format=stream-json".to_string(),
-            "--include-partial-messages".to_string(),
-            "--allowedTools=Bash".to_string(),
-            request.prompt,
-        ],
+        command: crate::agent::agent_command(&request.prompt),
         runs: vec![batch::RunSpec {
             key: request.task.clone(),
             dir,

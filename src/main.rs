@@ -1,3 +1,4 @@
+mod agent;
 mod batch;
 mod cli;
 mod config;

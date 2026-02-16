@@ -225,6 +225,55 @@ pub(super) fn task_create_from_sprint(client: &Client) -> Result<(), String> {
     Ok(())
 }
 
+pub(super) fn task_create_from_review_requests(
+    client: &Client,
+    dry_run: bool,
+) -> Result<(), String> {
+    let url = if dry_run {
+        "/task/create-from-review-requests?dry-run=true".to_string()
+    } else {
+        "/task/create-from-review-requests".to_string()
+    };
+    let response = client.post(&url)?;
+    let result: serde_json::Value =
+        serde_json::from_str(&response).map_err(|e| format!("Failed to parse response: {}", e))?;
+
+    if let Some(created) = result.get("created").and_then(|v| v.as_array()) {
+        for task in created {
+            if let Some(s) = task.as_str() {
+                println!("  Created {}", s);
+            }
+        }
+    }
+    if let Some(skipped) = result.get("skipped").and_then(|v| v.as_array()) {
+        for task in skipped {
+            if let Some(s) = task.as_str() {
+                println!("  Skipped {}", s);
+            }
+        }
+    }
+    if let Some(errors) = result.get("errors").and_then(|v| v.as_array()) {
+        for err in errors {
+            if let Some(s) = err.as_str() {
+                eprintln!("  Error: {}", s);
+            }
+        }
+    }
+
+    let created = result
+        .get("created")
+        .and_then(|v| v.as_array())
+        .map(|a| a.len())
+        .unwrap_or(0);
+    let skipped = result
+        .get("skipped")
+        .and_then(|v| v.as_array())
+        .map(|a| a.len())
+        .unwrap_or(0);
+    println!("\nDone: {} created, {} skipped", created, skipped);
+    Ok(())
+}
+
 /// Represents a parsed task target for the upsert command
 enum UpsertTarget {
     /// A project key like "repo:branch"

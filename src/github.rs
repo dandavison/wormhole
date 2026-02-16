@@ -137,6 +137,58 @@ pub fn get_pr_branch(owner: &str, repo: &str, pr_number: u64) -> Option<String> 
     }
 }
 
+#[derive(Debug, Deserialize, serde::Serialize)]
+pub struct ReviewRequest {
+    pub number: u64,
+    pub title: String,
+    pub url: String,
+    pub repository: SearchRepository,
+}
+
+#[derive(Debug, Deserialize, serde::Serialize)]
+pub struct SearchRepository {
+    pub name: String,
+    #[serde(rename = "nameWithOwner")]
+    pub name_with_owner: String,
+}
+
+pub fn search_review_requests() -> Result<Vec<ReviewRequest>, String> {
+    let output = Command::new("gh")
+        .args([
+            "search",
+            "prs",
+            "user-review-requested:@me",
+            "--state=open",
+            "--limit",
+            "100",
+            "--json",
+            "number,title,url,repository",
+        ])
+        .output()
+        .map_err(|e| format!("Failed to run gh: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("gh search prs failed: {}", stderr.trim()));
+    }
+
+    serde_json::from_slice(&output.stdout).map_err(|e| format!("Failed to parse gh output: {}", e))
+}
+
+pub fn pr_checkout(worktree_path: &Path, pr_number: u64) -> Result<(), String> {
+    let output = Command::new("gh")
+        .args(["pr", "checkout", &pr_number.to_string()])
+        .current_dir(worktree_path)
+        .output()
+        .map_err(|e| format!("Failed to run gh pr checkout: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("gh pr checkout failed: {}", stderr.trim()));
+    }
+    Ok(())
+}
+
 use crate::project::Project;
 
 /// Get the PR number for a project, checking cached value first

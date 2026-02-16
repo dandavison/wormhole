@@ -12,7 +12,10 @@ pub fn dashboard() -> Response<Body> {
             .all()
             .into_iter()
             .filter(|p| {
-                p.is_task() && (p.kv.contains_key("jira_key") || p.is_active(&window_names))
+                p.is_task()
+                    && (p.kv.contains_key("jira_key")
+                        || p.kv.get("task_type").is_some_and(|v| v == "review")
+                        || p.is_active(&window_names))
             })
             .cloned()
             .collect();
@@ -56,10 +59,17 @@ fn render_task_card(
             )
         })
         .unwrap_or_default();
+    let is_review = task.kv.get("task_type").is_some_and(|v| v == "review");
+    let review_badge = if is_review {
+        r#" <span class="card-review-badge" title="PR Review">&#x1F50D;</span>"#
+    } else {
+        ""
+    };
     let repo_branch = format!(
-        r#"<span class="card-repo">{}</span>{}"#,
+        r#"<span class="card-repo">{}</span>{}{}"#,
         html_escape(task.repo_name.as_str()),
-        branch_html
+        branch_html,
+        review_badge
     );
 
     let summary = task

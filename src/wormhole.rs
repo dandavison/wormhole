@@ -103,6 +103,21 @@ async fn route(
             projects::refresh_tasks();
             Response::new(Body::from(""))
         }),
+        "/task/notify-agent" => {
+            require_post_async(method, || async { crate::task::notify_agent(req).await }).await
+        }
+        "/task/create-from-review-requests" => require_post(method, || {
+            match crate::task::create_review_tasks(params.dry_run) {
+                Ok(result) => Response::builder()
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(serde_json::to_string_pretty(&result).unwrap()))
+                    .unwrap(),
+                Err(e) => Response::builder()
+                    .status(hyper::StatusCode::INTERNAL_SERVER_ERROR)
+                    .body(Body::from(e))
+                    .unwrap(),
+            }
+        }),
         "/doctor/conform" => require_post(method, || doctor::conform(params.dry_run)),
         "/doctor/persisted-data" => doctor::persisted_data(),
         "/doctor/migrate-worktrees" => require_post(method, doctor::migrate_worktrees),
@@ -132,7 +147,7 @@ async fn route_with_params(
         if let Some(id) = rest.strip_suffix("/cancel") {
             return require_post(method, || batch::cancel(id));
         }
-        return batch::batch_status(rest, &req, params.completed).await;
+        return cors_response(batch::batch_status(rest, &req, params.completed).await);
     }
     if let Some(name) = path.strip_prefix("/project/remove/") {
         return require_post(method, || project::remove(name));
@@ -365,7 +380,7 @@ fn cors_response(response: Response<Body>) -> Response<Body> {
     );
     parts.headers.insert(
         header::ACCESS_CONTROL_ALLOW_HEADERS,
-        "Content-Type".parse().unwrap(),
+        "Content-Type, Prefer".parse().unwrap(),
     );
     Response::from_parts(parts, body)
 }

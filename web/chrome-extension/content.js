@@ -15,6 +15,9 @@ let injecting = false;
 let vscodeExpanded = false;
 let vscodeMaximized = false;
 
+// Agent polling state
+let agentPollController = null;
+
 function isGitHubPage() {
     return window.location.hostname === 'github.com';
 }
@@ -67,6 +70,14 @@ function createButtons(info) {
         `;
     }
 
+    // Agent notify button for review tasks
+    if (info?.task_type === 'review' && info?.name) {
+        html += `
+            <span class="wormhole-agent-status wormhole-agent-idle" title="Agent idle"></span>
+            <button class="wormhole-btn wormhole-btn-icon wormhole-btn-agent" title="Notify Agent (Ctrl+Shift+N)">&#x1F514;</button>
+        `;
+    }
+
     if (!html) return null;
 
     container.innerHTML = html;
@@ -74,6 +85,7 @@ function createButtons(info) {
     const termBtn = container.querySelector('.wormhole-btn-terminal');
     const cursorBtn = container.querySelector('.wormhole-btn-cursor');
     const vscodeBtn = container.querySelector('.wormhole-btn-vscode');
+    const agentBtn = container.querySelector('.wormhole-btn-agent');
 
     if (termBtn) {
         termBtn.addEventListener('click', (e) => {
@@ -99,7 +111,114 @@ function createButtons(info) {
         });
     }
 
+    if (agentBtn) {
+        agentBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            notifyAgent(info);
+        });
+    }
+
+    // If agent is already running, start polling
+    if (info?.agent_batch_id) {
+        pollAgentStatus(info.agent_batch_id);
+    }
+
     return container;
+}
+
+function updateAgentLight(status) {
+    const light = document.querySelector('.wormhole-agent-status');
+    if (!light) return;
+    light.classList.remove('wormhole-agent-idle', 'wormhole-agent-running', 'wormhole-agent-failed');
+    if (status === 'running') {
+        light.classList.add('wormhole-agent-running');
+        light.title = 'Agent running';
+    } else if (status === 'failed') {
+        light.classList.add('wormhole-agent-failed');
+        light.title = 'Agent failed';
+    } else {
+        light.classList.add('wormhole-agent-idle');
+        light.title = 'Agent idle';
+    }
+}
+
+async function pollAgentStatus(batchId) {
+    if (agentPollController) agentPollController.abort();
+    agentPollController = new AbortController();
+    const signal = agentPollController.signal;
+
+    let completed = 0;
+    while (!signal.aborted) {
+        try {
+            const resp = await fetch(
+                `${WORMHOLE_BASE}/batch/${batchId}?completed=${completed}`,
+                { signal, headers: { 'Prefer': 'wait=30' } }
+            );
+            if (!resp.ok || signal.aborted) break;
+            const data = await resp.json();
+            const run = data.runs?.[0];
+            if (!run) break;
+            if (run.status === 'running' || run.status === 'pending') {
+                updateAgentLight('running');
+                completed = data.completed;
+            } else if (run.status === 'failed') {
+                updateAgentLight('failed');
+                return;
+            } else {
+                updateAgentLight('idle');
+                return;
+            }
+        } catch (err) {
+            if (err.name === 'AbortError') return;
+            console.warn('[Wormhole] agent poll error:', err.message);
+            return;
+        }
+    }
+}
+
+function buildAgentPrompt() {
+    const url = window.location.href;
+    const m = url.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
+    const [owner, repo, pr] = m ? [m[1], m[2], m[3]] : [null, null, null];
+    const repoSlug = owner && repo ? `${owner}/${repo}` : '';
+    const prRef = repoSlug && pr ? `${repoSlug}#${pr}` : url;
+    let prompt = `There are review comments on PR ${prRef}. `;
+    prompt += `Use gh to read the PR comments and diff. `;
+    if (repoSlug && pr) {
+        prompt += `List comments: gh api repos/${repoSlug}/pulls/${pr}/comments. `;
+        prompt += `Reply to a comment: gh api repos/${repoSlug}/pulls/${pr}/comments/{comment_id}/replies -f body="your reply". `;
+    }
+    prompt += `Skip comments that start with the \u{1F916} emoji (those are from AI agents). `;
+    prompt += `Reply to comments that have not already been adequately answered. `;
+    prompt += `If appropriate, make commits addressing the feedback. `;
+    prompt += `Prefix each of your PR comments with the \u{1F916} emoji.`;
+    return prompt;
+}
+
+async function notifyAgent(info) {
+    const prompt = buildAgentPrompt();
+    try {
+        updateAgentLight('running');
+        const resp = await fetch(`${WORMHOLE_BASE}/task/notify-agent`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ task: info.name, prompt })
+        });
+        if (resp.ok) {
+            const data = await resp.json();
+            pollAgentStatus(data.batch_id);
+        } else if (resp.status === 409) {
+            const data = await resp.json();
+            pollAgentStatus(data.batch_id);
+        } else {
+            console.warn('[Wormhole] notify-agent failed:', resp.status);
+            updateAgentLight('idle');
+        }
+    } catch (err) {
+        console.warn('[Wormhole] notify-agent error:', err.message);
+        updateAgentLight('idle');
+    }
 }
 
 async function toggleVSCode(projectName, vscodeBtn) {
@@ -379,6 +498,27 @@ function injectStyles() {
             top: 0;
             height: 100vh;
         }
+        .wormhole-agent-status {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            transition: background 0.3s;
+        }
+        .wormhole-agent-idle {
+            background: #3fb950;
+        }
+        .wormhole-agent-running {
+            background: #d29922;
+            animation: wormhole-pulse 1.5s ease-in-out infinite;
+        }
+        .wormhole-agent-failed {
+            background: #f85149;
+        }
+        @keyframes wormhole-pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
     `;
     document.head.appendChild(style);
 }
@@ -386,11 +526,8 @@ function injectStyles() {
 function getTargetSelectors() {
     if (isGitHubPage()) {
         return [
-            '.gh-header-title',
-            '.gh-header-actions',
-            '.gh-header-meta',
-            '#partial-discussion-header',
-            '.AppHeader-context-full',
+            '.markdown-title',
+            '[class*="pr-sticky-title"]',
         ];
     } else if (isJiraPage()) {
         return [
@@ -418,7 +555,7 @@ function shouldInject() {
     } else if (isJiraPage()) {
         // /browse/ACT-108 or board view with ?selectedIssue=ACT-108
         return window.location.pathname.includes('/browse/') ||
-               window.location.search.includes('selectedIssue=');
+            window.location.search.includes('selectedIssue=');
     }
     return false;
 }
@@ -441,6 +578,10 @@ async function injectButtons() {
         for (const sel of selectors) {
             targetElement = document.querySelector(sel);
             if (targetElement) break;
+        }
+        // These selectors match inline elements; append to parent instead
+        if (targetElement && (targetElement.tagName === 'SPAN' || targetElement.tagName === 'BDI')) {
+            targetElement = targetElement.parentElement;
         }
 
         if (targetElement) {
@@ -483,6 +624,8 @@ const observer = new MutationObserver(() => {
         cachedUrl = null;
         vscodeExpanded = false;
         vscodeMaximized = false;
+        if (agentPollController) agentPollController.abort();
+        agentPollController = null;
         document.querySelectorAll('.wormhole-buttons').forEach(el => el.remove());
         document.querySelectorAll('.wormhole-vscode-container').forEach(el => el.remove());
         document.body.style.overflow = '';
@@ -494,3 +637,14 @@ const observer = new MutationObserver(() => {
     }
 });
 observer.observe(document.body, { childList: true, subtree: true });
+
+// Keyboard shortcut: Ctrl+Shift+N to notify agent
+document.addEventListener('keydown', async (e) => {
+    if (e.ctrlKey && e.shiftKey && e.key === 'N') {
+        const info = cachedDescribe;
+        if (info?.task_type === 'review' && info?.name) {
+            e.preventDefault();
+            notifyAgent(info);
+        }
+    }
+});

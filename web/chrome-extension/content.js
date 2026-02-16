@@ -331,7 +331,7 @@ async function pollAgentOutput(batchId) {
 }
 
 async function notifyAgent(info) {
-    const prompt = `The reviewer has left comments on ${window.location.href}. Read the PR comments with gh, respond to them, and if appropriate make commits addressing the feedback.`;
+    const prompt = `The reviewer has left comments on ${window.location.href}. Read the PR comments with gh, respond to them, and if appropriate make commits addressing the feedback. Prefix each of your PR comments with the \u{1F916} emoji.`;
     try {
         showAgentPanel();
         updateAgentLight('running');

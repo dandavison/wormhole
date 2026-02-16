@@ -392,7 +392,7 @@ async function pollAgentOutput(batchId, agent) {
 }
 
 async function notifyAgent(info) {
-    const prompt = `There are review comments on ${window.location.href}. Read the PR comments with gh. Reply to comments that are from a human reviewer and have not already been adequately answered. If appropriate, make commits addressing the feedback. Prefix each of your PR comments with the \u{1F916} emoji.`;
+    const prompt = `There are review comments on ${window.location.href}. Read the PR comments with gh. Skip comments that start with the \u{1F916} emoji (those are from AI agents). Reply to comments that have not already been adequately answered. If appropriate, make commits addressing the feedback. Prefix each of your PR comments with the \u{1F916} emoji.`;
     try {
         showAgentPanel();
         updateAgentLight('running');

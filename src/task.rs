@@ -1,10 +1,118 @@
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::thread;
+
+use hyper::{Body, Request, Response, StatusCode};
+use lazy_static::lazy_static;
+use serde::Deserialize;
 
 use crate::project::ProjectKey;
 use crate::wormhole::Application;
-use crate::{config, editor, git, project::Project, projects, util::warn};
+use crate::{batch, config, editor, git, project::Project, projects, util::warn};
+
+lazy_static! {
+    static ref AGENT_BATCHES: Mutex<HashMap<String, String>> = Mutex::new(HashMap::new());
+}
+
+/// Look up the current agent batch ID for a task (if any, and still exists).
+pub fn agent_batch_id(task: &str) -> Option<String> {
+    let map = AGENT_BATCHES.lock().unwrap();
+    let batch_id = map.get(task)?;
+    let store = batch::lock();
+    store.get(batch_id).map(|_| batch_id.clone())
+}
+
+#[derive(Deserialize)]
+struct NotifyAgentRequest {
+    task: String,
+    prompt: String,
+}
+
+/// HTTP handler for POST /task/notify-agent
+pub async fn notify_agent(req: Request<Body>) -> Response<Body> {
+    let body_bytes = hyper::body::to_bytes(req.into_body()).await.unwrap();
+    let request: Result<NotifyAgentRequest, _> = serde_json::from_slice(&body_bytes);
+    let request = match request {
+        Ok(r) => r,
+        Err(e) => {
+            return Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body(Body::from(format!("Invalid JSON: {}", e)))
+                .unwrap();
+        }
+    };
+
+    // Check concurrency: one agent per task
+    {
+        let map = AGENT_BATCHES.lock().unwrap();
+        if let Some(batch_id) = map.get(&request.task) {
+            let store = batch::lock();
+            if let Some(b) = store.get(batch_id) {
+                if !b.is_done() {
+                    let json = serde_json::json!({
+                        "status": "running",
+                        "batch_id": batch_id,
+                    });
+                    return Response::builder()
+                        .status(StatusCode::CONFLICT)
+                        .header("Content-Type", "application/json")
+                        .body(Body::from(json.to_string()))
+                        .unwrap();
+                }
+            }
+        }
+    }
+
+    // Look up task to get worktree path
+    let key = ProjectKey::parse(&request.task);
+    let project = {
+        let projects = projects::lock();
+        projects.by_key(&key)
+    };
+    let project = match project {
+        Some(p) => p,
+        None => {
+            return Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(Body::from(format!("Task not found: {}", request.task)))
+                .unwrap();
+        }
+    };
+    let dir = project.working_tree();
+
+    // Create batch-of-1
+    let batch_id = batch::create_batch(batch::BatchRequest {
+        command: vec![
+            "claude".to_string(),
+            "--print".to_string(),
+            "--allowedTools".to_string(),
+            "Bash".to_string(),
+            request.prompt,
+        ],
+        runs: vec![batch::RunSpec {
+            key: request.task.clone(),
+            dir,
+        }],
+    });
+    batch::spawn_batch(&batch_id);
+
+    // Record for concurrency tracking
+    {
+        let mut map = AGENT_BATCHES.lock().unwrap();
+        map.insert(request.task, batch_id.clone());
+    }
+
+    let json = serde_json::json!({
+        "status": "running",
+        "batch_id": batch_id,
+    });
+    Response::builder()
+        .header("Content-Type", "application/json")
+        .body(Body::from(json.to_string()))
+        .unwrap()
+}
 
 pub fn get_task(key: &ProjectKey) -> Option<Project> {
     let projects = projects::lock();

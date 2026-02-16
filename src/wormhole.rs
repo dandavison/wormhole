@@ -103,6 +103,9 @@ async fn route(
             projects::refresh_tasks();
             Response::new(Body::from(""))
         }),
+        "/task/notify-agent" => {
+            require_post_async(method, || async { crate::task::notify_agent(req).await }).await
+        }
         "/task/create-from-review-requests" => {
             require_post(method, || match crate::task::create_review_tasks() {
                 Ok(result) => Response::builder()

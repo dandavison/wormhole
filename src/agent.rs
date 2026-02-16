@@ -43,6 +43,17 @@ pub fn cursor_command(prompt: &str) -> Vec<String> {
         "cursor".into(),
         "agent".into(),
         "--print".into(),
+        "--trust".into(),
+        "--yolo".into(),
+        "--output-format=stream-json".into(),
+        "--stream-partial-output".into(),
         prompt.into(),
     ]
+}
+
+pub fn agent_name() -> &'static str {
+    match agent() {
+        Agent::Cursor => "cursor",
+        Agent::Claude => "claude",
+    }
 }

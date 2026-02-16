@@ -54,6 +54,7 @@ pub async fn notify_agent(req: Request<Body>) -> Response<Body> {
                     let json = serde_json::json!({
                         "status": "running",
                         "batch_id": batch_id,
+                        "agent": crate::agent::agent_name(),
                     });
                     return Response::builder()
                         .status(StatusCode::CONFLICT)
@@ -101,6 +102,7 @@ pub async fn notify_agent(req: Request<Body>) -> Response<Body> {
     let json = serde_json::json!({
         "status": "running",
         "batch_id": batch_id,
+        "agent": crate::agent::agent_name(),
     });
     Response::builder()
         .header("Content-Type", "application/json")

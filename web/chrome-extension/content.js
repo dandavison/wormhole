@@ -206,9 +206,14 @@ function setPanelFooter(text) {
     if (footer) footer.textContent = text;
 }
 
-// -- Stream-json parser --
+// -- Stream-json parsers --
 
-function createStreamParser() {
+function createStreamParser(agent) {
+    if (agent === 'claude') return createClaudeStreamParser();
+    return createCursorStreamParser();
+}
+
+function createClaudeStreamParser() {
     let remainder = '';
     let toolJsonBuf = '';
     let inToolBlock = false;
@@ -275,9 +280,65 @@ function createStreamParser() {
         const text = remainder + chunk;
         const lines = text.split('\n');
         remainder = lines.pop();
-        for (const line of lines) {
-            processLine(line);
+        for (const line of lines) processLine(line);
+    };
+}
+
+function createCursorStreamParser() {
+    let remainder = '';
+
+    function processLine(line) {
+        if (!line.trim()) return;
+        let obj;
+        try { obj = JSON.parse(line); } catch { return; }
+
+        if (obj.type === 'system' && obj.subtype === 'init') {
+            appendToPanel(escapeHtml(obj.model || 'cursor') + '\n', 'wormhole-stream-meta');
+            return;
         }
+
+        if (obj.type === 'assistant') {
+            const blocks = obj.message?.content;
+            if (!Array.isArray(blocks)) return;
+            for (const b of blocks) {
+                if (b.type === 'text' && b.text) {
+                    appendToPanel(escapeHtml(b.text));
+                }
+            }
+            return;
+        }
+
+        if (obj.type === 'tool_call') {
+            const tc = obj.tool_call || {};
+            const toolKey = Object.keys(tc)[0] || '';
+            const toolLabel = toolKey.replace(/ToolCall$/, '');
+            if (obj.subtype === 'started') {
+                appendToPanel('\n' + escapeHtml(toolLabel) + ' ', 'wormhole-stream-tool-name');
+                const args = tc[toolKey]?.args;
+                if (args) {
+                    const summary = args.command || args.pattern || args.path || args.query || args.glob || args.globPattern || '';
+                    if (summary) {
+                        appendToPanel(escapeHtml(String(summary)) + '\n', 'wormhole-stream-tool-input');
+                    }
+                }
+            }
+            return;
+        }
+
+        if (obj.type === 'result') {
+            const cost = obj.total_cost_usd != null ? `$${obj.total_cost_usd.toFixed(2)}` : '';
+            const dur = obj.duration_ms != null ? `${(obj.duration_ms / 1000).toFixed(0)}s` : '';
+            const status = obj.subtype === 'success' ? 'done' : 'error';
+            setPanelFooter([status, dur, cost].filter(Boolean).join(' \u00b7 '));
+            return;
+        }
+    }
+
+    return function feed(chunk) {
+        const text = remainder + chunk;
+        const lines = text.split('\n');
+        remainder = lines.pop();
+        for (const line of lines) processLine(line);
     };
 }
 
@@ -287,12 +348,12 @@ function escapeHtml(s) {
 
 // -- Agent output polling --
 
-async function pollAgentOutput(batchId) {
+async function pollAgentOutput(batchId, agent) {
     if (agentPollController) agentPollController.abort();
     agentPollController = new AbortController();
     const signal = agentPollController.signal;
 
-    const parser = createStreamParser();
+    const parser = createStreamParser(agent);
     let offset = 0;
 
     updateAgentLight('running');
@@ -343,11 +404,11 @@ async function notifyAgent(info) {
         if (resp.ok) {
             const data = await resp.json();
             agentBatchId = data.batch_id;
-            pollAgentOutput(data.batch_id);
+            pollAgentOutput(data.batch_id, data.agent);
         } else if (resp.status === 409) {
             const data = await resp.json();
             agentBatchId = data.batch_id;
-            pollAgentOutput(data.batch_id);
+            pollAgentOutput(data.batch_id, data.agent);
         } else {
             console.warn('[Wormhole] notify-agent failed:', resp.status);
             updateAgentLight('idle');

@@ -15,8 +15,10 @@ let injecting = false;
 let vscodeExpanded = false;
 let vscodeMaximized = false;
 
-// Agent polling state
+// Agent panel state
 let agentPollController = null;
+let agentPanelVisible = false;
+let agentBatchId = null;
 
 function isGitHubPage() {
     return window.location.hostname === 'github.com';
@@ -119,9 +121,11 @@ function createButtons(info) {
         });
     }
 
-    // If agent is already running, start polling
+    // If agent is already running, show panel and start polling
     if (info?.agent_batch_id) {
-        pollAgentStatus(info.agent_batch_id);
+        agentBatchId = info.agent_batch_id;
+        showAgentPanel();
+        pollAgentOutput(info.agent_batch_id);
     }
 
     return container;
@@ -143,32 +147,246 @@ function updateAgentLight(status) {
     }
 }
 
-async function pollAgentStatus(batchId) {
+// -- Agent stream panel --
+
+function createAgentPanel() {
+    let panel = document.querySelector('.wormhole-agent-panel');
+    if (panel) return panel;
+    panel = document.createElement('div');
+    panel.className = 'wormhole-agent-panel';
+    panel.innerHTML = `
+        <div class="wormhole-agent-panel-header">
+            <span class="wormhole-agent-panel-title">Agent</span>
+            <button class="wormhole-agent-panel-close">\u00d7</button>
+        </div>
+        <div class="wormhole-agent-panel-body"></div>
+        <div class="wormhole-agent-panel-footer"></div>
+    `;
+    document.body.appendChild(panel);
+    panel.querySelector('.wormhole-agent-panel-close').addEventListener('click', () => {
+        panel.classList.remove('visible');
+        agentPanelVisible = false;
+    });
+    return panel;
+}
+
+function showAgentPanel() {
+    const panel = createAgentPanel();
+    panel.querySelector('.wormhole-agent-panel-body').textContent = '';
+    panel.querySelector('.wormhole-agent-panel-footer').textContent = '';
+    panel.classList.add('visible');
+    agentPanelVisible = true;
+}
+
+function closeAgentPanel() {
+    const panel = document.querySelector('.wormhole-agent-panel');
+    if (panel) {
+        panel.classList.remove('visible');
+        panel.remove();
+    }
+    agentPanelVisible = false;
+}
+
+function appendToPanel(html, cls) {
+    const body = document.querySelector('.wormhole-agent-panel-body');
+    if (!body) return;
+    if (cls) {
+        const span = document.createElement('span');
+        span.className = cls;
+        span.innerHTML = html;
+        body.appendChild(span);
+    } else {
+        body.insertAdjacentHTML('beforeend', html);
+    }
+    body.scrollTop = body.scrollHeight;
+}
+
+function setPanelFooter(text) {
+    const footer = document.querySelector('.wormhole-agent-panel-footer');
+    if (footer) footer.textContent = text;
+}
+
+// -- Stream-json parsers --
+
+function createStreamParser(agent) {
+    if (agent === 'claude') return createClaudeStreamParser();
+    return createCursorStreamParser();
+}
+
+function createClaudeStreamParser() {
+    let remainder = '';
+    let toolJsonBuf = '';
+    let inToolBlock = false;
+    let toolName = '';
+
+    function processLine(line) {
+        if (!line.trim()) return;
+        let obj;
+        try { obj = JSON.parse(line); } catch { return; }
+
+        if (obj.type === 'system' && obj.subtype === 'init') {
+            appendToPanel(escapeHtml(obj.model || 'claude') + '\n', 'wormhole-stream-meta');
+            return;
+        }
+
+        if (obj.type === 'stream_event') {
+            const ev = obj.event;
+            if (!ev) return;
+
+            if (ev.type === 'content_block_start' && ev.content_block?.type === 'tool_use') {
+                inToolBlock = true;
+                toolJsonBuf = '';
+                toolName = ev.content_block.name || 'tool';
+                appendToPanel('\n' + escapeHtml(toolName) + ' ', 'wormhole-stream-tool-name');
+                return;
+            }
+
+            if (ev.type === 'content_block_delta') {
+                if (ev.delta?.type === 'text_delta') {
+                    appendToPanel(escapeHtml(ev.delta.text));
+                } else if (ev.delta?.type === 'input_json_delta' && inToolBlock) {
+                    toolJsonBuf += ev.delta.partial_json;
+                }
+                return;
+            }
+
+            if (ev.type === 'content_block_stop') {
+                if (inToolBlock) {
+                    try {
+                        const input = JSON.parse(toolJsonBuf);
+                        const cmd = input.command || input.input || toolJsonBuf;
+                        appendToPanel(escapeHtml(cmd) + '\n', 'wormhole-stream-tool-input');
+                    } catch {
+                        appendToPanel(escapeHtml(toolJsonBuf) + '\n', 'wormhole-stream-tool-input');
+                    }
+                    inToolBlock = false;
+                    toolJsonBuf = '';
+                }
+                return;
+            }
+            return;
+        }
+
+        if (obj.type === 'result') {
+            const cost = obj.total_cost_usd != null ? `$${obj.total_cost_usd.toFixed(2)}` : '';
+            const dur = obj.duration_ms != null ? `${(obj.duration_ms / 1000).toFixed(0)}s` : '';
+            const status = obj.subtype === 'success' ? 'done' : 'error';
+            setPanelFooter([status, dur, cost].filter(Boolean).join(' \u00b7 '));
+            return;
+        }
+    }
+
+    return function feed(chunk) {
+        const text = remainder + chunk;
+        const lines = text.split('\n');
+        remainder = lines.pop();
+        for (const line of lines) processLine(line);
+    };
+}
+
+function createCursorStreamParser() {
+    let remainder = '';
+    let shownTextLen = 0;
+
+    function processLine(line) {
+        if (!line.trim()) return;
+        let obj;
+        try { obj = JSON.parse(line); } catch { return; }
+
+        if (obj.type === 'system' && obj.subtype === 'init') {
+            appendToPanel(escapeHtml(obj.model || 'cursor') + '\n', 'wormhole-stream-meta');
+            return;
+        }
+
+        if (obj.type === 'assistant') {
+            const blocks = obj.message?.content;
+            if (!Array.isArray(blocks)) return;
+            let fullText = '';
+            for (const b of blocks) {
+                if (b.type === 'text' && b.text) fullText += b.text;
+            }
+            if (fullText.length > shownTextLen) {
+                appendToPanel(escapeHtml(fullText.slice(shownTextLen)));
+                shownTextLen = fullText.length;
+            }
+            return;
+        }
+
+        if (obj.type === 'tool_call') {
+            const tc = obj.tool_call || {};
+            const toolKey = Object.keys(tc)[0] || '';
+            const toolLabel = toolKey.replace(/ToolCall$/, '');
+            if (obj.subtype === 'started') {
+                appendToPanel('\n' + escapeHtml(toolLabel) + ' ', 'wormhole-stream-tool-name');
+                const args = tc[toolKey]?.args;
+                if (args) {
+                    const summary = args.command || args.pattern || args.path || args.query || args.glob || args.globPattern || '';
+                    if (summary) {
+                        appendToPanel(escapeHtml(String(summary)) + '\n', 'wormhole-stream-tool-input');
+                    }
+                }
+            }
+            return;
+        }
+
+        if (obj.type === 'result') {
+            const cost = obj.total_cost_usd != null ? `$${obj.total_cost_usd.toFixed(2)}` : '';
+            const dur = obj.duration_ms != null ? `${(obj.duration_ms / 1000).toFixed(0)}s` : '';
+            const status = obj.subtype === 'success' ? 'done' : 'error';
+            setPanelFooter([status, dur, cost].filter(Boolean).join(' \u00b7 '));
+            return;
+        }
+    }
+
+    return function feed(chunk) {
+        const text = remainder + chunk;
+        const lines = text.split('\n');
+        remainder = lines.pop();
+        for (const line of lines) processLine(line);
+    };
+}
+
+function escapeHtml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// -- Agent output polling --
+
+async function pollAgentOutput(batchId, agent) {
     if (agentPollController) agentPollController.abort();
     agentPollController = new AbortController();
     const signal = agentPollController.signal;
 
-    let completed = 0;
+    const parser = createStreamParser(agent);
+    let offset = 0;
+
+    updateAgentLight('running');
     while (!signal.aborted) {
         try {
             const resp = await fetch(
-                `${WORMHOLE_BASE}/batch/${batchId}?completed=${completed}`,
-                { signal, headers: { 'Prefer': 'wait=30' } }
+                `${WORMHOLE_BASE}/batch/${batchId}/output?run=0&offset=${offset}`,
+                { signal }
             );
             if (!resp.ok || signal.aborted) break;
             const data = await resp.json();
-            const run = data.runs?.[0];
-            if (!run) break;
-            if (run.status === 'running' || run.status === 'pending') {
-                updateAgentLight('running');
-                completed = data.completed;
-            } else if (run.status === 'failed') {
-                updateAgentLight('failed');
-                return;
-            } else {
-                updateAgentLight('idle');
+            if (data.content) {
+                parser(data.content);
+            }
+            offset = data.offset;
+            if (data.done) {
+                // Check final status
+                const statusResp = await fetch(
+                    `${WORMHOLE_BASE}/batch/${batchId}`,
+                    { signal }
+                );
+                if (statusResp.ok) {
+                    const batch = await statusResp.json();
+                    const run = batch.runs?.[0];
+                    updateAgentLight(run?.status === 'failed' ? 'failed' : 'idle');
+                }
                 return;
             }
+            await new Promise(r => setTimeout(r, 300));
         } catch (err) {
             if (err.name === 'AbortError') return;
             console.warn('[Wormhole] agent poll error:', err.message);
@@ -199,6 +417,7 @@ function buildAgentPrompt() {
 async function notifyAgent(info) {
     const prompt = buildAgentPrompt();
     try {
+        showAgentPanel();
         updateAgentLight('running');
         const resp = await fetch(`${WORMHOLE_BASE}/task/notify-agent`, {
             method: 'POST',
@@ -207,10 +426,12 @@ async function notifyAgent(info) {
         });
         if (resp.ok) {
             const data = await resp.json();
-            pollAgentStatus(data.batch_id);
+            agentBatchId = data.batch_id;
+            pollAgentOutput(data.batch_id, data.agent);
         } else if (resp.status === 409) {
             const data = await resp.json();
-            pollAgentStatus(data.batch_id);
+            agentBatchId = data.batch_id;
+            pollAgentOutput(data.batch_id, data.agent);
         } else {
             console.warn('[Wormhole] notify-agent failed:', resp.status);
             updateAgentLight('idle');
@@ -519,6 +740,81 @@ function injectStyles() {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.4; }
         }
+        .wormhole-agent-panel {
+            display: none;
+            position: fixed;
+            right: 0;
+            top: 0;
+            width: 480px;
+            height: 100vh;
+            background: #1a1a2e;
+            color: #e0e0e0;
+            font-family: "SF Mono", "Menlo", "Monaco", monospace;
+            font-size: 0.8rem;
+            z-index: 10000;
+            box-shadow: -4px 0 20px rgba(0,0,0,0.4);
+            flex-direction: column;
+        }
+        .wormhole-agent-panel.visible {
+            display: flex;
+        }
+        .wormhole-agent-panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 0.75rem;
+            background: #16213e;
+            border-bottom: 1px solid #0f3460;
+            flex-shrink: 0;
+        }
+        .wormhole-agent-panel-title {
+            font-weight: 600;
+            font-size: 0.75rem;
+            color: #a0a0c0;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .wormhole-agent-panel-close {
+            background: none;
+            border: none;
+            color: #a0a0c0;
+            font-size: 1.2rem;
+            cursor: pointer;
+            padding: 0 0.25rem;
+            line-height: 1;
+        }
+        .wormhole-agent-panel-close:hover {
+            color: #fff;
+        }
+        .wormhole-agent-panel-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0.75rem;
+            white-space: pre-wrap;
+            word-break: break-word;
+            line-height: 1.5;
+        }
+        .wormhole-agent-panel-footer {
+            padding: 0.4rem 0.75rem;
+            background: #16213e;
+            border-top: 1px solid #0f3460;
+            font-size: 0.7rem;
+            color: #707090;
+            flex-shrink: 0;
+        }
+        .wormhole-stream-meta {
+            color: #707090;
+        }
+        .wormhole-stream-tool-name {
+            color: #e94560;
+            font-weight: 600;
+        }
+        .wormhole-stream-tool-input {
+            color: #0f3460;
+            background: #0d1b2a;
+            padding: 0.1rem 0.3rem;
+            border-radius: 2px;
+        }
     `;
     document.head.appendChild(style);
 }
@@ -626,6 +922,8 @@ const observer = new MutationObserver(() => {
         vscodeMaximized = false;
         if (agentPollController) agentPollController.abort();
         agentPollController = null;
+        agentBatchId = null;
+        closeAgentPanel();
         document.querySelectorAll('.wormhole-buttons').forEach(el => el.remove());
         document.querySelectorAll('.wormhole-vscode-container').forEach(el => el.remove());
         document.body.style.overflow = '';

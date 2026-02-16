@@ -54,6 +54,7 @@ pub async fn notify_agent(req: Request<Body>) -> Response<Body> {
                     let json = serde_json::json!({
                         "status": "running",
                         "batch_id": batch_id,
+                        "agent": crate::agent::agent_name(),
                     });
                     return Response::builder()
                         .status(StatusCode::CONFLICT)
@@ -84,12 +85,7 @@ pub async fn notify_agent(req: Request<Body>) -> Response<Body> {
 
     // Create batch-of-1
     let batch_id = batch::create_batch(batch::BatchRequest {
-        command: vec![
-            "claude".to_string(),
-            "--print".to_string(),
-            "--allowedTools=Bash".to_string(),
-            request.prompt,
-        ],
+        command: crate::agent::agent_command(&request.prompt),
         runs: vec![batch::RunSpec {
             key: request.task.clone(),
             dir,
@@ -106,6 +102,7 @@ pub async fn notify_agent(req: Request<Body>) -> Response<Body> {
     let json = serde_json::json!({
         "status": "running",
         "batch_id": batch_id,
+        "agent": crate::agent::agent_name(),
     });
     Response::builder()
         .header("Content-Type", "application/json")

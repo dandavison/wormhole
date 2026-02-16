@@ -252,6 +252,7 @@ fn render_iframe(task: &crate::project::Project) -> String {
     if !iframe_html.is_empty() {
         actions.push_str(r#"<button class="btn btn-maximize">Maximize</button>"#);
     }
+    actions.push_str(r#"<button class="btn btn-close" title="Close project">&times;</button>"#);
 
     format!(
         r#"<div class="card-actions">{}</div>{}"#,

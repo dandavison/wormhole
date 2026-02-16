@@ -305,6 +305,26 @@
       .card.maximized .btn-vscode {
         display: none;
       }
+      .btn-close {
+        margin-left: auto;
+        border: none;
+        background: transparent;
+        color: #999;
+        font-size: 1.1rem;
+        line-height: 1;
+        padding: 0.15rem 0.35rem;
+        opacity: 0;
+        transition:
+          opacity 0.15s,
+          color 0.15s;
+      }
+      .card:hover .btn-close {
+        opacity: 1;
+      }
+      .btn-close:hover {
+        color: #c00;
+        background: transparent;
+      }
     </style>
   </head>
   <body>
@@ -387,6 +407,16 @@
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
           fetch(btn.dataset.url);
+        });
+      });
+
+      document.querySelectorAll('.btn-close').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const card = btn.closest('.card');
+          const task = card.dataset.task;
+          fetch('/project/close/' + task, { method: 'POST' });
+          card.remove();
         });
       });
 

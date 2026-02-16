@@ -286,6 +286,7 @@ function createClaudeStreamParser() {
 
 function createCursorStreamParser() {
     let remainder = '';
+    let shownTextLen = 0;
 
     function processLine(line) {
         if (!line.trim()) return;
@@ -300,10 +301,13 @@ function createCursorStreamParser() {
         if (obj.type === 'assistant') {
             const blocks = obj.message?.content;
             if (!Array.isArray(blocks)) return;
+            let fullText = '';
             for (const b of blocks) {
-                if (b.type === 'text' && b.text) {
-                    appendToPanel(escapeHtml(b.text));
-                }
+                if (b.type === 'text' && b.text) fullText += b.text;
+            }
+            if (fullText.length > shownTextLen) {
+                appendToPanel(escapeHtml(fullText.slice(shownTextLen)));
+                shownTextLen = fullText.length;
             }
             return;
         }

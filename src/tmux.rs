@@ -82,6 +82,24 @@ pub fn open(project: &Project) -> Result<(), String> {
     Ok(())
 }
 
+pub fn split_pane(project: &Project, command: &[String]) -> Result<(), String> {
+    let window_name = project.store_key().to_string();
+    if get_window(&window_name).is_none() {
+        open(project)?;
+    }
+    let window = get_window(&window_name).ok_or("Window not found after creation")?;
+    let shell_cmd = crate::batch::shell_command_line(command);
+    tmux_vec(vec![
+        "split-window".into(),
+        "-t".into(),
+        window.id,
+        "-c".into(),
+        project.working_tree().to_string_lossy().to_string(),
+        shell_cmd,
+    ]);
+    Ok(())
+}
+
 pub fn close(project: &Project) {
     if let Some(window) = get_window(&project.store_key().to_string()) {
         tmux(["kill-window", "-t", &window.id]);

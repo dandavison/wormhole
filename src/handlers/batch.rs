@@ -1,3 +1,4 @@
+use std::io::{Read, Seek, SeekFrom};
 use std::time::Duration;
 
 use hyper::{Body, Request, Response, StatusCode};
@@ -79,6 +80,50 @@ pub fn cancel(id: &str) -> Response<Body> {
     } else {
         error_response(StatusCode::NOT_FOUND, "batch not found")
     }
+}
+
+pub fn batch_output(id: &str, run_idx: Option<usize>, offset: Option<u64>) -> Response<Body> {
+    let run_idx = run_idx.unwrap_or(0);
+    let offset = offset.unwrap_or(0);
+
+    let store = batch::lock();
+    let batch = match store.get(id) {
+        Some(b) => b,
+        None => return error_response(StatusCode::NOT_FOUND, "batch not found"),
+    };
+    let run = match batch.runs.get(run_idx) {
+        Some(r) => r,
+        None => return error_response(StatusCode::NOT_FOUND, "run not found"),
+    };
+
+    let done = matches!(
+        run.status,
+        batch::RunStatus::Succeeded | batch::RunStatus::Failed | batch::RunStatus::Cancelled
+    );
+    let stdout_path = run.stdout_path.clone();
+    drop(store);
+
+    let (content, new_offset) = read_from_offset(&stdout_path, offset);
+    let json = serde_json::json!({
+        "content": content,
+        "offset": new_offset,
+        "done": done,
+    });
+    json_response(StatusCode::OK, &json)
+}
+
+fn read_from_offset(path: &std::path::Path, offset: u64) -> (String, u64) {
+    let mut file = match std::fs::File::open(path) {
+        Ok(f) => f,
+        Err(_) => return (String::new(), offset),
+    };
+    if file.seek(SeekFrom::Start(offset)).is_err() {
+        return (String::new(), offset);
+    }
+    let mut buf = Vec::new();
+    let _ = file.read_to_end(&mut buf);
+    let new_offset = offset + buf.len() as u64;
+    (String::from_utf8_lossy(&buf).into_owned(), new_offset)
 }
 
 fn parse_prefer_wait(req: &Request<Body>) -> u64 {

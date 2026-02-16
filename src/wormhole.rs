@@ -39,6 +39,8 @@ pub struct QueryParams {
     pub current: Option<String>,
     pub completed: Option<usize>,
     pub dry_run: bool,
+    pub run: Option<usize>,
+    pub offset: Option<u64>,
 }
 
 pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
@@ -146,6 +148,9 @@ async fn route_with_params(
     if let Some(rest) = path.strip_prefix("/batch/") {
         if let Some(id) = rest.strip_suffix("/cancel") {
             return require_post(method, || batch::cancel(id));
+        }
+        if let Some(id) = rest.strip_suffix("/output") {
+            return cors_response(batch::batch_output(id, params.run, params.offset));
         }
         return cors_response(batch::batch_status(rest, &req, params.completed).await);
     }
@@ -324,6 +329,8 @@ impl QueryParams {
             current: None,
             completed: None,
             dry_run: false,
+            run: None,
+            offset: None,
         };
         if let Some(query) = query {
             for (key, val) in form_urlencoded::parse(query.as_bytes()) {
@@ -352,6 +359,8 @@ impl QueryParams {
                     }
                     "completed" => params.completed = val.parse().ok(),
                     "dry-run" => params.dry_run = val == "true" || val == "1",
+                    "run" => params.run = val.parse().ok(),
+                    "offset" => params.offset = val.parse().ok(),
                     _ => {}
                 }
             }

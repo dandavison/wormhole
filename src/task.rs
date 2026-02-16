@@ -87,6 +87,9 @@ pub async fn notify_agent(req: Request<Body>) -> Response<Body> {
         command: vec![
             "claude".to_string(),
             "--print".to_string(),
+            "--verbose".to_string(),
+            "--output-format=stream-json".to_string(),
+            "--include-partial-messages".to_string(),
             "--allowedTools=Bash".to_string(),
             request.prompt,
         ],

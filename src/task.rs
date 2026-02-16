@@ -87,8 +87,7 @@ pub async fn notify_agent(req: Request<Body>) -> Response<Body> {
         command: vec![
             "claude".to_string(),
             "--print".to_string(),
-            "--allowedTools".to_string(),
-            "Bash".to_string(),
+            "--allowedTools=Bash".to_string(),
             request.prompt,
         ],
         runs: vec![batch::RunSpec {

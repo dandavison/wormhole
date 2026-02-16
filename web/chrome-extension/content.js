@@ -76,6 +76,12 @@ function createButtons(info) {
     if (info?.task_type === 'review' && info?.name) {
         html += `
             <span class="wormhole-agent-status wormhole-agent-idle" title="Agent idle"></span>
+            <select class="wormhole-agent-select" title="Agent mode">
+                <option value="cursor">cursor</option>
+                <option value="claude">claude</option>
+                <option value="cursor-interactive">cursor-i</option>
+                <option value="claude-interactive">claude-i</option>
+            </select>
             <button class="wormhole-btn wormhole-btn-icon wormhole-btn-agent" title="Notify Agent (Ctrl+Shift+N)">&#x1F514;</button>
         `;
     }
@@ -416,19 +422,26 @@ function buildAgentPrompt() {
 
 async function notifyAgent(info) {
     const prompt = buildAgentPrompt();
+    const agentSelect = document.querySelector('.wormhole-agent-select');
+    const agent = agentSelect ? agentSelect.value : undefined;
     try {
-        showAgentPanel();
         updateAgentLight('running');
         const resp = await fetch(`${WORMHOLE_BASE}/task/notify-agent`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ task: info.name, prompt })
+            body: JSON.stringify({ task: info.name, prompt, agent })
         });
         if (resp.ok) {
             const data = await resp.json();
-            agentBatchId = data.batch_id;
-            pollAgentOutput(data.batch_id, data.agent);
+            if (data.status === 'interactive') {
+                updateAgentLight('idle');
+            } else {
+                showAgentPanel();
+                agentBatchId = data.batch_id;
+                pollAgentOutput(data.batch_id, data.agent);
+            }
         } else if (resp.status === 409) {
+            showAgentPanel();
             const data = await resp.json();
             agentBatchId = data.batch_id;
             pollAgentOutput(data.batch_id, data.agent);
@@ -718,6 +731,16 @@ function injectStyles() {
         .wormhole-vscode-container.maximized {
             top: 0;
             height: 100vh;
+        }
+        .wormhole-agent-select {
+            font-family: "SF Mono", "Menlo", "Monaco", monospace;
+            font-size: 0.65rem;
+            padding: 1px 2px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            background: #fff;
+            color: #555;
+            cursor: pointer;
         }
         .wormhole-agent-status {
             display: inline-block;

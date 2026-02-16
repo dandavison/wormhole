@@ -1,11 +1,9 @@
 {
   "manifest_version": 3,
   "name": "Wormhole",
-  "version": "3.12",
+  "version": "3.13",
   "description": "GitHub/JIRA integration for Wormhole: redirects file links and adds project switch buttons",
-  "permissions": [
-    "declarativeNetRequest"
-  ],
+  "permissions": ["declarativeNetRequest"],
   "host_permissions": [
     "https://github.com/*",
     "https://*.atlassian.net/*",
@@ -32,4 +30,3 @@
     "128": "icon128.png"
   }
 }
-

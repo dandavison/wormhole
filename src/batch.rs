@@ -452,7 +452,7 @@ fn run_command(
 /// Build a string to pass to `sh -c`. Single-element commands are passed
 /// verbatim (the user supplied a shell command string). Multi-element
 /// commands have each arg shell-escaped so word boundaries are preserved.
-fn shell_command_line(command: &[String]) -> String {
+pub fn shell_command_line(command: &[String]) -> String {
     if command.len() == 1 {
         return command[0].clone();
     }

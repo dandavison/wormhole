@@ -28,6 +28,7 @@ pub fn agent_batch_id(task: &str) -> Option<String> {
 struct NotifyAgentRequest {
     task: String,
     prompt: String,
+    agent: Option<String>,
 }
 
 /// HTTP handler for POST /task/notify-agent
@@ -51,10 +52,11 @@ pub async fn notify_agent(req: Request<Body>) -> Response<Body> {
             let store = batch::lock();
             if let Some(b) = store.get(batch_id) {
                 if !b.is_done() {
+                    let agent = crate::agent::default_agent();
                     let json = serde_json::json!({
                         "status": "running",
                         "batch_id": batch_id,
-                        "agent": crate::agent::agent_name(),
+                        "agent": agent.name(),
                     });
                     return Response::builder()
                         .status(StatusCode::CONFLICT)
@@ -81,11 +83,30 @@ pub async fn notify_agent(req: Request<Body>) -> Response<Body> {
                 .unwrap();
         }
     };
-    let dir = project.working_tree();
+    let agent = request
+        .agent
+        .as_deref()
+        .and_then(crate::agent::Agent::parse)
+        .unwrap_or_else(crate::agent::default_agent);
+    let command = agent.command(&request.prompt);
 
-    // Create batch-of-1
+    if agent.is_interactive() {
+        if let Err(e) = crate::tmux::split_pane(&project, &command) {
+            return Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(Body::from(format!("Failed to open tmux pane: {}", e)))
+                .unwrap();
+        }
+        let json = serde_json::json!({ "status": "interactive" });
+        return Response::builder()
+            .header("Content-Type", "application/json")
+            .body(Body::from(json.to_string()))
+            .unwrap();
+    }
+
+    let dir = project.working_tree();
     let batch_id = batch::create_batch(batch::BatchRequest {
-        command: crate::agent::agent_command(&request.prompt),
+        command,
         runs: vec![batch::RunSpec {
             key: request.task.clone(),
             dir,
@@ -93,7 +114,6 @@ pub async fn notify_agent(req: Request<Body>) -> Response<Body> {
     });
     batch::spawn_batch(&batch_id);
 
-    // Record for concurrency tracking
     {
         let mut map = AGENT_BATCHES.lock().unwrap();
         map.insert(request.task, batch_id.clone());
@@ -102,7 +122,7 @@ pub async fn notify_agent(req: Request<Body>) -> Response<Body> {
     let json = serde_json::json!({
         "status": "running",
         "batch_id": batch_id,
-        "agent": crate::agent::agent_name(),
+        "agent": agent.name(),
     });
     Response::builder()
         .header("Content-Type", "application/json")

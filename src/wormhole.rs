@@ -103,6 +103,18 @@ async fn route(
             projects::refresh_tasks();
             Response::new(Body::from(""))
         }),
+        "/task/create-from-review-requests" => {
+            require_post(method, || match crate::task::create_review_tasks() {
+                Ok(result) => Response::builder()
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(serde_json::to_string_pretty(&result).unwrap()))
+                    .unwrap(),
+                Err(e) => Response::builder()
+                    .status(hyper::StatusCode::INTERNAL_SERVER_ERROR)
+                    .body(Body::from(e))
+                    .unwrap(),
+            })
+        }
         "/doctor/conform" => require_post(method, || doctor::conform(params.dry_run)),
         "/doctor/persisted-data" => doctor::persisted_data(),
         "/doctor/migrate-worktrees" => require_post(method, doctor::migrate_worktrees),

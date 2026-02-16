@@ -153,6 +153,119 @@ pub fn remove_task(repo: &str, branch: &str) -> Result<(), String> {
     Ok(())
 }
 
+#[derive(serde::Serialize)]
+pub struct ReviewTaskResult {
+    pub created: Vec<String>,
+    pub skipped: Vec<String>,
+    pub errors: Vec<String>,
+}
+
+pub fn create_review_tasks() -> Result<ReviewTaskResult, String> {
+    projects::refresh_tasks();
+
+    let repo_map = build_github_repo_map();
+    let existing_tasks: std::collections::HashSet<String> = {
+        let projects = projects::lock();
+        projects
+            .all()
+            .iter()
+            .filter(|p| p.is_task())
+            .map(|p| p.store_key().to_string())
+            .collect()
+    };
+
+    let prs = crate::github::search_review_requests()?;
+
+    let mut result = ReviewTaskResult {
+        created: Vec::new(),
+        skipped: Vec::new(),
+        errors: Vec::new(),
+    };
+
+    for pr in &prs {
+        let (owner, repo_name) = match pr.repository.name_with_owner.split_once('/') {
+            Some(pair) => pair,
+            None => {
+                result.errors.push(format!(
+                    "#{}: invalid repo '{}'",
+                    pr.number, pr.repository.name_with_owner
+                ));
+                continue;
+            }
+        };
+
+        let home = match repo_map.get(&pr.repository.name_with_owner) {
+            Some(name) => name.clone(),
+            None => {
+                result.skipped.push(format!(
+                    "#{} {}: no local project for {}",
+                    pr.number, pr.title, pr.repository.name_with_owner
+                ));
+                continue;
+            }
+        };
+
+        let branch = match crate::github::get_pr_branch(owner, repo_name, pr.number) {
+            Some(b) => b,
+            None => {
+                result
+                    .errors
+                    .push(format!("#{} {}: failed to get branch", pr.number, pr.title));
+                continue;
+            }
+        };
+
+        let task_key = format!("{}:{}", home, branch);
+        if existing_tasks.contains(&task_key) {
+            result.skipped.push(format!("{} (exists)", task_key));
+            continue;
+        }
+
+        match create_task(&home, &branch) {
+            Ok(task) => {
+                let worktree = task.working_tree();
+                if let Err(e) = crate::github::pr_checkout(&worktree, pr.number) {
+                    result
+                        .errors
+                        .push(format!("{}: gh pr checkout failed: {}", task_key, e));
+                }
+                write_review_agents_md(&worktree, &pr.url, &pr.title);
+                let key = ProjectKey::task(&home, &branch);
+                crate::kv::set_value_sync(&key, "task_type", "review");
+                result.created.push(task_key);
+            }
+            Err(e) => {
+                result.errors.push(format!("{}: {}", task_key, e));
+            }
+        }
+    }
+
+    if !result.created.is_empty() {
+        projects::refresh_cache();
+    }
+
+    Ok(result)
+}
+
+fn build_github_repo_map() -> std::collections::HashMap<String, String> {
+    let mut map = std::collections::HashMap::new();
+    for (name, path) in config::available_projects() {
+        if let Some(github_repo) = git::github_repo_from_remote(&path) {
+            map.insert(github_repo, name);
+        }
+    }
+    map
+}
+
+fn write_review_agents_md(worktree_path: &Path, pr_url: &str, pr_title: &str) {
+    let agents_path = worktree_path.join(".task/AGENTS.md");
+    let content = format!(
+        "Your task is to review this pull request:\n\n{}\n\nTitle: {}\n",
+        pr_url, pr_title
+    );
+    let _ = fs::write(&agents_path, content);
+}
+
 fn resolve_project_path(project_name: &str) -> Result<PathBuf, String> {
     config::resolve_project_name(project_name)
         .or_else(|| {

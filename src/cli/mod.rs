@@ -137,9 +137,9 @@ pub enum ProjectCommand {
     },
     /// Close a project (editor and terminal windows)
     Close {
-        /// Project name
+        /// Project name (defaults to current project)
         #[arg(add = ArgValueCompleter::new(complete_projects))]
-        name: String,
+        name: Option<String>,
     },
     /// Remove a project from wormhole (removes worktree for tasks)
     Remove {
@@ -411,6 +411,11 @@ pub fn run(command: Command) -> Result<(), String> {
                 Ok(())
             }
             ProjectCommand::Close { name } => {
+                let name = name.unwrap_or_else(|| {
+                    std::env::current_dir()
+                        .map(|p| p.to_string_lossy().to_string())
+                        .unwrap_or_default()
+                });
                 client.post(&format!("/project/close/{}", name))?;
                 Ok(())
             }

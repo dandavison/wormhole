@@ -225,8 +225,16 @@ pub(super) fn task_create_from_sprint(client: &Client) -> Result<(), String> {
     Ok(())
 }
 
-pub(super) fn task_create_from_review_requests(client: &Client) -> Result<(), String> {
-    let response = client.post("/task/create-from-review-requests")?;
+pub(super) fn task_create_from_review_requests(
+    client: &Client,
+    dry_run: bool,
+) -> Result<(), String> {
+    let url = if dry_run {
+        "/task/create-from-review-requests?dry-run=true".to_string()
+    } else {
+        "/task/create-from-review-requests".to_string()
+    };
+    let response = client.post(&url)?;
     let result: serde_json::Value =
         serde_json::from_str(&response).map_err(|e| format!("Failed to parse response: {}", e))?;
 

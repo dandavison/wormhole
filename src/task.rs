@@ -268,7 +268,7 @@ pub struct ReviewTaskResult {
     pub errors: Vec<String>,
 }
 
-pub fn create_review_tasks() -> Result<ReviewTaskResult, String> {
+pub fn create_review_tasks(dry_run: bool) -> Result<ReviewTaskResult, String> {
     projects::refresh_tasks();
 
     let repo_map = build_github_repo_map();
@@ -329,6 +329,11 @@ pub fn create_review_tasks() -> Result<ReviewTaskResult, String> {
             continue;
         }
 
+        if dry_run {
+            result.created.push(format!("{} (dry run)", task_key));
+            continue;
+        }
+
         match create_task(&home, &branch) {
             Ok(task) => {
                 let worktree = task.working_tree();
@@ -348,7 +353,7 @@ pub fn create_review_tasks() -> Result<ReviewTaskResult, String> {
         }
     }
 
-    if !result.created.is_empty() {
+    if !dry_run && !result.created.is_empty() {
         projects::refresh_cache();
     }
 

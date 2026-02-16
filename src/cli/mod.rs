@@ -83,7 +83,11 @@ pub enum TaskCommand {
     /// Create tasks from current sprint issues
     CreateFromSprint,
     /// Create tasks from GitHub PRs requesting your review
-    CreateFromReviewRequests,
+    CreateFromReviewRequests {
+        /// Show what would be created without actually creating tasks
+        #[arg(long)]
+        dry_run: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -565,8 +569,8 @@ pub fn run(command: Command) -> Result<(), String> {
                 home_project,
             } => task::task_upsert(&client, &target, home_project),
             TaskCommand::CreateFromSprint => task::task_create_from_sprint(&client),
-            TaskCommand::CreateFromReviewRequests => {
-                task::task_create_from_review_requests(&client)
+            TaskCommand::CreateFromReviewRequests { dry_run } => {
+                task::task_create_from_review_requests(&client, dry_run)
             }
         },
 

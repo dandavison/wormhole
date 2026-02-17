@@ -385,7 +385,7 @@ pub fn create_review_tasks(dry_run: bool) -> Result<ReviewTaskResult, String> {
         }
     }
 
-    if !dry_run && !result.created.is_empty() {
+    if !dry_run && (!result.created.is_empty() || !result.skipped.is_empty()) {
         projects::refresh_cache();
     }
 

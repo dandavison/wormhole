@@ -14,6 +14,8 @@ use crate::{config, editor, git, task};
 pub struct ConformResult {
     pub dry_run: bool,
     pub results: Vec<ConformTaskResult>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub orphans_removed: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -42,12 +44,25 @@ impl ConformResult {
                 ok += 1;
             }
         }
+        for orphan in &self.orphans_removed {
+            let verb = if self.dry_run {
+                "would remove"
+            } else {
+                "removed"
+            };
+            lines.push(format!("  {} orphan: {}", verb, orphan));
+        }
         let verb = if self.dry_run {
             "Would conform"
         } else {
             "Conformed"
         };
-        lines.push(format!("{} {} task(s), {} error(s).", verb, ok, errs));
+        let mut summary = format!("{} {} task(s), {} error(s)", verb, ok, errs);
+        if !self.orphans_removed.is_empty() {
+            summary.push_str(&format!(", {} orphan(s)", self.orphans_removed.len()));
+        }
+        summary.push('.');
+        lines.push(summary);
         lines.join("\n")
     }
 }
@@ -84,7 +99,32 @@ pub fn conform(dry_run: bool) -> Response<Body> {
         })
         .collect();
 
-    let result = ConformResult { dry_run, results };
+    let orphans_removed: Vec<String> = repo_paths
+        .par_iter()
+        .filter(|(_, path)| git::is_git_repo(path))
+        .flat_map(|(_, path)| {
+            git::find_orphan_worktree_dirs(path)
+                .into_iter()
+                .filter_map(|orphan| {
+                    let display = orphan.display().to_string();
+                    if !dry_run {
+                        fs::remove_dir_all(&orphan).ok()?;
+                        // Remove empty branch parent directory
+                        if let Some(parent) = orphan.parent() {
+                            let _ = fs::remove_dir(parent);
+                        }
+                    }
+                    Some(display)
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect();
+
+    let result = ConformResult {
+        dry_run,
+        results,
+        orphans_removed,
+    };
     json_response(&result)
 }
 

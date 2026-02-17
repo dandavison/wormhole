@@ -206,6 +206,45 @@ pub fn worktree_base_path(repo_path: &Path) -> PathBuf {
     git_common_dir(repo_path).join("wormhole/worktrees")
 }
 
+/// Find directories under the worktree base that are not recognized by git as worktrees.
+pub fn find_orphan_worktree_dirs(repo_path: &Path) -> Vec<PathBuf> {
+    let base = worktree_base_path(repo_path);
+    if !base.exists() {
+        return vec![];
+    }
+    let known: std::collections::HashSet<PathBuf> = list_worktrees(repo_path)
+        .into_iter()
+        .filter_map(|wt| wt.path.canonicalize().ok())
+        .collect();
+
+    let mut orphans = vec![];
+    let branch_dirs = match std::fs::read_dir(&base) {
+        Ok(d) => d,
+        Err(_) => return vec![],
+    };
+    for branch_entry in branch_dirs.flatten() {
+        let branch_path = branch_entry.path();
+        if !branch_path.is_dir() {
+            continue;
+        }
+        let repo_dirs = match std::fs::read_dir(&branch_path) {
+            Ok(d) => d,
+            Err(_) => continue,
+        };
+        for repo_entry in repo_dirs.flatten() {
+            let path = repo_entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+            let canonical = path.canonicalize().unwrap_or_else(|_| path.clone());
+            if !known.contains(&canonical) {
+                orphans.push(path);
+            }
+        }
+    }
+    orphans
+}
+
 pub fn encode_branch_for_path(branch: &str) -> String {
     url::form_urlencoded::byte_serialize(branch.as_bytes()).collect()
 }
@@ -477,6 +516,65 @@ detached
         let result = create_worktree(&repo, &worktree_path, "ACT-123");
         assert!(result.is_ok(), "create_worktree failed: {:?}", result);
         assert!(worktree_path.exists());
+    }
+
+    #[test]
+    fn test_find_orphan_worktree_dirs() {
+        use std::fs;
+
+        let temp = tempfile::tempdir().unwrap();
+        let repo = temp.path().join("repo");
+
+        fs::create_dir_all(&repo).unwrap();
+        Command::new("git")
+            .args(["init"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "--allow-empty", "-m", "init"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+
+        let base = worktree_base_path(&repo);
+
+        // Create a real worktree
+        Command::new("git")
+            .args(["branch", "real-branch"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+        let real_wt = base.join("real-branch/repo");
+        create_worktree(&repo, &real_wt, "real-branch").unwrap();
+
+        // Create an orphan directory (not a git worktree)
+        let orphan = base.join("stale-branch/repo");
+        fs::create_dir_all(&orphan).unwrap();
+
+        let orphans = find_orphan_worktree_dirs(&repo);
+        assert_eq!(orphans, vec![orphan]);
+    }
+
+    #[test]
+    fn test_find_orphan_worktree_dirs_empty() {
+        use std::fs;
+
+        let temp = tempfile::tempdir().unwrap();
+        let repo = temp.path().join("repo");
+        fs::create_dir_all(&repo).unwrap();
+        Command::new("git")
+            .args(["init"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "--allow-empty", "-m", "init"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+
+        assert!(find_orphan_worktree_dirs(&repo).is_empty());
     }
 
     #[test]

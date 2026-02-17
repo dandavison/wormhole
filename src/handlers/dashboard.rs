@@ -103,6 +103,17 @@ fn render_task_card(
             html_escape(&pr.display()),
             comments
         )
+    } else if let Some(url) = task.kv.get("review_pr_url") {
+        let label = task
+            .kv
+            .get("review_pr_title")
+            .map(|t| html_escape(t))
+            .unwrap_or_else(|| "PR".to_string());
+        format!(
+            r#"<span class="meta-item"><a href="{}" target="_blank">{}</a></span>"#,
+            html_escape(url),
+            label
+        )
     } else {
         String::new()
     };

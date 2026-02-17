@@ -360,6 +360,8 @@ pub fn create_review_tasks(dry_run: bool) -> Result<ReviewTaskResult, String> {
                 write_review_agents_md(&worktree, &pr.url, &pr.title);
                 let key = ProjectKey::task(&home, &branch);
                 crate::kv::set_value_sync(&key, "task_type", "review");
+                crate::kv::set_value_sync(&key, "review_pr_url", &pr.url);
+                crate::kv::set_value_sync(&key, "review_pr_title", &pr.title);
                 if already_exists {
                     result.skipped.push(format!("{} (updated)", task_key));
                 } else {

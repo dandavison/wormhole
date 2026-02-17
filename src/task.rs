@@ -27,7 +27,7 @@ pub fn agent_batch_id(task: &str) -> Option<String> {
 #[derive(Deserialize)]
 struct NotifyAgentRequest {
     task: String,
-    prompt: String,
+    prompt: Option<String>,
     agent: Option<String>,
 }
 
@@ -83,12 +83,16 @@ pub async fn notify_agent(req: Request<Body>) -> Response<Body> {
                 .unwrap();
         }
     };
+    let prompt = request
+        .prompt
+        .or_else(|| resolve_prompt(&project))
+        .unwrap_or_default();
     let agent = request
         .agent
         .as_deref()
         .and_then(crate::agent::Agent::parse)
         .unwrap_or_else(crate::agent::default_agent);
-    let command = agent.command(&request.prompt);
+    let command = agent.command(&prompt);
 
     if agent.is_interactive() {
         if let Err(e) = crate::tmux::split_pane(&project, &command) {
@@ -128,6 +132,13 @@ pub async fn notify_agent(req: Request<Body>) -> Response<Body> {
         .header("Content-Type", "application/json")
         .body(Body::from(json.to_string()))
         .unwrap()
+}
+
+fn resolve_prompt(project: &Project) -> Option<String> {
+    match project.kv.get("task_type").map(|s| s.as_str()) {
+        Some("review") => crate::prompts::review_comments(project),
+        _ => None,
+    }
 }
 
 pub fn get_task(key: &ProjectKey) -> Option<Project> {

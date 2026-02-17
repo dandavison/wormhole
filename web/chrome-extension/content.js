@@ -401,27 +401,7 @@ async function pollAgentOutput(batchId, agent) {
     }
 }
 
-function buildAgentPrompt() {
-    const url = window.location.href;
-    const m = url.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
-    const [owner, repo, pr] = m ? [m[1], m[2], m[3]] : [null, null, null];
-    const repoSlug = owner && repo ? `${owner}/${repo}` : '';
-    const prRef = repoSlug && pr ? `${repoSlug}#${pr}` : url;
-    let prompt = `There are review comments on PR ${prRef}. `;
-    prompt += `Use gh to read the PR comments and diff. `;
-    if (repoSlug && pr) {
-        prompt += `List comments: gh api repos/${repoSlug}/pulls/${pr}/comments. `;
-        prompt += `Reply to a comment: gh api repos/${repoSlug}/pulls/${pr}/comments/{comment_id}/replies -f body="your reply". `;
-    }
-    prompt += `Skip comments that start with the \u{1F916} emoji (those are from AI agents). `;
-    prompt += `Reply to comments that have not already been adequately answered. `;
-    prompt += `If appropriate, make commits addressing the feedback. `;
-    prompt += `Prefix each of your PR comments with the \u{1F916} emoji.`;
-    return prompt;
-}
-
 async function notifyAgent(info) {
-    const prompt = buildAgentPrompt();
     const agentSelect = document.querySelector('.wormhole-agent-select');
     const agent = agentSelect ? agentSelect.value : undefined;
     try {
@@ -429,7 +409,7 @@ async function notifyAgent(info) {
         const resp = await fetch(`${WORMHOLE_BASE}/task/notify-agent`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ task: info.name, prompt, agent })
+            body: JSON.stringify({ task: info.name, agent })
         });
         if (resp.ok) {
             const data = await resp.json();

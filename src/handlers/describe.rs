@@ -291,12 +291,7 @@ fn find_task_by_pr(owner: &str, repo: &str, pr_number: u64) -> Option<TaskMatch>
     let tasks: Vec<(ProjectKey, crate::project::Project)> = projects::tasks().into_iter().collect();
 
     tasks.par_iter().find_map_any(|(key, project)| {
-        let task_pr = github::get_open_pr_number(project)?;
-        if task_pr != pr_number {
-            return None;
-        }
-        let task_repo = github::get_repo_name(project)?;
-        if task_repo != expected_repo {
+        if !matches_pr(project, &expected_repo, pr_number) {
             return None;
         }
         Some(TaskMatch {
@@ -306,6 +301,27 @@ fn find_task_by_pr(owner: &str, repo: &str, pr_number: u64) -> Option<TaskMatch>
             task_type: project.kv.get("task_type").cloned(),
         })
     })
+}
+
+/// Check whether a task's PR matches the expected repo and PR number.
+/// First checks the stored review_pr_url KV (fast, covers fork PRs),
+/// then falls back to `gh pr view` (slow, only finds same-repo PRs).
+fn matches_pr(project: &crate::project::Project, expected_repo: &str, pr_number: u64) -> bool {
+    if let Some(url) = project.kv.get("review_pr_url") {
+        if let Some(gh) = parse_github_url(url) {
+            if gh.pr == Some(pr_number) && format!("{}/{}", gh.owner, gh.repo) == expected_repo {
+                return true;
+            }
+        }
+    }
+    let task_pr = match github::get_open_pr_number(project) {
+        Some(pr) => pr,
+        None => return false,
+    };
+    if task_pr != pr_number {
+        return false;
+    }
+    github::get_repo_name(project).is_some_and(|r| r == expected_repo)
 }
 
 #[cfg(test)]

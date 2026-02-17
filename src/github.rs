@@ -175,16 +175,24 @@ pub fn search_review_requests() -> Result<Vec<ReviewRequest>, String> {
     serde_json::from_slice(&output.stdout).map_err(|e| format!("Failed to parse gh output: {}", e))
 }
 
-pub fn pr_checkout(worktree_path: &Path, pr_number: u64) -> Result<(), String> {
-    let output = Command::new("gh")
-        .args(["pr", "checkout", &pr_number.to_string()])
+pub fn pr_fetch_and_reset(worktree_path: &Path, pr_number: u64) -> Result<(), String> {
+    let fetch = Command::new("git")
+        .args(["fetch", "origin", &format!("pull/{}/head", pr_number)])
         .current_dir(worktree_path)
         .output()
-        .map_err(|e| format!("Failed to run gh pr checkout: {}", e))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("gh pr checkout failed: {}", stderr.trim()));
+        .map_err(|e| format!("git fetch failed: {}", e))?;
+    if !fetch.status.success() {
+        let stderr = String::from_utf8_lossy(&fetch.stderr);
+        return Err(format!("git fetch failed: {}", stderr.trim()));
+    }
+    let reset = Command::new("git")
+        .args(["reset", "--hard", "FETCH_HEAD"])
+        .current_dir(worktree_path)
+        .output()
+        .map_err(|e| format!("git reset failed: {}", e))?;
+    if !reset.status.success() {
+        let stderr = String::from_utf8_lossy(&reset.stderr);
+        return Err(format!("git reset failed: {}", stderr.trim()));
     }
     Ok(())
 }

@@ -340,28 +340,31 @@ pub fn create_review_tasks(dry_run: bool) -> Result<ReviewTaskResult, String> {
         };
 
         let task_key = format!("{}:{}", home, branch);
-        if existing_tasks.contains(&task_key) {
-            result.skipped.push(format!("{} (exists)", task_key));
-            continue;
-        }
+        let already_exists = existing_tasks.contains(&task_key);
 
         if dry_run {
-            result.created.push(format!("{} (dry run)", task_key));
+            let label = if already_exists { "update" } else { "create" };
+            result
+                .created
+                .push(format!("{} (dry run: {})", task_key, label));
             continue;
         }
 
         match create_task(&home, &branch) {
             Ok(task) => {
                 let worktree = task.working_tree();
-                if let Err(e) = crate::github::pr_checkout(&worktree, pr.number) {
-                    result
-                        .errors
-                        .push(format!("{}: gh pr checkout failed: {}", task_key, e));
+                if let Err(e) = crate::github::pr_fetch_and_reset(&worktree, pr.number) {
+                    result.errors.push(format!("{}: {}", task_key, e));
+                    continue;
                 }
                 write_review_agents_md(&worktree, &pr.url, &pr.title);
                 let key = ProjectKey::task(&home, &branch);
                 crate::kv::set_value_sync(&key, "task_type", "review");
-                result.created.push(task_key);
+                if already_exists {
+                    result.skipped.push(format!("{} (updated)", task_key));
+                } else {
+                    result.created.push(task_key);
+                }
             }
             Err(e) => {
                 result.errors.push(format!("{}: {}", task_key, e));

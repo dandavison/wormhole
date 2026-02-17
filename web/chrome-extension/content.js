@@ -822,27 +822,55 @@ function injectStyles() {
     document.head.appendChild(style);
 }
 
-function getTargetSelectors() {
+function findTargetElement() {
     if (isGitHubPage()) {
-        return [
-            '.markdown-title',
-            '[class*="pr-sticky-title"]',
-        ];
+        return findGitHubTarget();
     } else if (isJiraPage()) {
-        return [
-            // Breadcrumbs area (preferred - above title)
+        return findBySelector([
             '[data-testid="issue.views.issue-base.foundation.breadcrumbs.breadcrumb-current-issue-container"]',
             '[data-test-id="issue.views.issue-base.foundation.breadcrumbs.current-issue.item"]',
             '[data-testid="issue.views.issue-base.foundation.breadcrumbs.parent-issue.item"]',
-            // Board view modal selectors
             '[data-testid="issue.views.issue-base.foundation.summary.heading"]',
             '[data-testid="issue-details-panel-header"]',
-            // Browse page selectors
             '[data-testid="issue-header"]',
             '#jira-issue-header',
-        ];
+        ]);
     }
-    return [];
+    return null;
+}
+
+function findGitHubTarget() {
+    // For PRs and issues, find the title heading by the #NNNN text — this is
+    // robust against GitHub CSS class name changes.
+    const match = window.location.pathname.match(/\/(?:pull|issues)\/(\d+)/);
+    if (match) {
+        const needle = `#${match[1]}`;
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+        let node;
+        while ((node = walker.nextNode())) {
+            if (node.textContent.includes(needle)) {
+                let el = node.parentElement;
+                if (el && (el.tagName === 'SPAN' || el.tagName === 'BDI')) {
+                    el = el.parentElement;
+                }
+                return el;
+            }
+        }
+    }
+    return findBySelector(['.markdown-title']);
+}
+
+function findBySelector(selectors) {
+    for (const sel of selectors) {
+        let el = document.querySelector(sel);
+        if (el) {
+            if (el.tagName === 'SPAN' || el.tagName === 'BDI') {
+                el = el.parentElement;
+            }
+            return el;
+        }
+    }
+    return null;
 }
 
 function shouldInject() {
@@ -872,16 +900,7 @@ async function injectButtons() {
     try {
         injectStyles();
 
-        const selectors = getTargetSelectors();
-        let targetElement = null;
-        for (const sel of selectors) {
-            targetElement = document.querySelector(sel);
-            if (targetElement) break;
-        }
-        // These selectors match inline elements; append to parent instead
-        if (targetElement && (targetElement.tagName === 'SPAN' || targetElement.tagName === 'BDI')) {
-            targetElement = targetElement.parentElement;
-        }
+        const targetElement = findTargetElement();
 
         if (targetElement) {
             // Double-check no buttons were added while we waited

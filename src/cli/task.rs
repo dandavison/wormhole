@@ -234,7 +234,9 @@ pub(super) fn task_create_from_review_requests(
     } else {
         "/task/create-from-review-requests".to_string()
     };
+    eprint!("Fetching review requests...");
     let response = client.post(&url)?;
+    eprintln!(" done");
     let result: serde_json::Value =
         serde_json::from_str(&response).map_err(|e| format!("Failed to parse response: {}", e))?;
 

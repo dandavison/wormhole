@@ -1,12 +1,20 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 use crate::project::Project;
+
+fn prompts_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("prompts")
+}
 
 pub fn review_comments(project: &Project) -> Option<String> {
     let url = project.kv.get("review_pr_url")?;
     let (repo, pr) = parse_github_pr_url(url)?;
     let vars = HashMap::from([("repo", repo.as_str()), ("pr", pr.as_str())]);
-    Some(render(include_str!("../prompts/review-comments.md"), &vars))
+    let template = std::fs::read_to_string(prompts_dir().join("review-comments.md"))
+        .map_err(|e| eprintln!("Failed to read prompt template: {}", e))
+        .ok()?;
+    Some(render(&template, &vars))
 }
 
 fn render(template: &str, vars: &HashMap<&str, &str>) -> String {

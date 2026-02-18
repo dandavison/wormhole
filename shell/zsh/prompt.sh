@@ -23,7 +23,7 @@ function osc8_link {
 
 function prompt_dir_display {
     local name
-    if [[ -n $WORMHOLE_PROJECT_DIR ]] && [[ $PWD != $WORMHOLE_PROJECT_DIR ]]; then
+    if [[ -n $WORMHOLE_PROJECT_DIR ]] && [[ $PWD == $WORMHOLE_PROJECT_DIR/* ]]; then
         name="${WORMHOLE_PROJECT_NAME}/$(realpath --relative-to="$WORMHOLE_PROJECT_DIR" "$PWD")"
     elif [[ -n $WORMHOLE_PROJECT_DIR ]] && [[ $PWD == $WORMHOLE_PROJECT_DIR ]]; then
         name="${WORMHOLE_PROJECT_NAME}"

@@ -48,7 +48,9 @@ function prompt_git_branch {
         url="https://github.com/${WORMHOLE_GITHUB_REPO}/compare/${branch}?expand=1"
     fi
     if [[ -n $url ]]; then
-        print -rn -- "("; osc8_link "$url" "$branch"; print -rn -- ")"
+        print -rn -- "("
+        osc8_link "$url" "$branch"
+        print -rn -- ")"
     else
         print -rn -- "($branch)"
     fi

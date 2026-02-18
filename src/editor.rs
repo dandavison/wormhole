@@ -72,7 +72,7 @@ impl Editor {
     }
 
     fn open_directory_uri(&self, absolute_path: &Path) -> Option<String> {
-        let path = absolute_path.to_str().unwrap();
+        let path = encode_path_for_uri(absolute_path);
         match self {
             None => Option::None,
             Cursor => Some(format!("cursor://file/{path}")),
@@ -86,7 +86,7 @@ impl Editor {
     }
 
     fn open_file_uri(&self, absolute_path: &Path, line: Option<usize>) -> Option<String> {
-        let path = absolute_path.to_str().unwrap();
+        let path = encode_path_for_uri(absolute_path);
         let line = line.unwrap_or(1);
         match self {
             None => Option::None,
@@ -114,6 +114,10 @@ impl Editor {
         }
         hammerspoon::launch_or_focus(self.application_name())
     }
+}
+
+fn encode_path_for_uri(path: &Path) -> String {
+    path.to_str().unwrap().replace('%', "%25")
 }
 
 fn wormhole_workspace_path(project: &Project) -> std::path::PathBuf {

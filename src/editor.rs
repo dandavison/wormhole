@@ -331,6 +331,23 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_uri_encodes_percent_in_path() {
+        let path = Path::new("/repo/.git/wormhole/worktrees/feat%2Fauth/myrepo");
+        assert_eq!(
+            Cursor.open_directory_uri(path).unwrap(),
+            "cursor://file//repo/.git/wormhole/worktrees/feat%252Fauth/myrepo"
+        );
+        assert_eq!(
+            Cursor.open_file_uri(path, Some(42)).unwrap(),
+            "cursor://file//repo/.git/wormhole/worktrees/feat%252Fauth/myrepo:42"
+        );
+        assert_eq!(
+            VSCode.open_directory_uri(path).unwrap(),
+            "vscode://file//repo/.git/wormhole/worktrees/feat%252Fauth/myrepo"
+        );
+    }
+
+    #[test]
     fn test_migrate_workspace_files() {
         let temp = tempfile::tempdir().unwrap();
         let repo = temp.path().join("repo");

@@ -16,12 +16,15 @@ lazy_static! {
     static ref AGENT_BATCHES: Mutex<HashMap<String, String>> = Mutex::new(HashMap::new());
 }
 
-/// Look up the current agent batch ID for a task (if any, and still exists).
+/// Look up the current agent batch ID for a task (if still running).
 pub fn agent_batch_id(task: &str) -> Option<String> {
     let map = AGENT_BATCHES.lock().unwrap();
     let batch_id = map.get(task)?;
     let store = batch::lock();
-    store.get(batch_id).map(|_| batch_id.clone())
+    store
+        .get(batch_id)
+        .filter(|b| !b.is_done())
+        .map(|_| batch_id.clone())
 }
 
 #[derive(Deserialize)]
@@ -612,6 +615,32 @@ mod tests {
         assert!(!actions.is_empty());
         assert!(!worktree.join(".task").exists());
         assert!(!worktree.join("CLAUDE.md").exists());
+    }
+
+    #[test]
+    fn agent_batch_id_none_when_done() {
+        let batch = batch::Batch {
+            id: "test-done".into(),
+            command: vec!["echo".into()],
+            created_at: std::time::SystemTime::now(),
+            runs: vec![batch::Run {
+                key: "r".into(),
+                dir: PathBuf::from("/tmp"),
+                status: batch::RunStatus::Failed,
+                exit_code: Some(1),
+                stdout_path: PathBuf::from("/dev/null"),
+                stderr_path: PathBuf::from("/dev/null"),
+                pid: None,
+                started_at: None,
+                finished_at: None,
+            }],
+        };
+        batch::lock().insert(batch);
+        AGENT_BATCHES
+            .lock()
+            .unwrap()
+            .insert("my-task".into(), "test-done".into());
+        assert!(agent_batch_id("my-task").is_none());
     }
 
     #[test]

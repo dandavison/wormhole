@@ -122,7 +122,6 @@ async fn route(
         }),
         "/doctor/conform" => require_post(method, || doctor::conform(params.dry_run)),
         "/doctor/persisted-data" => doctor::persisted_data(),
-        "/doctor/migrate-worktrees" => require_post(method, doctor::migrate_worktrees),
         "/jira/sprint/list" => jira::sprint_list(),
         "/jira/sprint/show" => jira::sprint_show(),
         "/project/show" => project::show(None),

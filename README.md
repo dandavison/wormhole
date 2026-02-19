@@ -159,7 +159,6 @@ wormhole jira sprint show               # Show detailed sprint status
 wormhole refresh                        # Refresh in-memory data from disk/APIs
 wormhole kill                           # Kill tmux session and clean up
 wormhole doctor persisted-data          # Report on worktrees and KV files
-wormhole doctor migrate-worktrees      # Migrate worktrees to new layout
 wormhole completion bash                # Generate shell completions
 ```
 

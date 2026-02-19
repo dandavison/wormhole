@@ -6,7 +6,7 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::pst::TerminalHyperlink;
-use crate::{config, editor, git, task};
+use crate::{config, git, task};
 
 // --- conform ---
 
@@ -248,117 +248,6 @@ pub fn persisted_data() -> Response<Body> {
 
     let report = PersistedDataReport { projects };
     json_response(&report)
-}
-
-// --- migrate-worktrees ---
-
-#[derive(Serialize, Deserialize)]
-pub struct MigrateResult {
-    pub projects: Vec<MigrateProjectResult>,
-    pub worktrees_total: usize,
-    pub workspaces_total: usize,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct MigrateProjectResult {
-    pub name: String,
-    pub worktrees_migrated: usize,
-    pub workspaces_migrated: usize,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub worktree_error: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub workspace_error: Option<String>,
-}
-
-impl MigrateResult {
-    pub fn render_terminal(&self) -> String {
-        let mut lines = Vec::new();
-        for p in &self.projects {
-            if p.worktrees_migrated > 0 {
-                lines.push(format!(
-                    "{}: migrated {} worktree(s)",
-                    p.name, p.worktrees_migrated
-                ));
-            }
-            if p.workspaces_migrated > 0 {
-                lines.push(format!(
-                    "{}: migrated {} workspace file(s)",
-                    p.name, p.workspaces_migrated
-                ));
-            }
-            if let Some(ref e) = p.worktree_error {
-                lines.push(format!("{}: worktree error: {}", p.name, e));
-            }
-            if let Some(ref e) = p.workspace_error {
-                lines.push(format!("{}: workspace error: {}", p.name, e));
-            }
-        }
-        if self.worktrees_total == 0 && self.workspaces_total == 0 {
-            lines.push("No worktrees or workspace files needed migration.".to_string());
-        } else {
-            if self.worktrees_total > 0 {
-                lines.push(format!(
-                    "\nMigrated {} worktree(s) total.",
-                    self.worktrees_total
-                ));
-            }
-            if self.workspaces_total > 0 {
-                lines.push(format!(
-                    "Migrated {} workspace file(s) total.",
-                    self.workspaces_total
-                ));
-            }
-        }
-        lines.join("\n")
-    }
-}
-
-pub fn migrate_worktrees() -> Response<Body> {
-    let available = config::available_projects();
-    let mut projects = Vec::new();
-    let mut worktrees_total = 0;
-    let mut workspaces_total = 0;
-
-    for (name, path) in &available {
-        if !git::is_git_repo(path) {
-            continue;
-        }
-        let mut result = MigrateProjectResult {
-            name: name.clone(),
-            worktrees_migrated: 0,
-            workspaces_migrated: 0,
-            worktree_error: None,
-            workspace_error: None,
-        };
-        match git::migrate_worktrees(name, path) {
-            Ok(n) => {
-                result.worktrees_migrated = n;
-                worktrees_total += n;
-            }
-            Err(e) => result.worktree_error = Some(e),
-        }
-        match editor::migrate_workspace_files(path) {
-            Ok(n) => {
-                result.workspaces_migrated += n;
-                workspaces_total += n;
-            }
-            Err(e) => result.workspace_error = Some(e),
-        }
-        if result.worktrees_migrated > 0
-            || result.workspaces_migrated > 0
-            || result.worktree_error.is_some()
-            || result.workspace_error.is_some()
-        {
-            projects.push(result);
-        }
-    }
-
-    let result = MigrateResult {
-        projects,
-        worktrees_total,
-        workspaces_total,
-    };
-    json_response(&result)
 }
 
 fn json_response<T: Serialize>(value: &T) -> Response<Body> {

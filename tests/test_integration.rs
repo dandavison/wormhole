@@ -1008,7 +1008,7 @@ fn test_task_with_slash_in_branch() {
 
     test.cli(&format!("wormhole open '{}'", store_key)).unwrap();
     test.assert_tmux_window(&task_branch);
-    test.assert_editor_window(&task_branch);
+    test.assert_editor_window(&task_branch.replace('/', "--"));
 }
 
 #[test]

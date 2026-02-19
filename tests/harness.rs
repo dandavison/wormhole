@@ -406,7 +406,8 @@ impl WormholeTest {
     ) -> String {
         let worktrees_dir = format!("{}/.git/wormhole/worktrees", home_dir);
         std::fs::create_dir_all(&worktrees_dir).unwrap();
-        let worktree_path = format!("{}/{}/{}", worktrees_dir, branch, repo_name);
+        let encoded_branch = branch.replace('/', "--");
+        let worktree_path = format!("{}/{}/{}", worktrees_dir, encoded_branch, repo_name);
         let output = Command::new("git")
             .args(["worktree", "add", "-b", branch, &worktree_path])
             .current_dir(home_dir)

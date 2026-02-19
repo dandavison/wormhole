@@ -1,5 +1,6 @@
 use crate::config;
 use crate::editor::Editor;
+use crate::git;
 use crate::project_path::ProjectPath;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -143,7 +144,7 @@ impl Project {
         Some(
             common_dir
                 .join("wormhole/worktrees")
-                .join(branch.as_str())
+                .join(git::encode_branch_for_path(branch.as_str()))
                 .join(self.repo_name.as_str()),
         )
     }

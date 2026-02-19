@@ -106,7 +106,11 @@ fn wormhole_dir(project: &Project) -> PathBuf {
 fn kv_file(project: &Project) -> PathBuf {
     let key = &project.store_key();
     let stem = match &key.branch {
-        Some(branch) => format!("{}_{}", key.repo, branch),
+        Some(branch) => format!(
+            "{}_{}",
+            key.repo,
+            crate::git::encode_branch_for_path(branch.as_str())
+        ),
         None => key.repo.to_string(),
     };
     wormhole_dir(project)
@@ -212,7 +216,11 @@ pub fn list_all_kv_fresh() -> Response<Body> {
 
 fn kv_file_for_key(key: &ProjectKey, repo_path: &Path) -> PathBuf {
     let stem = match &key.branch {
-        Some(branch) => format!("{}_{}", key.repo, branch),
+        Some(branch) => format!(
+            "{}_{}",
+            key.repo,
+            git::encode_branch_for_path(branch.as_str())
+        ),
         None => key.repo.to_string(),
     };
     git::git_common_dir(repo_path)

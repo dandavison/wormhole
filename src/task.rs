@@ -164,7 +164,7 @@ pub fn create_task(repo: &str, branch: &str) -> Result<Project, String> {
     }
 
     let worktree_path = git::worktree_base_path(&repo_path)
-        .join(git::encode_branch_for_path(branch))
+        .join(branch)
         .join(repo);
 
     let worktree_preexisted = worktree_path.exists();

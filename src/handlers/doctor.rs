@@ -184,6 +184,27 @@ impl PersistedDataReport {
     }
 }
 
+fn collect_json_files_recursive(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let mut result = vec![];
+    collect_json_files_inner(dir, &mut result);
+    result
+}
+
+fn collect_json_files_inner(dir: &std::path::Path, result: &mut Vec<std::path::PathBuf>) {
+    let entries = match fs::read_dir(dir) {
+        Ok(d) => d,
+        Err(_) => return,
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_json_files_inner(&path, result);
+        } else if path.extension().map_or(false, |e| e == "json") {
+            result.push(path);
+        }
+    }
+}
+
 pub fn persisted_data() -> Response<Body> {
     let available = config::available_projects();
     let repo_paths: Vec<_> = available.into_iter().collect();
@@ -213,22 +234,17 @@ pub fn persisted_data() -> Response<Body> {
 
             let kv_dir = git::git_common_dir(path).join("wormhole/kv");
             let mut all_kv: HashMap<String, HashMap<String, String>> = HashMap::new();
-            if let Ok(entries) = fs::read_dir(&kv_dir) {
-                for entry in entries.flatten() {
-                    let file_path = entry.path();
-                    if file_path.extension().map(|e| e == "json").unwrap_or(false) {
-                        if let Ok(contents) = fs::read_to_string(&file_path) {
-                            if let Ok(kv) =
-                                serde_json::from_str::<HashMap<String, String>>(&contents)
-                            {
-                                let stem = file_path
-                                    .file_stem()
-                                    .and_then(|s| s.to_str())
-                                    .unwrap_or("unknown")
-                                    .to_string();
-                                all_kv.insert(stem, kv);
-                            }
-                        }
+            for file_path in collect_json_files_recursive(&kv_dir) {
+                if let Ok(contents) = fs::read_to_string(&file_path) {
+                    if let Ok(kv) =
+                        serde_json::from_str::<HashMap<String, String>>(&contents)
+                    {
+                        let stem = file_path
+                            .file_stem()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("unknown")
+                            .to_string();
+                        all_kv.insert(stem, kv);
                     }
                 }
             }
@@ -339,10 +355,19 @@ pub fn migrate_worktrees() -> Response<Body> {
         }
         match editor::migrate_workspace_files(path) {
             Ok(n) => {
-                result.workspaces_migrated = n;
+                result.workspaces_migrated += n;
                 workspaces_total += n;
             }
             Err(e) => result.workspace_error = Some(e),
+        }
+        let common = git::git_common_dir(path);
+        let ws_dir = common.join("wormhole/workspaces");
+        let kv_dir = common.join("wormhole/kv");
+        for dir in [&ws_dir, &kv_dir] {
+            if let Ok(n) = git::migrate_percent_encoded_files(dir) {
+                result.workspaces_migrated += n;
+                workspaces_total += n;
+            }
         }
         if result.worktrees_migrated > 0
             || result.workspaces_migrated > 0

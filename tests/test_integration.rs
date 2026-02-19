@@ -1006,10 +1006,9 @@ fn test_task_with_slash_in_branch() {
         "Task with / in branch should appear in list"
     );
 
-    // Switch to task and verify tmux window (literal /) and editor window (%2F)
     test.cli(&format!("wormhole open '{}'", store_key)).unwrap();
     test.assert_tmux_window(&task_branch);
-    test.assert_editor_window(&task_branch.replace('/', "%2F"));
+    test.assert_editor_window(&task_branch);
 }
 
 #[test]

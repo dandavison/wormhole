@@ -104,20 +104,14 @@ fn wormhole_dir(project: &Project) -> PathBuf {
 }
 
 fn kv_file(project: &Project) -> PathBuf {
-    // Use store_key for filename to differentiate tasks from same repo
-    // Encode branch to handle / and other special characters
     let key = &project.store_key();
-    let filename = match &key.branch {
-        Some(branch) => format!(
-            "{}_{}",
-            key.repo,
-            crate::git::encode_branch_for_path(branch.as_str())
-        ),
+    let stem = match &key.branch {
+        Some(branch) => format!("{}_{}", key.repo, branch),
         None => key.repo.to_string(),
     };
     wormhole_dir(project)
         .join("kv")
-        .join(format!("{}.json", filename))
+        .join(format!("{}.json", stem))
 }
 
 pub fn delete_kv_file(project: &Project) {
@@ -217,17 +211,12 @@ pub fn list_all_kv_fresh() -> Response<Body> {
 }
 
 fn kv_file_for_key(key: &ProjectKey, repo_path: &Path) -> PathBuf {
-    // Encode branch to handle / and other special characters
-    let filename = match &key.branch {
-        Some(branch) => format!(
-            "{}_{}",
-            key.repo,
-            crate::git::encode_branch_for_path(branch.as_str())
-        ),
+    let stem = match &key.branch {
+        Some(branch) => format!("{}_{}", key.repo, branch),
         None => key.repo.to_string(),
     };
     git::git_common_dir(repo_path)
         .join("wormhole")
         .join("kv")
-        .join(format!("{}.json", filename))
+        .join(format!("{}.json", stem))
 }

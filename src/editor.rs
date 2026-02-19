@@ -72,7 +72,7 @@ impl Editor {
     }
 
     fn open_directory_uri(&self, absolute_path: &Path) -> Option<String> {
-        let path = encode_path_for_uri(absolute_path);
+        let path = absolute_path.to_str().unwrap();
         match self {
             None => Option::None,
             Cursor => Some(format!("cursor://file/{path}")),
@@ -86,7 +86,7 @@ impl Editor {
     }
 
     fn open_file_uri(&self, absolute_path: &Path, line: Option<usize>) -> Option<String> {
-        let path = encode_path_for_uri(absolute_path);
+        let path = absolute_path.to_str().unwrap();
         let line = line.unwrap_or(1);
         match self {
             None => Option::None,
@@ -116,13 +116,9 @@ impl Editor {
     }
 }
 
-fn encode_path_for_uri(path: &Path) -> String {
-    path.to_str().unwrap().replace('%', "%25")
-}
-
 fn wormhole_workspace_path(project: &Project) -> std::path::PathBuf {
     let store_key = project.store_key().to_string();
-    let filename = format!("{}.code-workspace", store_key.replace('/', "%2F"));
+    let filename = format!("{}.code-workspace", store_key);
     let gitdir = crate::git::git_common_dir(&project.repo_path);
     gitdir.join("wormhole/workspaces").join(filename)
 }
@@ -214,14 +210,7 @@ pub fn migrate_workspace_files(repo_path: &Path) -> Result<usize, String> {
         return Ok(0);
     }
     let mut count = 0;
-    for entry in fs::read_dir(&ws_dir)
-        .map_err(|e| format!("Failed to read {}: {}", ws_dir.display(), e))?
-        .flatten()
-    {
-        let path = entry.path();
-        if path.extension().map_or(true, |e| e != "code-workspace") {
-            continue;
-        }
+    for path in collect_files_recursive(&ws_dir, "code-workspace") {
         let content = fs::read_to_string(&path)
             .map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
         let content = strip_trailing_commas(&content);
@@ -251,6 +240,27 @@ pub fn migrate_workspace_files(repo_path: &Path) -> Result<usize, String> {
         }
     }
     Ok(count)
+}
+
+fn collect_files_recursive(dir: &Path, extension: &str) -> Vec<std::path::PathBuf> {
+    let mut result = vec![];
+    collect_files_recursive_inner(dir, extension, &mut result);
+    result
+}
+
+fn collect_files_recursive_inner(dir: &Path, extension: &str, result: &mut Vec<std::path::PathBuf>) {
+    let entries = match fs::read_dir(dir) {
+        Ok(d) => d,
+        Err(_) => return,
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_files_recursive_inner(&path, extension, result);
+        } else if path.extension().map_or(false, |e| e == extension) {
+            result.push(path);
+        }
+    }
 }
 
 /// Strip trailing commas before `]` and `}` (JSONC → JSON).
@@ -335,19 +345,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_uri_encodes_percent_in_path() {
-        let path = Path::new("/repo/.git/wormhole/worktrees/feat%2Fauth/myrepo");
+    fn test_uri_with_slash_in_branch() {
+        let path = Path::new("/repo/.git/wormhole/worktrees/feat/auth/myrepo");
         assert_eq!(
             Cursor.open_directory_uri(path).unwrap(),
-            "cursor://file//repo/.git/wormhole/worktrees/feat%252Fauth/myrepo"
+            "cursor://file//repo/.git/wormhole/worktrees/feat/auth/myrepo"
         );
         assert_eq!(
             Cursor.open_file_uri(path, Some(42)).unwrap(),
-            "cursor://file//repo/.git/wormhole/worktrees/feat%252Fauth/myrepo:42"
-        );
-        assert_eq!(
-            VSCode.open_directory_uri(path).unwrap(),
-            "vscode://file//repo/.git/wormhole/worktrees/feat%252Fauth/myrepo"
+            "cursor://file//repo/.git/wormhole/worktrees/feat/auth/myrepo:42"
         );
     }
 

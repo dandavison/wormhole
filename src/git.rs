@@ -218,35 +218,33 @@ pub fn find_orphan_worktree_dirs(repo_path: &Path) -> Vec<PathBuf> {
         .collect();
 
     let mut orphans = vec![];
-    let branch_dirs = match std::fs::read_dir(&base) {
+    collect_worktree_dirs(&base, &known, &mut orphans);
+    orphans
+}
+
+fn collect_worktree_dirs(
+    dir: &Path,
+    known: &std::collections::HashSet<PathBuf>,
+    orphans: &mut Vec<PathBuf>,
+) {
+    let entries = match std::fs::read_dir(dir) {
         Ok(d) => d,
-        Err(_) => return vec![],
+        Err(_) => return,
     };
-    for branch_entry in branch_dirs.flatten() {
-        let branch_path = branch_entry.path();
-        if !branch_path.is_dir() {
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
             continue;
         }
-        let repo_dirs = match std::fs::read_dir(&branch_path) {
-            Ok(d) => d,
-            Err(_) => continue,
-        };
-        for repo_entry in repo_dirs.flatten() {
-            let path = repo_entry.path();
-            if !path.is_dir() {
-                continue;
-            }
+        if path.join(".git").is_file() {
             let canonical = path.canonicalize().unwrap_or_else(|_| path.clone());
             if !known.contains(&canonical) {
                 orphans.push(path);
             }
+        } else {
+            collect_worktree_dirs(&path, known, orphans);
         }
     }
-    orphans
-}
-
-pub fn encode_branch_for_path(branch: &str) -> String {
-    url::form_urlencoded::byte_serialize(branch.as_bytes()).collect()
 }
 
 pub fn list_branches(repo_path: &Path) -> Vec<String> {
@@ -264,21 +262,25 @@ pub fn list_branches(repo_path: &Path) -> Vec<String> {
     }
 }
 
-/// Migrate worktrees from old layout (`worktrees/$branch`) to new layout
-/// (`worktrees/$branch/$repo_name`). Returns the number of worktrees migrated.
+/// Migrate worktrees from old layouts to current layout.
+///
+/// Handles two legacy layouts:
+/// 1. Flat: `worktrees/$branch/.git` → `worktrees/$branch/$repo_name/.git`
+/// 2. Percent-encoded: `worktrees/feat%2Fbar/$repo/.git` → `worktrees/feat/bar/$repo/.git`
 pub fn migrate_worktrees(repo_name: &str, repo_path: &Path) -> Result<usize, String> {
     let base = worktree_base_path(repo_path);
     if !base.exists() {
         return Ok(0);
     }
     let mut new_paths: Vec<PathBuf> = Vec::new();
+
+    // Pass 1: flat layout ($base/$branch/.git → $base/$branch/$repo/.git)
     let entries: Vec<_> = std::fs::read_dir(&base)
         .map_err(|e| format!("Failed to read {}: {}", base.display(), e))?
         .filter_map(|e| e.ok())
         .collect();
     for entry in entries {
         let old = entry.path();
-        // Old layout: $base/$encoded_branch/.git exists (it's a worktree)
         if !old.join(".git").is_file() {
             continue;
         }
@@ -298,21 +300,128 @@ pub fn migrate_worktrees(repo_name: &str, repo_path: &Path) -> Result<usize, Str
         })?;
         new_paths.push(new);
     }
+
+    // Pass 2: percent-encoded dirs (e.g. feat%2Fbar/ → feat/bar/)
+    new_paths.extend(migrate_percent_encoded_dirs(&base)?);
+
     if !new_paths.is_empty() {
-        let mut args: Vec<&str> = vec!["worktree", "repair"];
-        let path_strs: Vec<String> = new_paths.iter().map(|p| p.display().to_string()).collect();
-        args.extend(path_strs.iter().map(|s| s.as_str()));
-        let output = Command::new("git")
-            .args(&args)
-            .current_dir(repo_path)
-            .output()
-            .map_err(|e| format!("git worktree repair failed: {}", e))?;
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("git worktree repair failed: {}", stderr.trim()));
-        }
+        repair_worktrees(repo_path, &new_paths)?;
     }
     Ok(new_paths.len())
+}
+
+fn migrate_percent_encoded_dirs(base: &Path) -> Result<Vec<PathBuf>, String> {
+    let mut moved = vec![];
+    let entries: Vec<_> = std::fs::read_dir(base)
+        .map_err(|e| format!("Failed to read {}: {}", base.display(), e))?
+        .filter_map(|e| e.ok())
+        .collect();
+    for entry in entries {
+        let old = entry.path();
+        let name = match old.file_name().and_then(|n| n.to_str()) {
+            Some(n) => n.to_string(),
+            None => continue,
+        };
+        if !name.contains("%2F") && !name.contains("%2f") {
+            continue;
+        }
+        if !old.is_dir() {
+            continue;
+        }
+        let decoded: String = url::form_urlencoded::parse(name.as_bytes())
+            .map(|(k, v)| {
+                if v.is_empty() {
+                    k.into_owned()
+                } else {
+                    format!("{}={}", k, v)
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("");
+        let new_dir = base.join(&decoded);
+        if new_dir == old {
+            continue;
+        }
+        std::fs::create_dir_all(new_dir.parent().unwrap_or(base))
+            .map_err(|e| format!("Failed to create dir: {}", e))?;
+        std::fs::rename(&old, &new_dir).map_err(|e| {
+            format!(
+                "Failed to rename {} -> {}: {}",
+                old.display(),
+                new_dir.display(),
+                e
+            )
+        })?;
+        // Collect worktree dirs inside the moved directory
+        for sub in std::fs::read_dir(&new_dir)
+            .map_err(|e| format!("Failed to read {}: {}", new_dir.display(), e))?
+            .flatten()
+        {
+            let p = sub.path();
+            if p.is_dir() && p.join(".git").is_file() {
+                moved.push(p);
+            }
+        }
+    }
+    Ok(moved)
+}
+
+fn repair_worktrees(repo_path: &Path, paths: &[PathBuf]) -> Result<(), String> {
+    let mut args: Vec<&str> = vec!["worktree", "repair"];
+    let path_strs: Vec<String> = paths.iter().map(|p| p.display().to_string()).collect();
+    args.extend(path_strs.iter().map(|s| s.as_str()));
+    let output = Command::new("git")
+        .args(&args)
+        .current_dir(repo_path)
+        .output()
+        .map_err(|e| format!("git worktree repair failed: {}", e))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("git worktree repair failed: {}", stderr.trim()));
+    }
+    Ok(())
+}
+
+/// Rename files in `dir` whose names contain `%2F` to the decoded equivalent
+/// (creating nested subdirectories as needed). Returns the count of files moved.
+pub fn migrate_percent_encoded_files(dir: &Path) -> Result<usize, String> {
+    if !dir.exists() {
+        return Ok(0);
+    }
+    let mut count = 0;
+    let entries: Vec<_> = std::fs::read_dir(dir)
+        .map_err(|e| format!("Failed to read {}: {}", dir.display(), e))?
+        .filter_map(|e| e.ok())
+        .collect();
+    for entry in entries {
+        let old = entry.path();
+        let name = match old.file_name().and_then(|n| n.to_str()) {
+            Some(n) => n.to_string(),
+            None => continue,
+        };
+        if !name.contains("%2F") && !name.contains("%2f") {
+            continue;
+        }
+        let decoded = name.replace("%2F", "/").replace("%2f", "/");
+        let new = dir.join(&decoded);
+        if new == old {
+            continue;
+        }
+        if let Some(parent) = new.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create dir {}: {}", parent.display(), e))?;
+        }
+        std::fs::rename(&old, &new).map_err(|e| {
+            format!(
+                "Failed to rename {} -> {}: {}",
+                old.display(),
+                new.display(),
+                e
+            )
+        })?;
+        count += 1;
+    }
+    Ok(count)
 }
 
 pub fn remove_worktree(repo_path: &Path, worktree_path: &Path) -> Result<(), String> {
@@ -548,9 +657,10 @@ detached
         let real_wt = base.join("real-branch/repo");
         create_worktree(&repo, &real_wt, "real-branch").unwrap();
 
-        // Create an orphan directory (not a git worktree)
+        // Create an orphan directory (looks like a worktree but not known to git)
         let orphan = base.join("stale-branch/repo");
         fs::create_dir_all(&orphan).unwrap();
+        fs::write(orphan.join(".git"), "gitdir: fake").unwrap();
 
         let orphans = find_orphan_worktree_dirs(&repo);
         assert_eq!(orphans, vec![orphan]);
@@ -575,22 +685,5 @@ detached
             .unwrap();
 
         assert!(find_orphan_worktree_dirs(&repo).is_empty());
-    }
-
-    #[test]
-    fn test_encode_branch_for_path() {
-        // Simple branch names pass through unchanged
-        assert_eq!(encode_branch_for_path("main"), "main");
-        assert_eq!(encode_branch_for_path("ACT-123"), "ACT-123");
-
-        // Branch names with / are URL-encoded to stay flat
-        assert_eq!(encode_branch_for_path("feature/auth"), "feature%2Fauth");
-        assert_eq!(
-            encode_branch_for_path("feature/nested/deep"),
-            "feature%2Fnested%2Fdeep"
-        );
-
-        // Other special characters that might appear in branch names
-        assert_eq!(encode_branch_for_path("fix-bug#123"), "fix-bug%23123");
     }
 }

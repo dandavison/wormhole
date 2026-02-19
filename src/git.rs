@@ -360,7 +360,7 @@ fn migrate_encoded_worktree_dirs(base: &Path, repo_name: &str) -> Result<Vec<Pat
 }
 
 /// Migrate worktrees from nested layout (branch `/` created subdirs) to flat `--` layout.
-/// Finds worktrees under `base` whose path doesn't match the expected flat layout.
+/// E.g. `worktrees/user/topic/repo` → `worktrees/user--topic/repo`
 fn migrate_nested_worktree_dirs(
     base: &Path,
     repo_name: &str,
@@ -379,30 +379,38 @@ fn migrate_nested_worktree_dirs(
         if wt.path == expected {
             continue;
         }
-        // Move the branch-level dir (parent of repo dir) to the flat name
-        let old_branch_dir = match wt.path.parent() {
-            Some(p) if p != base => p,
-            _ => continue,
-        };
         let new_branch_dir = base.join(encode_branch_for_path(branch));
-        if old_branch_dir == new_branch_dir || new_branch_dir.exists() {
+        if new_branch_dir.exists() {
             continue;
         }
-        std::fs::rename(old_branch_dir, &new_branch_dir).map_err(|e| {
+        // The nested layout has branch components as subdirs: base/user/topic/repo.
+        // The top-level dir to rename is base/user (first component after base).
+        let relative = match wt.path.strip_prefix(base) {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+        let top_component = match relative.components().next() {
+            Some(c) => c.as_os_str(),
+            None => continue,
+        };
+        let old_top = base.join(top_component);
+
+        // Move contents: create new flat dir, move repo worktree into it
+        std::fs::create_dir_all(&new_branch_dir)
+            .map_err(|e| format!("Failed to create {}: {}", new_branch_dir.display(), e))?;
+        let old_repo = wt.path.clone();
+        let new_repo = new_branch_dir.join(repo_name);
+        std::fs::rename(&old_repo, &new_repo).map_err(|e| {
             format!(
                 "Failed to rename {} -> {}: {}",
-                old_branch_dir.display(),
-                new_branch_dir.display(),
+                old_repo.display(),
+                new_repo.display(),
                 e
             )
         })?;
-        // Clean up empty parent dirs left behind
-        if let Some(grandparent) = old_branch_dir.parent() {
-            if grandparent != base {
-                let _ = std::fs::remove_dir(grandparent);
-            }
-        }
-        moved.push(new_branch_dir.join(repo_name));
+        // Clean up the old nested directory tree
+        let _ = std::fs::remove_dir_all(&old_top);
+        moved.push(new_repo);
     }
     Ok(moved)
 }
@@ -448,7 +456,12 @@ pub fn migrate_legacy_files(dir: &Path) -> Result<usize, String> {
         let new = dir.join(&new_name);
         if new != old {
             std::fs::rename(&old, &new).map_err(|e| {
-                format!("Failed to rename {} -> {}: {}", old.display(), new.display(), e)
+                format!(
+                    "Failed to rename {} -> {}: {}",
+                    old.display(),
+                    new.display(),
+                    e
+                )
             })?;
             count += 1;
         }
@@ -484,7 +497,12 @@ pub fn migrate_legacy_files(dir: &Path) -> Result<usize, String> {
             let new_name = format!("{}--{}", prefix, file_name);
             let new = dir.join(&new_name);
             std::fs::rename(&old, &new).map_err(|e| {
-                format!("Failed to rename {} -> {}: {}", old.display(), new.display(), e)
+                format!(
+                    "Failed to rename {} -> {}: {}",
+                    old.display(),
+                    new.display(),
+                    e
+                )
             })?;
             count += 1;
         }

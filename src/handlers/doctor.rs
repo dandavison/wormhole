@@ -344,15 +344,6 @@ pub fn migrate_worktrees() -> Response<Body> {
             }
             Err(e) => result.workspace_error = Some(e),
         }
-        let common = git::git_common_dir(path);
-        let ws_dir = common.join("wormhole/workspaces");
-        let kv_dir = common.join("wormhole/kv");
-        for dir in [&ws_dir, &kv_dir] {
-            if let Ok(n) = git::migrate_legacy_files(dir) {
-                result.workspaces_migrated += n;
-                workspaces_total += n;
-            }
-        }
         if result.worktrees_migrated > 0
             || result.workspaces_migrated > 0
             || result.worktree_error.is_some()

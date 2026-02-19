@@ -267,20 +267,14 @@ pub fn list_branches(repo_path: &Path) -> Vec<String> {
     }
 }
 
-/// Migrate worktrees from old layouts to current layout.
-///
-/// Handles legacy layouts:
-/// 1. Ancient flat: `worktrees/$branch/.git` → `worktrees/$encoded/$repo/.git`
-/// 2. Percent-encoded: `worktrees/feat%2Fbar/` → `worktrees/feat--bar/`
-/// 3. Nested (from short-lived intermediate layout): `worktrees/feat/bar/` → `worktrees/feat--bar/`
+/// Migrate worktrees from old flat layout (`worktrees/$branch/.git`) to
+/// current layout (`worktrees/$branch/$repo_name/.git`).
 pub fn migrate_worktrees(repo_name: &str, repo_path: &Path) -> Result<usize, String> {
     let base = worktree_base_path(repo_path);
     if !base.exists() {
         return Ok(0);
     }
     let mut new_paths: Vec<PathBuf> = Vec::new();
-
-    // Pass 1: ancient flat layout ($base/$branch/.git → $base/$branch/$repo/.git)
     let entries: Vec<_> = std::fs::read_dir(&base)
         .map_err(|e| format!("Failed to read {}: {}", base.display(), e))?
         .filter_map(|e| e.ok())
@@ -306,210 +300,21 @@ pub fn migrate_worktrees(repo_name: &str, repo_path: &Path) -> Result<usize, Str
         })?;
         new_paths.push(new);
     }
-
-    // Pass 2: percent-encoded dirs (feat%2Fbar/ → feat--bar/)
-    new_paths.extend(migrate_encoded_worktree_dirs(&base, repo_name)?);
-
-    // Pass 3: nested dirs from intermediate layout (feat/bar/$repo → feat--bar/$repo)
-    new_paths.extend(migrate_nested_worktree_dirs(&base, repo_name, repo_path)?);
-
     if !new_paths.is_empty() {
-        repair_worktrees(repo_path, &new_paths)?;
+        let mut args: Vec<&str> = vec!["worktree", "repair"];
+        let path_strs: Vec<String> = new_paths.iter().map(|p| p.display().to_string()).collect();
+        args.extend(path_strs.iter().map(|s| s.as_str()));
+        let output = Command::new("git")
+            .args(&args)
+            .current_dir(repo_path)
+            .output()
+            .map_err(|e| format!("git worktree repair failed: {}", e))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("git worktree repair failed: {}", stderr.trim()));
+        }
     }
     Ok(new_paths.len())
-}
-
-/// Rename worktree branch dirs that use %2F encoding to -- encoding.
-fn migrate_encoded_worktree_dirs(base: &Path, repo_name: &str) -> Result<Vec<PathBuf>, String> {
-    let mut moved = vec![];
-    let entries: Vec<_> = std::fs::read_dir(base)
-        .map_err(|e| format!("Failed to read {}: {}", base.display(), e))?
-        .filter_map(|e| e.ok())
-        .collect();
-    for entry in entries {
-        let old = entry.path();
-        let name = match old.file_name().and_then(|n| n.to_str()) {
-            Some(n) => n.to_string(),
-            None => continue,
-        };
-        if !name.contains("%2F") && !name.contains("%2f") {
-            continue;
-        }
-        if !old.is_dir() {
-            continue;
-        }
-        let new_name = name.replace("%2F", "--").replace("%2f", "--");
-        let new_dir = base.join(&new_name);
-        if new_dir == old {
-            continue;
-        }
-        std::fs::rename(&old, &new_dir).map_err(|e| {
-            format!(
-                "Failed to rename {} -> {}: {}",
-                old.display(),
-                new_dir.display(),
-                e
-            )
-        })?;
-        let repo_wt = new_dir.join(repo_name);
-        if repo_wt.is_dir() && repo_wt.join(".git").is_file() {
-            moved.push(repo_wt);
-        }
-    }
-    Ok(moved)
-}
-
-/// Migrate worktrees from nested layout (branch `/` created subdirs) to flat `--` layout.
-/// E.g. `worktrees/user/topic/repo` → `worktrees/user--topic/repo`
-fn migrate_nested_worktree_dirs(
-    base: &Path,
-    repo_name: &str,
-    repo_path: &Path,
-) -> Result<Vec<PathBuf>, String> {
-    let mut moved = vec![];
-    for wt in list_worktrees(repo_path) {
-        if !wt.path.starts_with(base) {
-            continue;
-        }
-        let branch = match &wt.branch {
-            Some(b) if b.contains('/') => b,
-            _ => continue,
-        };
-        let expected = base.join(encode_branch_for_path(branch)).join(repo_name);
-        if wt.path == expected {
-            continue;
-        }
-        let new_branch_dir = base.join(encode_branch_for_path(branch));
-        if new_branch_dir.exists() {
-            continue;
-        }
-        // The nested layout has branch components as subdirs: base/user/topic/repo.
-        // The top-level dir to rename is base/user (first component after base).
-        let relative = match wt.path.strip_prefix(base) {
-            Ok(r) => r,
-            Err(_) => continue,
-        };
-        let top_component = match relative.components().next() {
-            Some(c) => c.as_os_str(),
-            None => continue,
-        };
-        let old_top = base.join(top_component);
-
-        // Move contents: create new flat dir, move repo worktree into it
-        std::fs::create_dir_all(&new_branch_dir)
-            .map_err(|e| format!("Failed to create {}: {}", new_branch_dir.display(), e))?;
-        let old_repo = wt.path.clone();
-        let new_repo = new_branch_dir.join(repo_name);
-        std::fs::rename(&old_repo, &new_repo).map_err(|e| {
-            format!(
-                "Failed to rename {} -> {}: {}",
-                old_repo.display(),
-                new_repo.display(),
-                e
-            )
-        })?;
-        // Clean up the old nested directory tree
-        let _ = std::fs::remove_dir_all(&old_top);
-        moved.push(new_repo);
-    }
-    Ok(moved)
-}
-
-fn repair_worktrees(repo_path: &Path, paths: &[PathBuf]) -> Result<(), String> {
-    let mut args: Vec<&str> = vec!["worktree", "repair"];
-    let path_strs: Vec<String> = paths.iter().map(|p| p.display().to_string()).collect();
-    args.extend(path_strs.iter().map(|s| s.as_str()));
-    let output = Command::new("git")
-        .args(&args)
-        .current_dir(repo_path)
-        .output()
-        .map_err(|e| format!("git worktree repair failed: {}", e))?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("git worktree repair failed: {}", stderr.trim()));
-    }
-    Ok(())
-}
-
-/// Migrate files in `dir` from legacy naming (%2F or nested subdirs) to flat `--` naming.
-pub fn migrate_legacy_files(dir: &Path) -> Result<usize, String> {
-    if !dir.exists() {
-        return Ok(0);
-    }
-    let mut count = 0;
-
-    // Rename %2F-encoded files
-    let entries: Vec<_> = std::fs::read_dir(dir)
-        .map_err(|e| format!("Failed to read {}: {}", dir.display(), e))?
-        .filter_map(|e| e.ok())
-        .collect();
-    for entry in entries {
-        let old = entry.path();
-        let name = match old.file_name().and_then(|n| n.to_str()) {
-            Some(n) => n.to_string(),
-            None => continue,
-        };
-        if !name.contains("%2F") && !name.contains("%2f") {
-            continue;
-        }
-        let new_name = name.replace("%2F", "--").replace("%2f", "--");
-        let new = dir.join(&new_name);
-        if new != old {
-            std::fs::rename(&old, &new).map_err(|e| {
-                format!(
-                    "Failed to rename {} -> {}: {}",
-                    old.display(),
-                    new.display(),
-                    e
-                )
-            })?;
-            count += 1;
-        }
-    }
-
-    // Flatten nested subdirectories: move files from subdirs up with -- separator
-    let entries: Vec<_> = std::fs::read_dir(dir)
-        .map_err(|e| format!("Failed to read {}: {}", dir.display(), e))?
-        .filter_map(|e| e.ok())
-        .collect();
-    for entry in entries {
-        let subdir = entry.path();
-        if !subdir.is_dir() {
-            continue;
-        }
-        let prefix = match subdir.file_name().and_then(|n| n.to_str()) {
-            Some(n) => n.to_string(),
-            None => continue,
-        };
-        let sub_entries: Vec<_> = match std::fs::read_dir(&subdir) {
-            Ok(d) => d.filter_map(|e| e.ok()).collect(),
-            Err(_) => continue,
-        };
-        for sub_entry in sub_entries {
-            let old = sub_entry.path();
-            if old.is_dir() {
-                continue;
-            }
-            let file_name = match old.file_name().and_then(|n| n.to_str()) {
-                Some(n) => n.to_string(),
-                None => continue,
-            };
-            let new_name = format!("{}--{}", prefix, file_name);
-            let new = dir.join(&new_name);
-            std::fs::rename(&old, &new).map_err(|e| {
-                format!(
-                    "Failed to rename {} -> {}: {}",
-                    old.display(),
-                    new.display(),
-                    e
-                )
-            })?;
-            count += 1;
-        }
-        let _ = std::fs::remove_dir(&subdir);
-    }
-
-    Ok(count)
 }
 
 pub fn remove_worktree(repo_path: &Path, worktree_path: &Path) -> Result<(), String> {

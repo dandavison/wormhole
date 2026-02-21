@@ -789,6 +789,43 @@ fn test_switch_to_project_when_task_exists() {
 }
 
 #[test]
+fn test_open_worktree_path_resolves_to_task() {
+    // Regression test: `wormhole open <worktree-dir>` should resolve to the task,
+    // not the base project whose repo_name matches the leaf directory.
+    let test = harness::WormholeTest::new(8964);
+
+    let home_proj = format!("{}wt-path", TEST_PREFIX);
+    let home_dir = format!("/tmp/{}", home_proj);
+    let task_branch = format!("{}wt-branch", TEST_PREFIX);
+
+    init_git_repo(&home_dir);
+    test.create_project(&home_dir, &home_proj);
+
+    let task_dir = test.create_worktree_directly(&home_dir, &home_proj, &task_branch);
+
+    test.http_post("/project/refresh-tasks").unwrap();
+
+    assert!(
+        test.task_in_list(&home_proj, &task_branch),
+        "Task should be discovered after refresh"
+    );
+
+    // Open by absolute worktree path — this is what `wormhole open .` does from a worktree dir.
+    test.cli(&format!("wormhole open {}", task_dir)).unwrap();
+
+    // Should land in the task worktree, not the base project dir.
+    test.assert_tmux_cwd(&task_dir);
+
+    // The task (not the base project) should be the current entry in the ring.
+    assert!(
+        test.task_in_list(&home_proj, &task_branch),
+        "Task '{}:{}' should be in project list after opening by worktree path",
+        home_proj,
+        task_branch
+    );
+}
+
+#[test]
 fn test_file_opens_in_project_not_task() {
     // Regression test: /file/ endpoint should open files in the correct project,
     // not a task from the same repo.

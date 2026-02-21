@@ -29,7 +29,7 @@ Wormhole is a tool for working on software projects.
   discover it using the repo remote that is stored by git on disk.)
 
 - Wormhole is a process exposing an HTTP API, with a CLI client that is a thin wrapper over the HTTP
-  API. The CLI API includes `wormhole project list`, `wormhole task create`,
+  API. The CLI API includes `wormhole project list`, `wormhole task upsert`,
   `wormhole project switch`, etc.
 
 - On server start, `wormhole project list` lists all tasks discovered on disk.
@@ -148,51 +148,70 @@ wormhole project pin                    # Pin current (project, app) state
 wormhole project debug                  # Debug info for all projects
 wormhole project show                   # Show task info (JIRA, PR, CLAUDE.md)
 wormhole project show myrepo:ACT-1234   # Show info for specific project/task
+wormhole project message myapp          # Send JSON-RPC message to project
+wormhole project for-each <command>     # Run command in each project dir
 wormhole kv get myapp land-in           # Get KV
 wormhole kv set myapp land-in editor    # Set KV
 wormhole kv delete myapp land-in        # Delete KV
 wormhole kv list myapp                  # List all KV for project
-wormhole task create <jira-url>         # Create task from JIRA URL
+wormhole task upsert <target>           # Create or update a task
 wormhole task create-from-sprint        # Create tasks for all sprint issues
+wormhole task create-from-review-requests # Create tasks from PR review requests
 wormhole jira sprint list               # List JIRA sprint issues
 wormhole jira sprint show               # Show detailed sprint status
 wormhole refresh                        # Refresh in-memory data from disk/APIs
 wormhole kill                           # Kill tmux session and clean up
 wormhole doctor persisted-data          # Report on worktrees and KV files
+wormhole doctor conform                 # Conform task worktrees
 wormhole completion bash                # Generate shell completions
 ```
 
 ## HTTP API
 
-| Method | Endpoint                    | Description                       |
-|--------|-----------------------------|-----------------------------------|
-| GET    | `/project/list`             | List projects (JSON, includes tasks) |
-| GET    | `/project/neighbors`        | Project ring for navigation UI    |
-| GET    | `/project/switch/<name>`    | Switch/create project or task     |
-| GET    | `/project/create/<branch>`  | Create task with branch name      |
-| GET    | `/project/previous`         | Previous project                  |
-| GET    | `/project/next`             | Next project                      |
-| POST   | `/project/close/<name>`     | Close project windows             |
-| POST   | `/project/remove/<name>`    | Remove project/task               |
-| POST   | `/project/pin`              | Pin current (project, app) state  |
-| GET    | `/project/debug`            | Debug info                        |
-| GET    | `/project/show[/<name>]`    | Task info (JIRA, PR, CLAUDE.md)   |
-| POST   | `/project/describe`         | Describe URL (JIRA/GitHub lookup) |
-| GET    | `/project/vscode/<name>`    | Get embedded VSCode URL           |
-| POST   | `/project/refresh`          | Refresh all in-memory data        |
-| POST   | `/project/refresh/<name>`   | Refresh single project            |
-| POST   | `/project/refresh-tasks`    | Refresh task worktrees            |
-| GET    | `/dashboard`                | Sprint dashboard HTML             |
-| GET    | `/shell`                    | Shell env vars (pwd query param)  |
-| GET    | `/file/<path>`              | Open file (path:line supported)   |
-| GET    | `/<github_blob_path>?line=N`| Open GitHub file locally          |
-| GET    | `/kv/<project>/<key>`       | Get value                         |
-| PUT    | `/kv/<project>/<key>`       | Set value (body)                  |
-| DELETE | `/kv/<project>/<key>`       | Delete key                        |
-| GET    | `/kv/<project>`             | List project KV                   |
-| GET    | `/kv`                       | List all KV                       |
+| Method | Endpoint                      | Description                       |
+|--------|-------------------------------|-----------------------------------|
+| GET    | `/project/list`               | List projects (JSON, includes tasks) |
+| GET    | `/project/neighbors`          | Project ring for navigation UI    |
+| GET    | `/project/switch/<name>`      | Switch/create project or task     |
+| GET    | `/project/create/<branch>`    | Create task with branch name      |
+| GET    | `/project/previous`           | Previous project                  |
+| GET    | `/project/next`               | Next project                      |
+| POST   | `/project/close/<name>`       | Close project windows             |
+| POST   | `/project/remove/<name>`      | Remove project/task               |
+| POST   | `/project/pin`                | Pin current (project, app) state  |
+| GET    | `/project/current/poll`       | Poll for current project changes  |
+| GET    | `/project/debug`              | Debug info                        |
+| GET    | `/project/show[/<name>]`      | Task info (JIRA, PR, CLAUDE.md)   |
+| POST   | `/project/describe`           | Describe URL (JIRA/GitHub lookup) |
+| GET    | `/project/vscode/<name>`      | Get embedded VSCode URL           |
+| GET    | `/project/messages/<name>`    | Poll messages                     |
+| POST   | `/project/messages/<name>`    | Publish messages                  |
+| POST   | `/project/refresh`            | Refresh all in-memory data        |
+| POST   | `/project/refresh/<name>`     | Refresh single project            |
+| POST   | `/project/refresh-tasks`      | Refresh task worktrees            |
+| POST   | `/task/notify-agent`          | Notify agent                      |
+| POST   | `/task/create-from-review-requests` | Create review tasks          |
+| POST   | `/batch`                      | Start a new batch                 |
+| GET    | `/batch`                      | List batches                      |
+| GET    | `/batch/<id>`                 | Batch status                      |
+| GET    | `/batch/<id>/output`          | Batch output                      |
+| POST   | `/batch/<id>/cancel`          | Cancel batch                      |
+| GET    | `/`                           | Sprint dashboard HTML             |
+| GET    | `/shell`                      | Shell env vars (pwd query param)  |
+| GET    | `/file/<path>`                | Open file (path:line supported)   |
+| GET    | `/<github_blob_path>?line=N`  | Open GitHub file locally          |
+| GET    | `/asset/<path>`               | Serve static assets               |
+| GET    | `/doctor/persisted-data`      | Report on worktrees and KV files  |
+| POST   | `/doctor/conform`             | Conform task worktrees            |
+| GET    | `/jira/sprint/list`           | List JIRA sprint issues           |
+| GET    | `/jira/sprint/show`           | Detailed sprint status            |
+| GET    | `/kv/<project>/<key>`         | Get value                         |
+| PUT    | `/kv/<project>/<key>`         | Set value (body)                  |
+| DELETE | `/kv/<project>/<key>`         | Delete key                        |
+| GET    | `/kv/<project>`               | List project KV                   |
+| GET    | `/kv`                         | List all KV                       |
 
-Query params: `land-in=terminal|editor`, `line=N`, `home-project=<project>`, `branch=<branch>`, `active=true`, `skip-editor=true`, `focus-terminal=true`, `sync=true`, `pwd=<path>`
+Query params: `land-in=terminal|editor`, `line=N`, `home-project=<project>`, `branch=<branch>`, `active=true`, `current=true`, `completed=true`, `dry-run=true`, `skip-editor=true`, `focus-terminal=true`, `sync=true`, `pwd=<path>`, `run=<id>`, `offset=N`, `role=<role>`, `wait=N`
 
 ## Environment Variables
 

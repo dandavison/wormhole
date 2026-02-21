@@ -157,14 +157,17 @@ fn resolve_workspace_file(project: &Project) -> Result<std::path::PathBuf, Strin
         }
         (Option::None, false) => {
             let project_dir = project.working_tree();
-            let content = serde_json::json!({
+            let mut ws = serde_json::json!({
                 "folders": [{"path": project_dir.to_str().unwrap()}],
-                "settings": {"wormhole.port": crate::config::wormhole_port()}
             });
+            let port = crate::config::wormhole_port();
+            if port != 7117 {
+                ws["settings"] = serde_json::json!({"wormhole.port": port});
+            }
             if let Some(parent) = wormhole_ws.parent() {
                 let _ = fs::create_dir_all(parent);
             }
-            let _ = fs::write(&wormhole_ws, serde_json::to_string_pretty(&content).unwrap());
+            let _ = fs::write(&wormhole_ws, serde_json::to_string_pretty(&ws).unwrap());
             Ok(wormhole_ws)
         }
     }
@@ -178,12 +181,22 @@ fn ensure_workspace_port(path: &Path) {
     let Ok(mut json) = serde_json::from_str::<serde_json::Value>(&data) else {
         return;
     };
-    let settings = json
-        .as_object_mut()
-        .unwrap()
-        .entry("settings")
-        .or_insert_with(|| serde_json::json!({}));
-    settings["wormhole.port"] = serde_json::json!(port);
+    let obj = json.as_object_mut().unwrap();
+    if port == 7117 {
+        if let Some(settings) = obj.get_mut("settings") {
+            if let Some(s) = settings.as_object_mut() {
+                s.remove("wormhole.port");
+                if s.is_empty() {
+                    obj.remove("settings");
+                }
+            }
+        }
+    } else {
+        let settings = obj
+            .entry("settings")
+            .or_insert_with(|| serde_json::json!({}));
+        settings["wormhole.port"] = serde_json::json!(port);
+    }
     let _ = fs::write(path, serde_json::to_string_pretty(&json).unwrap());
 }
 
@@ -293,5 +306,4 @@ mod tests {
             "cursor://file//repo/.git/wormhole/worktrees/feat--auth/myrepo:42"
         );
     }
-
 }

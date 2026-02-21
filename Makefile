@@ -16,7 +16,13 @@ integration-test-headless:
 extension-test:
 	cd web/chrome-extension && npm install && npm test
 
+vscode-extension:
+	$(MAKE) -C web/vscode-extension install
+
+vscode-extension-test:
+	$(MAKE) -C web/vscode-extension test
+
 reload: build
 	./target/release/wormhole server start
 
-.PHONY: gui test serve serve-tmux build reload integration-test integration-test-headless extension-test
+.PHONY: gui test serve serve-tmux build reload integration-test integration-test-headless extension-test vscode-extension vscode-extension-test

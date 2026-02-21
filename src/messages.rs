@@ -78,12 +78,6 @@ impl<'a> Store<'a> {
         }
     }
 
-    pub fn touch(&mut self, id: ConsumerId) {
-        if let Some(consumer) = self.0.consumers.get_mut(&id) {
-            consumer.last_seen = Instant::now();
-        }
-    }
-
     pub fn publish(&mut self, project: &str, target: &Target, notification: Notification) {
         for consumer in self.0.consumers.values_mut() {
             if consumer.project != project || !consumer.is_alive() {

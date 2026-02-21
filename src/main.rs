@@ -9,6 +9,7 @@ mod hammerspoon;
 mod handlers;
 mod jira;
 mod kv;
+mod messages;
 mod project;
 mod project_path;
 mod projects;

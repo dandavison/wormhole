@@ -2,7 +2,7 @@ use std::convert::Infallible;
 use std::thread;
 
 use crate::handlers;
-use crate::handlers::{batch, dashboard, describe, doctor, jira, project};
+use crate::handlers::{batch, dashboard, describe, doctor, jira, messages, project};
 use crate::project_path::ProjectPath;
 use crate::projects;
 use crate::projects::Mutation;
@@ -41,6 +41,8 @@ pub struct QueryParams {
     pub dry_run: bool,
     pub run: Option<usize>,
     pub offset: Option<u64>,
+    pub role: Option<String>,
+    pub wait: Option<u64>,
 }
 
 pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
@@ -152,6 +154,17 @@ async fn route_with_params(
             return cors_response(batch::batch_output(id, params.run, params.offset));
         }
         return cors_response(batch::batch_status(rest, &req, params.completed).await);
+    }
+    if let Some(name) = path.strip_prefix("/project/messages/") {
+        return match *method {
+            Method::GET => {
+                let role = params.role.as_deref().unwrap_or("editor");
+                let wait = params.wait.unwrap_or(30);
+                messages::poll(name, role, wait).await
+            }
+            Method::POST => messages::publish(name, req).await,
+            _ => method_not_allowed(),
+        };
     }
     if let Some(name) = path.strip_prefix("/project/remove/") {
         return require_post(method, || project::remove(name));
@@ -330,6 +343,8 @@ impl QueryParams {
             dry_run: false,
             run: None,
             offset: None,
+            role: None,
+            wait: None,
         };
         if let Some(query) = query {
             for (key, val) in form_urlencoded::parse(query.as_bytes()) {
@@ -360,6 +375,8 @@ impl QueryParams {
                     "dry-run" => params.dry_run = val == "true" || val == "1",
                     "run" => params.run = val.parse().ok(),
                     "offset" => params.offset = val.parse().ok(),
+                    "role" => params.role = Some(val.to_string()),
+                    "wait" => params.wait = val.parse().ok(),
                     _ => {}
                 }
             }

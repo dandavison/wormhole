@@ -3,6 +3,7 @@ pub mod dashboard;
 pub mod describe;
 pub mod doctor;
 pub mod jira;
+pub mod messages;
 pub mod project;
 
 use hyper::{Body, Response, StatusCode};

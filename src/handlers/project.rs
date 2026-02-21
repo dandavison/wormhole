@@ -123,7 +123,6 @@ fn close_project(name: &str) {
     if let Some(p) = projects.by_key(&key) {
         config::TERMINAL.close(&p);
         config::editor().close(&p);
-        // Remove tasks from ring so they don't appear in project list
         if p.is_task() {
             projects.remove_from_ring(&p.store_key());
         }

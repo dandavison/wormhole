@@ -2,10 +2,7 @@ use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard};
-use std::time::{Duration, Instant};
 use tokio::sync::watch;
-
-const CONSUMER_TTL: Duration = Duration::from_secs(5);
 
 type ConsumerId = u64;
 
@@ -29,13 +26,6 @@ struct Consumer {
     project: String,
     role: String,
     queue: Vec<Notification>,
-    last_seen: Instant,
-}
-
-impl Consumer {
-    fn is_alive(&self) -> bool {
-        self.last_seen.elapsed() < CONSUMER_TTL
-    }
 }
 
 struct MessageStore {
@@ -51,10 +41,8 @@ pub fn lock() -> Store<'static> {
 
 impl<'a> Store<'a> {
     pub fn find_or_register(&mut self, project: &str, role: &str) -> ConsumerId {
-        self.gc();
-        for (&id, c) in &mut self.0.consumers {
+        for (&id, c) in &self.0.consumers {
             if c.project == project && c.role == role {
-                c.last_seen = Instant::now();
                 return id;
             }
         }
@@ -66,19 +54,17 @@ impl<'a> Store<'a> {
                 project: project.to_string(),
                 role: role.to_string(),
                 queue: Vec::new(),
-                last_seen: Instant::now(),
             },
         );
         id
     }
 
     pub fn drain(&mut self, id: ConsumerId) -> Vec<Notification> {
-        if let Some(consumer) = self.0.consumers.get_mut(&id) {
-            consumer.last_seen = Instant::now();
-            std::mem::take(&mut consumer.queue)
-        } else {
-            Vec::new()
-        }
+        self.0
+            .consumers
+            .get_mut(&id)
+            .map(|c| std::mem::take(&mut c.queue))
+            .unwrap_or_default()
     }
 
     pub fn publish(&mut self, project: &str, target: &Target, notification: Notification) {
@@ -103,15 +89,9 @@ impl<'a> Store<'a> {
             .map_or(false, |c| !c.queue.is_empty())
     }
 
-    fn gc(&mut self) {
-        self.0.consumers.retain(|_, c| c.is_alive());
-    }
-
-    #[cfg(test)]
-    fn backdate(&mut self, id: ConsumerId, age: Duration) {
-        if let Some(c) = self.0.consumers.get_mut(&id) {
-            c.last_seen = Instant::now() - age;
-        }
+    #[allow(dead_code)]
+    pub fn remove_project(&mut self, project: &str) {
+        self.0.consumers.retain(|_, c| c.project != project);
     }
 }
 
@@ -203,14 +183,11 @@ mod tests {
         let mut store = lock();
         let id = store.find_or_register("msg-test-gap", "editor");
         assert!(store.drain(id).is_empty());
-        // Consumer persists after drain (simulating gap between polls)
-        // Message published in the gap before next poll
         store.publish(
             "msg-test-gap",
             &Target::Role("editor".to_string()),
             Notification::new("editor/close"),
         );
-        // Next poll: find_or_register returns the same consumer with queued message
         let id2 = store.find_or_register("msg-test-gap", "editor");
         assert_eq!(id, id2);
         let msgs = store.drain(id2);
@@ -225,19 +202,13 @@ mod tests {
     fn test_message_delivered_during_long_poll() {
         let mut store = lock();
         let id = store.find_or_register("msg-test-longpoll", "editor");
-        // Simulate time passing during a 30s long-poll wait
-        store.backdate(id, CONSUMER_TTL + Duration::from_secs(1));
         store.publish(
             "msg-test-longpoll",
             &Target::Role("editor".to_string()),
             Notification::new("editor/close"),
         );
         let msgs = store.drain(id);
-        assert_eq!(
-            msgs.len(),
-            1,
-            "message must be delivered even if consumer last_seen exceeds TTL during long-poll"
-        );
+        assert_eq!(msgs.len(), 1, "message must be delivered during long-poll");
     }
 
     #[test]
@@ -252,5 +223,19 @@ mod tests {
         );
         assert_eq!(store.drain(id1).len(), 1);
         assert_eq!(store.drain(id2).len(), 1);
+    }
+
+    #[test]
+    fn test_remove_project() {
+        let mut store = lock();
+        let id = store.find_or_register("msg-test-rm", "editor");
+        store.publish(
+            "msg-test-rm",
+            &Target::Role("editor".to_string()),
+            Notification::new("editor/close"),
+        );
+        store.remove_project("msg-test-rm");
+        assert!(store.drain(id).is_empty());
+        assert_eq!(store.find_or_register("msg-test-rm", "editor"), id + 1);
     }
 }

@@ -164,6 +164,18 @@ pub enum ProjectCommand {
         #[arg(short, long, default_value = "text")]
         output: String,
     },
+    /// Send a JSON-RPC message to a project's extension
+    Message {
+        /// Project name (defaults to current project)
+        #[arg(add = ArgValueCompleter::new(complete_projects))]
+        name: Option<String>,
+        /// JSON-RPC method (e.g. editor/close)
+        #[arg(short, long)]
+        method: String,
+        /// Target role (default: editor)
+        #[arg(short, long, default_value = "editor")]
+        target: String,
+    },
     /// Run a command in each project directory
     ForEach {
         /// Only run on tasks (not plain repos)
@@ -467,6 +479,26 @@ pub fn run(command: Command) -> Result<(), String> {
                         serde_json::from_str(&response).map_err(|e| e.to_string())?;
                     println!("{}", project::render_task_status(&status));
                 }
+                Ok(())
+            }
+            ProjectCommand::Message {
+                name,
+                method,
+                target,
+            } => {
+                let name = name.unwrap_or_else(|| {
+                    std::env::current_dir()
+                        .map(|p| p.to_string_lossy().to_string())
+                        .unwrap_or_default()
+                });
+                let body = serde_json::json!({
+                    "target": target,
+                    "message": {
+                        "jsonrpc": "2.0",
+                        "method": method,
+                    }
+                });
+                client.post_json(&format!("/project/messages/{}", name), &body)?;
                 Ok(())
             }
         },

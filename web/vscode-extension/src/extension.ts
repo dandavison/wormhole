@@ -19,16 +19,23 @@ const INTENTS: Record<string, IntentHandler> = {
 
 let abortController: AbortController | null = null;
 let statusItem: vscode.StatusBarItem | null = null;
+let log: vscode.LogOutputChannel;
 
 export function activate(context: vscode.ExtensionContext) {
+  log = vscode.window.createOutputChannel('Wormhole', { log: true });
+  context.subscriptions.push(log);
+
   const projectKey = resolveProjectKey();
   if (!projectKey) {
+    log.info('No workspace folder; extension inactive');
     return;
   }
   const config = vscode.workspace.getConfiguration('wormhole');
   const port =
     config.get<number>('port') ??
     parseInt(process.env.WORMHOLE_PORT || '7117', 10);
+
+  log.info(`project=${projectKey} port=${port}`);
 
   statusItem = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Left,
@@ -52,17 +59,28 @@ export function deactivate() {
 async function pollLoop(projectKey: string, port: number, signal: AbortSignal) {
   while (!signal.aborted) {
     try {
+      log.debug(`polling /project/messages/${projectKey}?role=editor&wait=30`);
       const messages = await poll(projectKey, port, signal);
+      if (messages.length > 0) {
+        log.info(
+          `received ${messages.length} message(s): ${messages.map((m) => m.method).join(', ')}`,
+        );
+      }
       for (const msg of messages) {
         const handler = INTENTS[msg.method];
         if (handler) {
+          log.info(`handling intent: ${msg.method}`);
           await handler(projectKey, port);
+        } else {
+          log.warn(`unknown intent: ${msg.method}`);
         }
       }
     } catch (e: unknown) {
       if (signal.aborted) {
         return;
       }
+      const message = e instanceof Error ? e.message : String(e);
+      log.error(`poll error: ${message}`);
       await sleep(2000);
     }
   }
@@ -111,7 +129,10 @@ function resolveProjectKey(): string | undefined {
   if (!folders || folders.length === 0) {
     return undefined;
   }
-  return projectKeyFromPath(folders[0].uri.fsPath);
+  const key = projectKeyFromPath(folders[0].uri.fsPath);
+  log.info(`workspace path: ${folders[0].uri.fsPath}`);
+  log.info(`resolved project key: ${key}`);
+  return key;
 }
 
 function putKv(projectKey: string, port: number, key: string, value: string) {

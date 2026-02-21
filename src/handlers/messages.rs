@@ -5,12 +5,10 @@ use crate::handlers::project::poll_until;
 use crate::messages::{self, PublishRequest};
 
 pub async fn poll(name: &str, role: &str, wait_secs: u64) -> Response<Body> {
-    let id = messages::lock().register(name, role);
+    let id = messages::lock().find_or_register(name, role);
 
     if messages::lock().has_messages(id) {
-        let msgs = messages::lock().drain(id);
-        messages::lock().unregister(id);
-        return json_response(&msgs);
+        return json_response(&messages::lock().drain(id));
     }
 
     let rx = messages::subscribe();
@@ -21,9 +19,7 @@ pub async fn poll(name: &str, role: &str, wait_secs: u64) -> Response<Body> {
     )
     .await;
 
-    let msgs = messages::lock().drain(id);
-    messages::lock().unregister(id);
-    json_response(&msgs)
+    json_response(&messages::lock().drain(id))
 }
 
 pub async fn publish(name: &str, req: Request<Body>) -> Response<Body> {

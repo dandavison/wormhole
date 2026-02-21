@@ -10,7 +10,7 @@ use crate::project::ProjectKey;
 use crate::project_path::ProjectPath;
 use crate::projects::Mutation;
 use crate::wormhole::QueryParams;
-use crate::{config, hammerspoon, projects, util::debug};
+use crate::{config, hammerspoon, messages, projects, util::debug};
 
 /// Return JSON with current and available projects (including tasks)
 /// Includes cached JIRA/PR status for tasks
@@ -123,11 +123,11 @@ fn close_project(name: &str) {
     if let Some(p) = projects.by_key(&key) {
         config::TERMINAL.close(&p);
         config::editor().close(&p);
-        // Remove tasks from ring so they don't appear in project list
         if p.is_task() {
             projects.remove_from_ring(&p.store_key());
         }
     }
+    messages::lock().remove_project(name);
     projects.print();
 }
 

@@ -141,12 +141,7 @@ pub fn create_worktree(
 
     let args = if branch_exists(repo_path, branch_name) {
         if let Some(existing_path) = branch_checked_out_at(repo_path, branch_name) {
-            return Err(format!(
-                "Branch '{}' is already checked out at {}. \
-                 Switch to a different branch there first, or use that location directly.",
-                branch_name,
-                existing_path.display()
-            ));
+            vacate_branch(&existing_path, branch_name)?;
         }
         vec![
             "worktree",
@@ -197,6 +192,70 @@ fn branch_checked_out_at(repo_path: &Path, branch_name: &str) -> Option<PathBuf>
     for wt in list_worktrees(repo_path) {
         if wt.branch.as_deref() == Some(branch_name) {
             return Some(wt.path);
+        }
+    }
+    None
+}
+
+/// Free a branch by switching the checkout at `path` to the default branch.
+/// Fails if the working tree has uncommitted changes.
+fn vacate_branch(path: &Path, branch_name: &str) -> Result<(), String> {
+    if !is_working_tree_clean(path) {
+        return Err(format!(
+            "Branch '{}' is checked out at {} with uncommitted changes. \
+             Commit or stash changes there first.",
+            branch_name,
+            path.display()
+        ));
+    }
+    let target = default_branch(path).unwrap_or_else(|| "HEAD".to_string());
+    let args: Vec<&str> = if target == "HEAD" {
+        vec!["switch", "--detach"]
+    } else {
+        vec!["switch", &target]
+    };
+    let output = Command::new("git")
+        .args(&args)
+        .current_dir(path)
+        .output()
+        .map_err(|e| format!("Failed to switch branch at {}: {}", path.display(), e))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(format!(
+            "Failed to vacate branch '{}' at {}: {}",
+            branch_name,
+            path.display(),
+            stderr.trim()
+        ))
+    }
+}
+
+fn is_working_tree_clean(path: &Path) -> bool {
+    Command::new("git")
+        .args(["status", "--porcelain"])
+        .current_dir(path)
+        .output()
+        .map(|o| o.status.success() && o.stdout.is_empty())
+        .unwrap_or(false)
+}
+
+fn default_branch(repo_path: &Path) -> Option<String> {
+    let output = Command::new("git")
+        .args(["symbolic-ref", "refs/remotes/origin/HEAD"])
+        .current_dir(repo_path)
+        .output()
+        .ok()?;
+    if output.status.success() {
+        let full_ref = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        return full_ref
+            .strip_prefix("refs/remotes/origin/")
+            .map(String::from);
+    }
+    for name in ["main", "master"] {
+        if branch_exists(repo_path, name) {
+            return Some(name.to_string());
         }
     }
     None
@@ -528,6 +587,78 @@ detached
             .unwrap();
 
         assert!(find_orphan_worktree_dirs(&repo).is_empty());
+    }
+
+    #[test]
+    fn test_create_worktree_vacates_checked_out_branch() {
+        use std::fs;
+
+        let temp = tempfile::tempdir().unwrap();
+        let repo = temp.path().join("repo");
+
+        fs::create_dir_all(&repo).unwrap();
+        Command::new("git")
+            .args(["init"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "--allow-empty", "-m", "init"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+
+        // Checkout a feature branch in the main repo
+        Command::new("git")
+            .args(["checkout", "-b", "my-feature"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+
+        assert!(branch_checked_out_at(&repo, "my-feature").is_some());
+
+        // Creating a worktree should vacate the branch from the main repo
+        let worktree_path = repo.join("worktrees/my-feature");
+        let result = create_worktree(&repo, &worktree_path, "my-feature");
+        assert!(result.is_ok(), "create_worktree failed: {:?}", result);
+        assert!(worktree_path.exists());
+    }
+
+    #[test]
+    fn test_create_worktree_refuses_dirty_checked_out_branch() {
+        use std::fs;
+
+        let temp = tempfile::tempdir().unwrap();
+        let repo = temp.path().join("repo");
+
+        fs::create_dir_all(&repo).unwrap();
+        Command::new("git")
+            .args(["init"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "--allow-empty", "-m", "init"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+
+        Command::new("git")
+            .args(["checkout", "-b", "dirty-feature"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+
+        // Make the working tree dirty
+        fs::write(repo.join("dirty.txt"), "uncommitted").unwrap();
+
+        let worktree_path = repo.join("worktrees/dirty-feature");
+        let result = create_worktree(&repo, &worktree_path, "dirty-feature");
+        assert!(result.is_err());
+        assert!(
+            result.unwrap_err().contains("uncommitted changes"),
+            "error should mention uncommitted changes"
+        );
     }
 
     #[test]

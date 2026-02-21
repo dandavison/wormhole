@@ -6,8 +6,8 @@ wormhole-cd() {
     fi
 }
 
-wormhole-open() {
-    wormhole open "${1:-.}"
+wormhole-open-editor() {
+    wormhole open --land-in editor "${1:-.}"
 }
 
 # A hack to make a shell session switch to a different project, without altering other shell

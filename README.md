@@ -108,7 +108,7 @@ wormhole server start
 ln -fs $PWD/gui/dist/Wormhole/Wormhole.app /Applications/
 
 # Chrome extension (optional)
-# Load web/chrome-extension as unpacked extension
+# Load chrome-extension as unpacked extension
 ```
 
 ### Shell completions
@@ -256,7 +256,7 @@ hs.hotkey.bind({}, "f13", wormhole.select)
 ```
 
 **GitHub links → local editor:**
-Install the Chrome extension as an unpacked extension from `web/chrome-extension/`
+Install the Chrome extension as an unpacked extension from `chrome-extension/`
 
 **Terminal hyperlinks:**
 Tools like [delta](https://dandavison.github.io/delta/) and [ripgrep](https://github.com/BurntSushi/ripgrep) emit OSC 8 hyperlinks. Configure them to use `http://localhost:7117/file/` URLs.

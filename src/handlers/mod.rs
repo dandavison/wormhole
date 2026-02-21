@@ -12,7 +12,7 @@ pub fn favicon() -> Response<Body> {
     Response::builder()
         .header("Content-Type", "image/png")
         .body(Body::from(
-            &include_bytes!("../../web/chrome-extension/icon48.png")[..],
+            &include_bytes!("../../chrome-extension/icon48.png")[..],
         ))
         .unwrap()
 }

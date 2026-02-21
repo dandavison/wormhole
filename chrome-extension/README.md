@@ -24,7 +24,7 @@ Adds **Terminal** and **Cursor** buttons to GitHub pages:
 1. Open Chrome and go to `chrome://extensions/`
 2. Enable "Developer mode" (toggle in top right)
 3. Click "Load unpacked"
-4. Select this directory (`web/chrome-extension`)
+4. Select this directory (`chrome-extension`)
 
 ## Usage
 

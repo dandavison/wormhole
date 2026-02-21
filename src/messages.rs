@@ -50,7 +50,14 @@ pub fn lock() -> Store<'static> {
 }
 
 impl<'a> Store<'a> {
-    pub fn register(&mut self, project: &str, role: &str) -> ConsumerId {
+    pub fn find_or_register(&mut self, project: &str, role: &str) -> ConsumerId {
+        self.gc();
+        for (&id, c) in &mut self.0.consumers {
+            if c.project == project && c.role == role {
+                c.last_seen = Instant::now();
+                return id;
+            }
+        }
         let id = self.0.next_id;
         self.0.next_id += 1;
         self.0.consumers.insert(
@@ -63,10 +70,6 @@ impl<'a> Store<'a> {
             },
         );
         id
-    }
-
-    pub fn unregister(&mut self, id: ConsumerId) {
-        self.0.consumers.remove(&id);
     }
 
     pub fn drain(&mut self, id: ConsumerId) -> Vec<Notification> {
@@ -98,6 +101,10 @@ impl<'a> Store<'a> {
             .consumers
             .get(&id)
             .map_or(false, |c| !c.queue.is_empty())
+    }
+
+    fn gc(&mut self) {
+        self.0.consumers.retain(|_, c| c.is_alive());
     }
 }
 
@@ -148,7 +155,7 @@ mod tests {
     #[test]
     fn test_register_and_drain() {
         let mut store = lock();
-        let id = store.register("msg-test-1", "editor");
+        let id = store.find_or_register("msg-test-1", "editor");
         store.publish(
             "msg-test-1",
             &Target::Role("editor".to_string()),
@@ -158,60 +165,56 @@ mod tests {
         assert_eq!(msgs.len(), 1);
         assert_eq!(msgs[0].method, "editor/close");
         assert!(store.drain(id).is_empty());
-        store.unregister(id);
     }
 
     #[test]
     fn test_publish_wrong_role() {
         let mut store = lock();
-        let id = store.register("msg-test-2", "editor");
+        let id = store.find_or_register("msg-test-2", "editor");
         store.publish(
             "msg-test-2",
             &Target::Role("cli".to_string()),
             Notification::new("cli/something"),
         );
         assert!(store.drain(id).is_empty());
-        store.unregister(id);
     }
 
     #[test]
     fn test_publish_wrong_project() {
         let mut store = lock();
-        let id = store.register("msg-test-3a", "editor");
+        let id = store.find_or_register("msg-test-3a", "editor");
         store.publish(
             "msg-test-3b",
             &Target::Role("editor".to_string()),
             Notification::new("editor/close"),
         );
         assert!(store.drain(id).is_empty());
-        store.unregister(id);
     }
 
     #[test]
     fn test_message_survives_between_polls() {
         let mut store = lock();
-        let id = store.register("msg-test-gap", "editor");
+        let id = store.find_or_register("msg-test-gap", "editor");
         assert!(store.drain(id).is_empty());
-        // Simulate end of first poll: unregister, then re-register (as current poll() does)
-        store.unregister(id);
+        // Consumer persists after drain (simulating gap between polls)
         // Message published between polls
         store.publish(
             "msg-test-gap",
             &Target::Role("editor".to_string()),
             Notification::new("editor/close"),
         );
-        // Next poll arrives
-        let id2 = store.register("msg-test-gap", "editor");
+        // Next poll: find_or_register returns the same consumer with queued message
+        let id2 = store.find_or_register("msg-test-gap", "editor");
+        assert_eq!(id, id2);
         let msgs = store.drain(id2);
         assert_eq!(msgs.len(), 1, "message published between polls must not be lost");
-        store.unregister(id2);
     }
 
     #[test]
     fn test_broadcast() {
         let mut store = lock();
-        let id1 = store.register("msg-test-5", "editor");
-        let id2 = store.register("msg-test-5", "cli");
+        let id1 = store.find_or_register("msg-test-5", "editor");
+        let id2 = store.find_or_register("msg-test-5", "cli");
         store.publish(
             "msg-test-5",
             &Target::Broadcast,
@@ -219,7 +222,5 @@ mod tests {
         );
         assert_eq!(store.drain(id1).len(), 1);
         assert_eq!(store.drain(id2).len(), 1);
-        store.unregister(id1);
-        store.unregister(id2);
     }
 }

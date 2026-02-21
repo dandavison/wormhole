@@ -83,7 +83,7 @@ impl<'a> Store<'a> {
 
     pub fn publish(&mut self, project: &str, target: &Target, notification: Notification) {
         for consumer in self.0.consumers.values_mut() {
-            if consumer.project != project || !consumer.is_alive() {
+            if consumer.project != project {
                 continue;
             }
             if let Target::Role(role) = target {
@@ -105,6 +105,13 @@ impl<'a> Store<'a> {
 
     fn gc(&mut self) {
         self.0.consumers.retain(|_, c| c.is_alive());
+    }
+
+    #[cfg(test)]
+    fn backdate(&mut self, id: ConsumerId, age: Duration) {
+        if let Some(c) = self.0.consumers.get_mut(&id) {
+            c.last_seen = Instant::now() - age;
+        }
     }
 }
 
@@ -207,7 +214,30 @@ mod tests {
         let id2 = store.find_or_register("msg-test-gap", "editor");
         assert_eq!(id, id2);
         let msgs = store.drain(id2);
-        assert_eq!(msgs.len(), 1, "message published between polls must not be lost");
+        assert_eq!(
+            msgs.len(),
+            1,
+            "message published between polls must not be lost"
+        );
+    }
+
+    #[test]
+    fn test_message_delivered_during_long_poll() {
+        let mut store = lock();
+        let id = store.find_or_register("msg-test-longpoll", "editor");
+        // Simulate time passing during a 30s long-poll wait
+        store.backdate(id, CONSUMER_TTL + Duration::from_secs(1));
+        store.publish(
+            "msg-test-longpoll",
+            &Target::Role("editor".to_string()),
+            Notification::new("editor/close"),
+        );
+        let msgs = store.drain(id);
+        assert_eq!(
+            msgs.len(),
+            1,
+            "message must be delivered even if consumer last_seen exceeds TTL during long-poll"
+        );
     }
 
     #[test]

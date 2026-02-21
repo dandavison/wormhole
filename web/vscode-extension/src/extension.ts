@@ -34,8 +34,9 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.StatusBarAlignment.Left,
     0,
   );
+  const version = context.extension.packageJSON.version;
   statusItem.text = '🌀';
-  statusItem.tooltip = `wormhole: ${projectKey}`;
+  statusItem.tooltip = `wormhole ${version}: ${projectKey} (port ${port})`;
   statusItem.show();
   context.subscriptions.push(statusItem);
 

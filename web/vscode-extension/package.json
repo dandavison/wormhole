@@ -3,7 +3,7 @@
   "displayName": "Wormhole",
   "description": "Wormhole message channel for editor operations",
   "publisher": "dandavison",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "engines": {
     "vscode": "^1.71.0"
   },

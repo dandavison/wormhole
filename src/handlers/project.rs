@@ -423,6 +423,9 @@ fn resolve_project(
         Ok(Some(project.as_project_path()))
     } else if name_or_path.starts_with('/') {
         let path = std::path::PathBuf::from(name_or_path);
+        if let Some(project) = projects.by_path(&path) {
+            return Ok(Some(project.as_project_path()));
+        }
         let name = path
             .file_name()
             .and_then(|n| n.to_str())

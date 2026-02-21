@@ -188,6 +188,26 @@ mod tests {
     }
 
     #[test]
+    fn test_message_survives_between_polls() {
+        let mut store = lock();
+        let id = store.register("msg-test-gap", "editor");
+        assert!(store.drain(id).is_empty());
+        // Simulate end of first poll: unregister, then re-register (as current poll() does)
+        store.unregister(id);
+        // Message published between polls
+        store.publish(
+            "msg-test-gap",
+            &Target::Role("editor".to_string()),
+            Notification::new("editor/close"),
+        );
+        // Next poll arrives
+        let id2 = store.register("msg-test-gap", "editor");
+        let msgs = store.drain(id2);
+        assert_eq!(msgs.len(), 1, "message published between polls must not be lost");
+        store.unregister(id2);
+    }
+
+    #[test]
     fn test_broadcast() {
         let mut store = lock();
         let id1 = store.register("msg-test-5", "editor");

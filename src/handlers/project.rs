@@ -446,10 +446,11 @@ fn resolve_project(
 
 /// Generic long-poll helper: waits until predicate returns true or timeout.
 /// Returns true if predicate became true, false if timeout.
+/// Pass `None` for timeout to wait indefinitely.
 pub async fn poll_until<F>(
     mut predicate: F,
     mut rx: tokio::sync::watch::Receiver<u64>,
-    timeout: Duration,
+    timeout: Option<Duration>,
 ) -> bool
 where
     F: FnMut() -> bool,
@@ -458,21 +459,31 @@ where
         return true;
     }
 
-    let deadline = Instant::now() + timeout;
+    let deadline = timeout.map(|t| Instant::now() + t);
 
     loop {
-        let remaining = deadline.saturating_duration_since(Instant::now());
-        if remaining.is_zero() {
-            return false;
-        }
-
-        match tokio::time::timeout(remaining, rx.changed()).await {
-            Ok(Ok(())) => {
-                if predicate() {
-                    return true;
-                }
+        if let Some(dl) = deadline {
+            let remaining = dl.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return false;
             }
-            _ => return false,
+            match tokio::time::timeout(remaining, rx.changed()).await {
+                Ok(Ok(())) => {
+                    if predicate() {
+                        return true;
+                    }
+                }
+                _ => return false,
+            }
+        } else {
+            match rx.changed().await {
+                Ok(()) => {
+                    if predicate() {
+                        return true;
+                    }
+                }
+                Err(_) => return false,
+            }
         }
     }
 }
@@ -492,7 +503,7 @@ pub async fn poll_current(client_current: Option<&str>, timeout_secs: u64) -> Re
             }
         },
         projects::subscribe_to_changes(),
-        Duration::from_secs(timeout_secs),
+        Some(Duration::from_secs(timeout_secs)),
     )
     .await;
 

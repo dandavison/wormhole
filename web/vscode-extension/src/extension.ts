@@ -59,7 +59,7 @@ export function deactivate() {
 async function pollLoop(projectKey: string, port: number, signal: AbortSignal) {
   while (!signal.aborted) {
     try {
-      log.debug(`polling /project/messages/${projectKey}?role=editor&wait=30`);
+      log.debug(`polling /project/messages/${projectKey}?role=editor`);
       const messages = await poll(projectKey, port, signal);
       if (messages.length > 0) {
         log.info(
@@ -99,7 +99,7 @@ function poll(
 ): Promise<Notification[]> {
   return new Promise((resolve, reject) => {
     const req = http.get(
-      `http://127.0.0.1:${port}/project/messages/${projectKey}?role=editor&wait=30`,
+      `http://127.0.0.1:${port}/project/messages/${projectKey}?role=editor`,
       (res) => {
         let data = '';
         res.on('data', (chunk: string) => (data += chunk));

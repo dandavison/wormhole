@@ -159,8 +159,7 @@ async fn route_with_params(
         return match *method {
             Method::GET => {
                 let role = params.role.as_deref().unwrap_or("editor");
-                let wait = params.wait.unwrap_or(30);
-                messages::poll(name, role, wait).await
+                messages::poll(name, role, params.wait).await
             }
             Method::POST => messages::publish(name, req).await,
             _ => method_not_allowed(),

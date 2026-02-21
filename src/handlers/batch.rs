@@ -57,7 +57,7 @@ pub async fn batch_status(
                     }
                 },
                 batch::subscribe(),
-                Duration::from_secs(wait),
+                Some(Duration::from_secs(wait)),
             )
             .await;
         }

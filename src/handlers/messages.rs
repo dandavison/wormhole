@@ -4,7 +4,7 @@ use std::time::Duration;
 use crate::handlers::project::poll_until;
 use crate::messages::{self, PublishRequest};
 
-pub async fn poll(name: &str, role: &str, wait_secs: u64) -> Response<Body> {
+pub async fn poll(name: &str, role: &str, wait_secs: Option<u64>) -> Response<Body> {
     let id = messages::lock().find_or_register(name, role);
 
     if messages::lock().has_messages(id) {
@@ -15,7 +15,7 @@ pub async fn poll(name: &str, role: &str, wait_secs: u64) -> Response<Body> {
     poll_until(
         || messages::lock().has_messages(id),
         rx,
-        Duration::from_secs(wait_secs),
+        wait_secs.map(Duration::from_secs),
     )
     .await;
 

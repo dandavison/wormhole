@@ -262,13 +262,23 @@ impl WormholeTest {
         self.run_hs(&lua).map(|s| s == "true").unwrap_or(false)
     }
 
-    pub fn close_cursor_window(&self, name: &str) {
-        let lua_pattern = name.replace("-", "%-");
-        let lua = format!(
-            r#"local cursor = hs.application.find('Cursor'); if cursor then for _, w in ipairs(cursor:allWindows()) do if string.find(w:title(), "{}") then w:close() end end end"#,
-            lua_pattern
-        );
-        let _ = self.run_hs(&lua);
+    fn close_test_projects(&self) {
+        let Ok(response) = self.http_get("/project/list") else {
+            return;
+        };
+        let Ok(data) = serde_json::from_str::<serde_json::Value>(&response) else {
+            return;
+        };
+        let Some(projects) = data["current"].as_array() else {
+            return;
+        };
+        for p in projects {
+            if let Some(key) = p["project_key"].as_str() {
+                if key.starts_with(TEST_PREFIX) {
+                    let _ = self.http_post(&format!("/project/close/{}", key));
+                }
+            }
+        }
     }
 
     pub fn wait_until<F>(&self, mut predicate: F, timeout_secs: u64) -> bool
@@ -568,13 +578,8 @@ impl WormholeTest {
 impl Drop for WormholeTest {
     fn drop(&mut self) {
         if !editor_is_none() {
-            let _ = self.wait_until(
-                || {
-                    self.close_cursor_window(TEST_PREFIX);
-                    !self.window_exists(TEST_PREFIX)
-                },
-                10,
-            );
+            self.close_test_projects();
+            let _ = self.wait_until(|| !self.window_exists(TEST_PREFIX), 10);
         }
         self.tmux.stop();
         let _ = std::fs::remove_file("/tmp/wormhole.env");

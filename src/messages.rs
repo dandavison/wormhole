@@ -99,6 +99,13 @@ impl<'a> Store<'a> {
             .get(&id)
             .map_or(false, |c| !c.queue.is_empty())
     }
+
+    #[cfg(test)]
+    fn backdate(&mut self, id: ConsumerId, age: Duration) {
+        if let Some(c) = self.0.consumers.get_mut(&id) {
+            c.last_seen = Instant::now() - age;
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -184,6 +191,50 @@ mod tests {
             Notification::new("editor/close"),
         );
         assert!(store.drain(id).is_empty());
+        store.unregister(id);
+    }
+
+    #[test]
+    fn test_message_survives_between_polls() {
+        let mut store = lock();
+        let id = store.register("msg-test-gap", "editor");
+        assert!(store.drain(id).is_empty());
+        // Simulate end-of-poll: consumer is unregistered
+        store.unregister(id);
+        // Message published in the gap before next poll
+        store.publish(
+            "msg-test-gap",
+            &Target::Role("editor".to_string()),
+            Notification::new("editor/close"),
+        );
+        // Next poll: re-register
+        let id2 = store.register("msg-test-gap", "editor");
+        let msgs = store.drain(id2);
+        assert_eq!(
+            msgs.len(),
+            1,
+            "message published between polls must not be lost"
+        );
+        store.unregister(id2);
+    }
+
+    #[test]
+    fn test_message_delivered_during_long_poll() {
+        let mut store = lock();
+        let id = store.register("msg-test-longpoll", "editor");
+        // Simulate time passing during a 30s long-poll wait
+        store.backdate(id, CONSUMER_TTL + Duration::from_secs(1));
+        store.publish(
+            "msg-test-longpoll",
+            &Target::Role("editor".to_string()),
+            Notification::new("editor/close"),
+        );
+        let msgs = store.drain(id);
+        assert_eq!(
+            msgs.len(),
+            1,
+            "message must be delivered even if consumer last_seen exceeds TTL during long-poll"
+        );
         store.unregister(id);
     }
 

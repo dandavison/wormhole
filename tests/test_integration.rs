@@ -149,8 +149,11 @@ fn test_close_project() {
     test.cli(&format!("wormhole open {}", proj)).unwrap();
     test.assert_focus(Editor(&proj));
 
-    // Wait for the VSCode extension to connect and start polling
-    std::thread::sleep(Duration::from_secs(3));
+    // Wait long enough that the extension's consumer has exceeded the
+    // message store TTL during its 30-second long-poll. This reproduces
+    // the bug where publish() skips consumers whose last_seen exceeds
+    // the TTL, even though they are actively waiting in a long-poll.
+    std::thread::sleep(Duration::from_secs(8));
 
     test.cli(&format!("wormhole project close {}", proj))
         .unwrap();

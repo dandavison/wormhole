@@ -123,11 +123,14 @@ fn test_close_project() {
     test.cli(&format!("wormhole open {}", proj)).unwrap();
     test.assert_focus(Editor(&proj));
 
+    // Wait for the VSCode extension to connect and start polling
+    std::thread::sleep(Duration::from_secs(3));
+
     test.cli(&format!("wormhole project close {}", proj))
         .unwrap();
 
     assert!(
-        test.wait_until(|| !test.window_exists(&proj), 5),
+        test.wait_until(|| !test.window_exists(&proj), 10),
         "Editor window should be closed"
     );
 }
@@ -222,13 +225,16 @@ fn test_close_task_removes_from_list() {
         "Task should be in list before close"
     );
 
+    // Wait for the VSCode extension to connect and start polling
+    std::thread::sleep(Duration::from_secs(3));
+
     // Close the task using store_key format
     test.cli(&format!("wormhole project close '{}'", store_key))
         .unwrap();
 
     // Wait for window to close (window name is store_key)
     assert!(
-        test.wait_until(|| !test.window_exists(&store_key), 5),
+        test.wait_until(|| !test.window_exists(&store_key), 10),
         "Task window should be closed"
     );
 

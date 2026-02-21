@@ -14,7 +14,18 @@
     "onStartupFinished"
   ],
   "main": "./out/extension.js",
-  "contributes": {},
+  "contributes": {
+    "configuration": {
+      "title": "Wormhole",
+      "properties": {
+        "wormhole.port": {
+          "type": "number",
+          "default": 7117,
+          "description": "Wormhole server port"
+        }
+      }
+    }
+  },
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",

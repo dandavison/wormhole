@@ -365,7 +365,7 @@
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
           const task = btn.closest('.card').dataset.task;
-          fetch('/project/switch/' + task);
+          fetch('/project/switch/' + task + '?land-in=editor');
         });
       });
 

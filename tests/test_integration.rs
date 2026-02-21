@@ -2,6 +2,7 @@ mod harness;
 use harness::{init_git_repo, Focus::*, TEST_PREFIX};
 use serde_json::Value;
 use std::process::Command;
+use std::time::Duration;
 
 fn editor_is_none() -> bool {
     std::env::var("WORMHOLE_EDITOR").ok().as_deref() == Some("none")
@@ -1112,5 +1113,41 @@ fn test_task_worktree_agent_instructions() {
     assert_eq!(
         claude_content, agents_md,
         "CLAUDE.md symlink should resolve to .task/AGENTS.md content"
+    );
+}
+
+#[test]
+fn test_close_zen_mode_window() {
+    // Verify that editor close works even in zen mode, where Hammerspoon-based
+    // close fails. Requires the wormhole VSCode extension to be installed.
+    if editor_is_none() {
+        return;
+    }
+    let test = harness::WormholeTest::new(8962);
+
+    let proj = format!("{}zen-close", TEST_PREFIX);
+    let dir = format!("/tmp/{}", proj);
+
+    init_git_repo(&dir);
+
+    test.create_project(&dir, &proj);
+    test.cli(&format!("wormhole open {}", proj)).unwrap();
+    test.assert_focus(Editor(&proj));
+
+    // Wait for the VSCode extension to connect and start polling
+    std::thread::sleep(Duration::from_secs(3));
+
+    // Enter zen mode via the message channel
+    test.publish_message(&proj, "editor/toggleZenMode", "editor")
+        .unwrap();
+    std::thread::sleep(Duration::from_secs(2));
+
+    // Close the project — server publishes editor/close via messages
+    test.cli(&format!("wormhole project close {}", proj))
+        .unwrap();
+
+    assert!(
+        test.wait_until(|| !test.window_exists(&proj), 10),
+        "Editor window should be closed even in zen mode"
     );
 }

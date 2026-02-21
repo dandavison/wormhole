@@ -426,6 +426,19 @@ impl WormholeTest {
         format!("{}:{}", repo, branch)
     }
 
+    pub fn publish_message(
+        &self,
+        project: &str,
+        method: &str,
+        target: &str,
+    ) -> Result<String, String> {
+        let body = format!(
+            r#"{{"target":"{}","message":{{"jsonrpc":"2.0","method":"{}"}}}}"#,
+            target, method
+        );
+        self.http_post_json(&format!("/project/messages/{}", project), &body)
+    }
+
     pub fn wait_for_kv(&self, project: &str, key: &str, expected: &str, timeout_secs: u64) -> bool {
         let url = format!("http://127.0.0.1:{}/kv/{}/{}", self.port, project, key);
         self.wait_until(

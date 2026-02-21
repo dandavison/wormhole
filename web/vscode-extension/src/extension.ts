@@ -8,6 +8,7 @@ const INTENTS: Record<string, string> = {
 };
 
 let abortController: AbortController | null = null;
+let statusItem: vscode.StatusBarItem | null = null;
 
 export function activate(context: vscode.ExtensionContext) {
   const projectKey = resolveProjectKey();
@@ -15,6 +16,16 @@ export function activate(context: vscode.ExtensionContext) {
     return;
   }
   const port = parseInt(process.env.WORMHOLE_PORT || '7117', 10);
+
+  statusItem = vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Left,
+    0,
+  );
+  statusItem.text = '🌀';
+  statusItem.tooltip = `wormhole: ${projectKey}`;
+  statusItem.show();
+  context.subscriptions.push(statusItem);
+
   abortController = new AbortController();
   pollLoop(projectKey, port, abortController.signal);
 }

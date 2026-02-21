@@ -1,9 +1,9 @@
 use std::fs;
 use std::path::Path;
 
-use crate::hammerspoon;
+use crate::messages::{self, Notification, Target};
 use crate::project::Project;
-use crate::{project_path::ProjectPath, util::execute_command};
+use crate::{hammerspoon, project_path::ProjectPath, util::execute_command};
 
 #[allow(dead_code)]
 #[derive(Debug, PartialEq, Clone)]
@@ -104,8 +104,12 @@ impl Editor {
         if self.is_none() {
             return;
         }
-        let store_key = project.store_key().to_string();
-        hammerspoon::close_window(self.application_name(), &store_key);
+        let key = project.store_key().to_string();
+        messages::lock().publish(
+            &key,
+            &Target::Role("editor".to_string()),
+            Notification::new("editor/close"),
+        );
     }
 
     pub fn focus(&self) {

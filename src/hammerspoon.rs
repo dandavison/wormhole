@@ -44,22 +44,6 @@ pub fn launch_or_focus(application_name: &str) {
     ));
 }
 
-pub fn close_window(application_name: &str, title_pattern: &str) {
-    let lua_pattern = title_pattern.replace("-", "%-");
-    hammerspoon(&format!(
-        r#"
-        local app = hs.application.find('{application_name}')
-        if app then
-            for _, w in ipairs(app:allWindows()) do
-                if string.find(w:title(), "{lua_pattern}") then
-                    w:close()
-                end
-            end
-        end
-        "#,
-    ));
-}
-
 pub fn alert(message: &str) {
     hammerspoon(&format!(r#"hs.alert.show("{message}", 0.5)"#,));
 }

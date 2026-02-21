@@ -25,13 +25,29 @@ pub fn dashboard() -> Response<Body> {
     tasks.sort_by_key(|t| status_sort_order(t.cached.jira.as_ref().map(|j| j.status.as_str())));
     let jira_instance = std::env::var("JIRA_INSTANCE").ok();
 
-    let cards_html: String = tasks
+    let mut cards_html: String = tasks
         .iter()
         .map(|task| {
             let is_current = current_key.as_ref() == Some(&task.store_key().to_string());
             render_task_card(task, jira_instance.as_deref(), is_current)
         })
         .collect();
+
+    let mut active_projects: Vec<Project> = {
+        let projects = projects::lock();
+        projects
+            .all()
+            .into_iter()
+            .filter(|p| !p.is_task() && p.is_active(&window_names))
+            .cloned()
+            .collect()
+    };
+    active_projects.sort_by(|a, b| a.repo_name.as_str().cmp(b.repo_name.as_str()));
+    if !active_projects.is_empty() {
+        for project in &active_projects {
+            cards_html.push_str(&render_project_card(project));
+        }
+    }
 
     let template = include_str!("dashboard.html");
     let html = template.replace("{{CARDS}}", &cards_html);
@@ -216,6 +232,30 @@ fn render_task_card(
         assignee_html,
         card_content_html,
         iframe_html
+    )
+}
+
+fn render_project_card(project: &crate::project::Project) -> String {
+    let name = html_escape(project.repo_name.as_str());
+    let key = html_escape(&project.store_key().to_string());
+    let terminal_icon = include_str!("icons/terminal.b64");
+    let cursor_icon = include_str!("icons/cursor.b64");
+    format!(
+        concat!(
+            r#"<div class="card folded" data-task="{}">"#,
+            r#"<div class="card-header"><span class="card-repo">{}</span></div>"#,
+            r#"<div class="card-actions">"#,
+            r#"<button class="btn btn-icon btn-terminal" title="Terminal">"#,
+            r#"<img src="data:image/png;base64,{}" alt="Terminal"></button>"#,
+            r#"<button class="btn btn-icon btn-cursor" title="Cursor">"#,
+            r#"<img src="data:image/png;base64,{}" alt="Cursor"></button>"#,
+            r#"<button class="btn btn-close" title="Close project">&times;</button>"#,
+            r#"</div></div>"#,
+        ),
+        key,
+        name,
+        terminal_icon.trim(),
+        cursor_icon.trim(),
     )
 }
 

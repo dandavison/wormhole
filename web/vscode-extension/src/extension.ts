@@ -2,9 +2,19 @@ import * as vscode from 'vscode';
 import * as http from 'http';
 import { projectKeyFromPath } from './project-key';
 
-const INTENTS: Record<string, string> = {
-  'editor/close': 'workbench.action.closeWindow',
-  'editor/toggleZenMode': 'workbench.action.toggleZenMode',
+type IntentHandler = (
+  projectKey: string,
+  port: number,
+) => void | Thenable<void>;
+
+function vscodeCommand(command: string): IntentHandler {
+  return () => vscode.commands.executeCommand(command);
+}
+
+const INTENTS: Record<string, IntentHandler> = {
+  'editor/close': vscodeCommand('workbench.action.closeWindow'),
+  'editor/toggleZenMode': vscodeCommand('workbench.action.toggleZenMode'),
+  echo: (projectKey, port) => putKv(projectKey, port, 'last-message', 'echo'),
 };
 
 let abortController: AbortController | null = null;
@@ -16,7 +26,9 @@ export function activate(context: vscode.ExtensionContext) {
     return;
   }
   const config = vscode.workspace.getConfiguration('wormhole');
-  const port = config.get<number>('port') ?? parseInt(process.env.WORMHOLE_PORT || '7117', 10);
+  const port =
+    config.get<number>('port') ??
+    parseInt(process.env.WORMHOLE_PORT || '7117', 10);
 
   statusItem = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Left,
@@ -41,9 +53,9 @@ async function pollLoop(projectKey: string, port: number, signal: AbortSignal) {
     try {
       const messages = await poll(projectKey, port, signal);
       for (const msg of messages) {
-        const command = INTENTS[msg.method];
-        if (command) {
-          await vscode.commands.executeCommand(command);
+        const handler = INTENTS[msg.method];
+        if (handler) {
+          await handler(projectKey, port);
         }
       }
     } catch (e: unknown) {
@@ -99,6 +111,14 @@ function resolveProjectKey(): string | undefined {
     return undefined;
   }
   return projectKeyFromPath(folders[0].uri.fsPath);
+}
+
+function putKv(projectKey: string, port: number, key: string, value: string) {
+  const req = http.request(`http://127.0.0.1:${port}/kv/${projectKey}/${key}`, {
+    method: 'PUT',
+  });
+  req.on('error', () => {});
+  req.end(value);
 }
 
 function sleep(ms: number): Promise<void> {

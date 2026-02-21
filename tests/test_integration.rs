@@ -111,6 +111,32 @@ fn test_previous_project_and_next_project() {
 }
 
 #[test]
+fn test_extension_receives_message() {
+    if editor_is_none() {
+        return;
+    }
+    let test = harness::WormholeTest::new(8963);
+
+    let proj = format!("{}msg-recv", TEST_PREFIX);
+    let dir = format!("/tmp/{}", proj);
+
+    init_git_repo(&dir);
+
+    test.create_project(&dir, &proj);
+    test.cli(&format!("wormhole open {}", proj)).unwrap();
+    test.assert_focus(Editor(&proj));
+
+    std::thread::sleep(Duration::from_secs(3));
+
+    test.publish_message(&proj, "echo", "editor").unwrap();
+
+    assert!(
+        test.wait_for_kv(&proj, "last-message", "echo", 10),
+        "Extension should echo received message back to KV"
+    );
+}
+
+#[test]
 fn test_close_project() {
     let test = harness::WormholeTest::new(8933);
 

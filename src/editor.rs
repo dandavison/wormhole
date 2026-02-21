@@ -151,20 +151,40 @@ fn resolve_workspace_file(project: &Project) -> Result<std::path::PathBuf, Strin
             wormhole_ws.display()
         )),
         (Some(root), false) => Ok(root),
-        (Option::None, true) => Ok(wormhole_ws),
+        (Option::None, true) => {
+            ensure_workspace_port(&wormhole_ws);
+            Ok(wormhole_ws)
+        }
         (Option::None, false) => {
             let project_dir = project.working_tree();
-            let content = format!(
-                r#"{{"folders": [{{"path": "{}"}}]}}"#,
-                project_dir.display()
-            );
+            let content = serde_json::json!({
+                "folders": [{"path": project_dir.to_str().unwrap()}],
+                "settings": {"wormhole.port": crate::config::wormhole_port()}
+            });
             if let Some(parent) = wormhole_ws.parent() {
                 let _ = fs::create_dir_all(parent);
             }
-            let _ = fs::write(&wormhole_ws, content);
+            let _ = fs::write(&wormhole_ws, serde_json::to_string_pretty(&content).unwrap());
             Ok(wormhole_ws)
         }
     }
+}
+
+fn ensure_workspace_port(path: &Path) {
+    let port = crate::config::wormhole_port();
+    let Ok(data) = fs::read_to_string(path) else {
+        return;
+    };
+    let Ok(mut json) = serde_json::from_str::<serde_json::Value>(&data) else {
+        return;
+    };
+    let settings = json
+        .as_object_mut()
+        .unwrap()
+        .entry("settings")
+        .or_insert_with(|| serde_json::json!({}));
+    settings["wormhole.port"] = serde_json::json!(port);
+    let _ = fs::write(path, serde_json::to_string_pretty(&json).unwrap());
 }
 
 pub fn open_workspace(project: &Project) {

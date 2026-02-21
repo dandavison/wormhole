@@ -15,7 +15,8 @@ export function activate(context: vscode.ExtensionContext) {
   if (!projectKey) {
     return;
   }
-  const port = parseInt(process.env.WORMHOLE_PORT || '7117', 10);
+  const config = vscode.workspace.getConfiguration('wormhole');
+  const port = config.get<number>('port') ?? parseInt(process.env.WORMHOLE_PORT || '7117', 10);
 
   statusItem = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Left,
@@ -67,7 +68,7 @@ function poll(
 ): Promise<Notification[]> {
   return new Promise((resolve, reject) => {
     const req = http.get(
-      `http://127.0.0.1:${port}/project/messages/${encodeURIComponent(projectKey)}?role=editor&wait=30`,
+      `http://127.0.0.1:${port}/project/messages/${projectKey}?role=editor&wait=30`,
       (res) => {
         let data = '';
         res.on('data', (chunk: string) => (data += chunk));

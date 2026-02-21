@@ -148,7 +148,8 @@ wormhole project pin                    # Pin current (project, app) state
 wormhole project debug                  # Debug info for all projects
 wormhole project show                   # Show task info (JIRA, PR, CLAUDE.md)
 wormhole project show myrepo:ACT-1234   # Show info for specific project/task
-wormhole project message myapp          # Send JSON-RPC message to project
+wormhole project message myapp -m editor/close           # Send intent to project
+wormhole project message myapp -m editor/toggleZenMode   # Toggle zen mode
 wormhole project for-each <command>     # Run command in each project dir
 wormhole kv get myapp land-in           # Get KV
 wormhole kv set myapp land-in editor    # Set KV
@@ -212,6 +213,24 @@ wormhole completion bash                # Generate shell completions
 | GET    | `/kv`                         | List all KV                       |
 
 Query params: `land-in=terminal|editor`, `line=N`, `home-project=<project>`, `branch=<branch>`, `active=true`, `current=true`, `completed=true`, `dry-run=true`, `skip-editor=true`, `focus-terminal=true`, `sync=true`, `pwd=<path>`, `run=<id>`, `offset=N`, `role=<role>`, `wait=N`
+
+## Message Intents
+
+The wormhole server routes JSON-RPC 2.0 notifications to editor extensions via the message channel.
+The VSCode/Cursor extension translates intents to native editor commands. `project close` uses this
+internally; intents can also be sent manually via `wormhole project message`.
+
+| Intent                  | VSCode command                       | Description              |
+|-------------------------|--------------------------------------|--------------------------|
+| `editor/close`          | `workbench.action.closeWindow`       | Close the editor window  |
+| `editor/toggleZenMode`  | `workbench.action.toggleZenMode`     | Toggle zen mode          |
+| `echo`                  | _(writes KV `last-message=echo`)_    | Test connectivity        |
+
+```bash
+wormhole project message myapp -m editor/close
+wormhole project message myapp -m editor/toggleZenMode
+wormhole project message myapp -m editor/close -t '*'  # broadcast to all roles
+```
 
 ## Environment Variables
 

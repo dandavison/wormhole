@@ -1,8 +1,9 @@
 Wormhole is a tool for working on software projects.
 
-- A set of directories is specified in `WORMHOLE_PATH`. The set of _available repos_ is the union of
-  the git repo directories that are located at the top level in one of those directories. These may
-  be submodules, or top-level git repos.
+- A set of directories to search for projects is configured in `~/.wormhole/wormhole.toml` (or via
+  the `WORMHOLE_SEARCH_PATHS` env var). The set of _available repos_ is the union of the git repo
+  directories that are located at the top level in one of those directories. These may be submodules,
+  or top-level git repos.
 
 - A _task_ is a `(repo, branch)` pair: a branch in some git repository. The branch has a short
   descriptive name that acts as the name of the task.
@@ -11,10 +12,9 @@ Wormhole is a tool for working on software projects.
   checked out. You always work on the task in the worktree: never in the main repo dir. Wormhole can
   thus determine all known tasks by enumerating worktrees of available repos.
 
-- In practice, wormhole stores its worktrees at `$gitdir/wormhole/worktrees/$branch/$repo_name`. If
-  the repo directory is not a submodule then `$gitdir` is `$dir/.git`; if it is a submodule then
-  `$gitdir` is the gitdir entry specified in the `$dir/.git` file. The leaf directory is `$repo_name`
-  so that editors display the repo name (not the branch) in the sidebar.
+- Task worktrees are stored at `$worktree_dir/$repo_name/$encoded_branch/$repo_name` (default
+  `$worktree_dir` is `~/worktrees`, configurable in `wormhole.toml`). Grouped by repo first, with
+  the repo name as the leaf so editors display the repo name in the sidebar.
 
 - A _task_ is a type of _project_. Each repo is a non-task _project_. A non-task project has no
   associated branch. Thus the set of projects is the union of the _available repos_ and the
@@ -41,10 +41,9 @@ Wormhole is a tool for working on software projects.
 
 - Each project gets a generated `.code-workspace` file (stored at
   `$gitdir/wormhole/workspaces/<key>.code-workspace`). This gives each project a distinct VSCode
-  window identity so multiple tasks can be open simultaneously. The file includes a `wormhole.port`
-  setting (when non-default) so the VSCode extension connects to the correct server. The extension
-  derives the project key from the worktree path (looking for `/wormhole/worktrees/` and extracting
-  the branch and repo name) and uses it to long-poll the server for messages.
+  window identity so multiple tasks can be open simultaneously. The file includes `wormhole.port`
+  and `wormhole.worktreeDir` settings so the VSCode extension connects to the correct server and
+  derives the project key from the worktree path.
 
 - The following sorts of hyperlinks can thus be created:
   - Go to the terminal tmux window for a specified project or task
@@ -144,7 +143,7 @@ wormhole open /path/to/repo             # Open/create project at path
 wormhole open /path/to/file.rs:42       # Open file at line in editor
 wormhole open myrepo:ACT-1234           # Open task (creates worktree if needed)
 wormhole project list                   # List projects (includes tasks)
-wormhole project list --available       # List available projects (from WORMHOLE_PATH)
+wormhole project list --available       # List available projects (from search_paths)
 wormhole project list --active          # List only projects with tmux windows
 wormhole project list --name-only       # Output project keys only (for completion)
 wormhole project previous               # Previous project
@@ -239,15 +238,44 @@ wormhole project message myapp -m editor/toggleZenMode
 wormhole project message myapp -m editor/close -t '*'  # broadcast to all roles
 ```
 
+## Configuration
+
+Global config lives at `~/.wormhole/wormhole.toml`:
+
+```toml
+# Directories to search for projects (replaces WORMHOLE_SEARCH_PATHS env var).
+# Plain strings and objects with per-path excludes can be mixed.
+search_paths = [
+    "~/src/repos",
+    { path = "~/src", exclude = ["node_modules", "venv"] },
+]
+
+# Where task worktrees are created (default: ~/worktrees)
+worktree_dir = "~/worktrees"
+```
+
+`~` is expanded to `$HOME` at load time.
+
+Env var names follow the convention `WORMHOLE_` + SCREAMING_SNAKE of the TOML key. Env vars
+override config file values when set. `WORMHOLE_SEARCH_PATHS` is colon-separated; per-path excludes
+are a config-file-only feature.
+
+_Wormhole is pre-1.0. Configuration and environment variable names may change without backward
+compatibility._
+
 ## Environment Variables
 
-| Variable                | Description                                                        |
-|-------------------------|--------------------------------------------------------------------|
-| `JIRA_INSTANCE`         | JIRA instance name (e.g., `mycompany` for mycompany.atlassian.net) |
-| `JIRA_EMAIL`            | JIRA account email                                                 |
-| `JIRA_TOKEN`            | JIRA API token                                                     |
-| `GITHUB_REPO`           | GitHub repo (e.g., `owner/repo`) for PR lookup in `jira sprint`    |
-| `WORMHOLE_DEFAULT_HOME` | Default home project for `jira sprint create`                      |
+| Variable                  | Description                                                        |
+|---------------------------|--------------------------------------------------------------------|
+| `WORMHOLE_SEARCH_PATHS`   | Colon-separated directories to search for projects                 |
+| `WORMHOLE_WORKTREE_DIR`   | Where task worktrees are created (default: `~/worktrees`)          |
+| `WORMHOLE_PORT`           | HTTP API port (default: 7117)                                      |
+| `WORMHOLE_EDITOR`         | Editor to use (`cursor`, `code`, `code-insiders`, `emacs`, `none`) |
+| `JIRA_INSTANCE`           | JIRA instance name (e.g., `mycompany` for mycompany.atlassian.net) |
+| `JIRA_EMAIL`              | JIRA account email                                                 |
+| `JIRA_TOKEN`              | JIRA API token                                                     |
+| `GITHUB_REPO`             | GitHub repo (e.g., `owner/repo`) for PR lookup in `jira sprint`    |
+| `WORMHOLE_DEFAULT_HOME`   | Default home project for `jira sprint create`                      |
 
 ## Example Workflows
 

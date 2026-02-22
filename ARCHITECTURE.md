@@ -118,7 +118,7 @@ Storage location: `{git_common_dir}/wormhole/kv/{store_key}.json`
 ```
 main.rs
   → projects::load()
-    → config::available_projects()  // discover from WORMHOLE_PATH
+    → config::available_projects()  // discover from search_paths config
     → git::list_worktrees()         // find tasks
     → kv::load_kv_data()            // load persisted KV
   → wormhole::serve_http()          // start HTTP server
@@ -605,7 +605,7 @@ fn doctor_persisted_data(output: &str) -> Result<(), String> {
 
 - `editor()` — returns configured editor (Cursor, VSCode, etc.)
 - `wormhole_port()` — HTTP port (default 7117, env `WORMHOLE_PORT`)
-- `available_projects()` — discovers projects from `WORMHOLE_PATH`
+- `available_projects()` — discovers projects from `search_paths` config
 - `resolve_project_name()` — resolves name to path
 
 ### git.rs — Git Operations

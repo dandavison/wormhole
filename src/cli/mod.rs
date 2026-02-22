@@ -113,7 +113,7 @@ pub enum ProjectCommand {
         /// Output format: text (default) or json
         #[arg(short, long, default_value = "text")]
         output: String,
-        /// List available projects (from WORMHOLE_PATH) instead of current
+        /// List available projects (from search_paths config) instead of current
         #[arg(short, long)]
         available: bool,
         /// Output only project names (for shell completion)

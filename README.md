@@ -39,6 +39,13 @@ Wormhole is a tool for working on software projects.
   the project exists, (3) one or the other of these applications is given focus (the user can
   control which by using `wormhole project pin` to store the preference in kv).
 
+- Each project gets a generated `.code-workspace` file (stored at
+  `$gitdir/wormhole/workspaces/<key>.code-workspace`). This gives each project a distinct VSCode
+  window identity so multiple tasks can be open simultaneously. The file includes a `wormhole.port`
+  setting (when non-default) so the VSCode extension connects to the correct server. The extension
+  derives the project key from the worktree path (looking for `/wormhole/worktrees/` and extracting
+  the branch and repo name) and uses it to long-poll the server for messages.
+
 - The following sorts of hyperlinks can thus be created:
   - Go to the terminal tmux window for a specified project or task
   - Go to the editor worskpace for a specified project or task

@@ -1,7 +1,7 @@
 use crate::config;
 use crate::jira;
 use crate::project::ProjectKey;
-use crate::pst::TerminalHyperlink;
+use crate::tty::TerminalHyperlink;
 
 use super::util::*;
 

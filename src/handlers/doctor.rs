@@ -5,7 +5,7 @@ use hyper::{Body, Response, StatusCode};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::pst::TerminalHyperlink;
+use crate::tty::TerminalHyperlink;
 use crate::{config, git, task};
 
 // --- conform ---

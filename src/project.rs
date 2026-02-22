@@ -83,7 +83,7 @@ impl fmt::Display for ProjectKey {
     }
 }
 
-impl crate::pst::TerminalHyperlink for ProjectKey {
+impl crate::tty::TerminalHyperlink for ProjectKey {
     fn display_text(&self) -> String {
         self.to_string()
     }

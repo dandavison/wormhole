@@ -1,4 +1,11 @@
 use std::env::current_dir;
+use std::io::IsTerminal;
+use std::sync::OnceLock;
+
+pub fn is_tty() -> bool {
+    static IS_TTY: OnceLock<bool> = OnceLock::new();
+    *IS_TTY.get_or_init(|| std::io::stdout().is_terminal())
+}
 
 #[macro_export]
 macro_rules! ps {
@@ -40,6 +47,9 @@ pub fn format_vscode_hyperlink(rel_path: &str, line: u32) -> String {
 }
 
 pub fn format_osc8_hyperlink(url: &str, text: &str) -> String {
+    if !is_tty() {
+        return text.to_string();
+    }
     format!(
         "{osc}8;;{url}{st}{text}{osc}8;;{st}",
         url = url,

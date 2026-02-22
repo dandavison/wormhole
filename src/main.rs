@@ -23,8 +23,8 @@ mod util;
 mod wezterm;
 mod wormhole;
 #[macro_use]
-pub mod pst;
-pub use pst::*;
+pub mod tty;
+pub use tty::*;
 
 use std::convert::Infallible;
 use std::net::SocketAddr;

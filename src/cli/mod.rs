@@ -7,6 +7,7 @@ use clap_complete::{generate, Shell};
 use std::io;
 
 use crate::config;
+use crate::tty::TerminalHyperlink;
 
 mod doctor;
 mod jira;
@@ -391,7 +392,10 @@ pub fn run(command: Command) -> Result<(), String> {
                         if let Some(avail) = json.get("available").and_then(|v| v.as_array()) {
                             for item in avail {
                                 if let Some(name) = item.as_str() {
-                                    println!("{}", name);
+                                    println!(
+                                        "{}",
+                                        crate::project::ProjectKey::parse(name).hyperlink()
+                                    );
                                 }
                             }
                         }
@@ -400,13 +404,7 @@ pub fn run(command: Command) -> Result<(), String> {
                         sorted.sort_by(|a, b| {
                             let a_key = a.get("project_key").and_then(|k| k.as_str()).unwrap_or("");
                             let b_key = b.get("project_key").and_then(|k| k.as_str()).unwrap_or("");
-                            let a_is_task = a_key.contains(':');
-                            let b_is_task = b_key.contains(':');
-                            match (a_is_task, b_is_task) {
-                                (false, true) => std::cmp::Ordering::Less,
-                                (true, false) => std::cmp::Ordering::Greater,
-                                _ => a_key.cmp(b_key),
-                            }
+                            a_key.cmp(b_key)
                         });
                         for item in &sorted {
                             if name_only {

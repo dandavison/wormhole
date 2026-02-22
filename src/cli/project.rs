@@ -2,7 +2,7 @@ use serde::Serialize;
 
 use crate::jira;
 use crate::project::ProjectKey;
-use crate::pst::TerminalHyperlink;
+use crate::tty::TerminalHyperlink;
 
 #[derive(Serialize, serde::Deserialize)]
 pub(super) struct ProjectDebug {
@@ -35,12 +35,19 @@ impl KvValue {
     }
 }
 
-/// Render a project item from /project/list response
+/// Render a project item from /project/list response.
+/// TTY: rich format with hyperlinks, JIRA status, PR info.
+/// Non-TTY: plain project key only.
 pub(super) fn render_project_item(item: &serde_json::Value) -> String {
     let project_key_str = item
         .get("project_key")
         .and_then(|k| k.as_str())
         .unwrap_or("");
+
+    if !crate::tty::is_tty() {
+        return project_key_str.to_string();
+    }
+
     let task_display = ProjectKey::parse(project_key_str).hyperlink();
 
     let jira_instance = std::env::var("JIRA_INSTANCE").ok();
@@ -53,6 +60,10 @@ pub(super) fn render_project_item(item: &serde_json::Value) -> String {
             )
         })
         .unwrap_or(("", ""));
+
+    if jira_key.is_empty() {
+        return format!("  {}", task_display);
+    }
 
     let pr_display = item
         .get("pr")
@@ -68,11 +79,6 @@ pub(super) fn render_project_item(item: &serde_json::Value) -> String {
             format!("  {}", crate::format_osc8_hyperlink(url, &display))
         })
         .unwrap_or_default();
-
-    // No JIRA info - just show the task identifier
-    if jira_key.is_empty() {
-        return task_display;
-    }
 
     let jira_display = if let Some(ref instance) = jira_instance {
         let url = format!("https://{}.atlassian.net/browse/{}", instance, jira_key);
@@ -335,44 +341,28 @@ pub(super) fn for_each(
 mod tests {
     use super::*;
 
+    // Tests run in a non-TTY context, so render_project_item returns plain keys.
+
     #[test]
     fn test_render_project_item_bare_project() {
-        // Project without JIRA - just shows project_key
         let item = serde_json::json!({
             "project_key": "wormhole",
             "path": "/Users/dan/src/wormhole"
         });
-        let rendered = render_project_item(&item);
-        // Should contain the project key (inside a hyperlink)
-        assert!(rendered.contains("wormhole"), "Should contain project key");
-        // Should not contain emoji (no JIRA)
-        assert!(
-            !rendered.contains("●"),
-            "Should not have indicator without JIRA"
-        );
+        assert_eq!(render_project_item(&item), "wormhole");
     }
 
     #[test]
     fn test_render_project_item_task_without_jira() {
-        // Task but no JIRA - shows project_key
         let item = serde_json::json!({
             "project_key": "cli:feature-branch",
             "path": "/Users/dan/src/cli/feature-branch"
         });
-        let rendered = render_project_item(&item);
-        assert!(
-            rendered.contains("cli:feature-branch"),
-            "Should show project_key"
-        );
-        assert!(
-            !rendered.contains("●"),
-            "Should not have indicator without JIRA"
-        );
+        assert_eq!(render_project_item(&item), "cli:feature-branch");
     }
 
     #[test]
     fn test_render_project_item_task_with_jira() {
-        // Task with JIRA info - shows emoji, task, JIRA key (no summary)
         let item = serde_json::json!({
             "project_key": "cli:standalone-activity",
             "path": "/Users/dan/src/cli/standalone-activity",
@@ -382,22 +372,11 @@ mod tests {
                 "summary": "Standalone activity CLI integration"
             }
         });
-        let rendered = render_project_item(&item);
-        assert!(rendered.contains("●"), "Should contain status indicator");
-        assert!(
-            rendered.contains("cli:standalone-activity"),
-            "Should contain project_key"
-        );
-        assert!(rendered.contains("ACT-107"), "Should contain JIRA key");
-        assert!(
-            !rendered.contains("Standalone activity CLI integration"),
-            "Should not contain summary"
-        );
+        assert_eq!(render_project_item(&item), "cli:standalone-activity");
     }
 
     #[test]
     fn test_render_project_item_task_with_pr() {
-        // Task with JIRA and PR
         let item = serde_json::json!({
             "project_key": "cli:feature",
             "jira": {
@@ -411,8 +390,7 @@ mod tests {
                 "isDraft": false
             }
         });
-        let rendered = render_project_item(&item);
-        assert!(rendered.contains("#123"), "Should contain PR number");
+        assert_eq!(render_project_item(&item), "cli:feature");
     }
 
     #[test]
@@ -430,7 +408,18 @@ mod tests {
                 "isDraft": true
             }
         });
-        let rendered = render_project_item(&item);
-        assert!(rendered.contains("#456 (draft)"), "Should show draft PR");
+        assert_eq!(render_project_item(&item), "cli:feature");
+    }
+
+    #[test]
+    fn test_format_osc8_hyperlink_non_tty() {
+        let result = crate::format_osc8_hyperlink("http://example.com", "display");
+        assert_eq!(result, "display");
+    }
+
+    #[test]
+    fn test_status_indicator_non_tty() {
+        let result = jira::status_indicator("In Progress");
+        assert_eq!(result, "●");
     }
 }

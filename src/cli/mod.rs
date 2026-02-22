@@ -396,7 +396,19 @@ pub fn run(command: Command) -> Result<(), String> {
                             }
                         }
                     } else if let Some(current) = json.get("current").and_then(|v| v.as_array()) {
-                        for item in current {
+                        let mut sorted = current.clone();
+                        sorted.sort_by(|a, b| {
+                            let a_key = a.get("project_key").and_then(|k| k.as_str()).unwrap_or("");
+                            let b_key = b.get("project_key").and_then(|k| k.as_str()).unwrap_or("");
+                            let a_is_task = a_key.contains(':');
+                            let b_is_task = b_key.contains(':');
+                            match (a_is_task, b_is_task) {
+                                (false, true) => std::cmp::Ordering::Less,
+                                (true, false) => std::cmp::Ordering::Greater,
+                                _ => a_key.cmp(b_key),
+                            }
+                        });
+                        for item in &sorted {
                             if name_only {
                                 if let Some(key) = item.get("project_key").and_then(|k| k.as_str())
                                 {

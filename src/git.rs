@@ -265,6 +265,13 @@ pub fn worktree_base_path(repo_path: &Path) -> PathBuf {
     git_common_dir(repo_path).join("wormhole/worktrees")
 }
 
+pub fn task_worktree_path(git_common_dir: &Path, branch: &str, repo_name: &str) -> PathBuf {
+    git_common_dir
+        .join("wormhole/worktrees")
+        .join(encode_branch_for_path(branch))
+        .join(repo_name)
+}
+
 /// Find directories under the worktree base that are not recognized by git as worktrees.
 pub fn find_orphan_worktree_dirs(repo_path: &Path) -> Vec<PathBuf> {
     let base = worktree_base_path(repo_path);

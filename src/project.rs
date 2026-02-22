@@ -141,12 +141,11 @@ impl Project {
     pub fn worktree_path(&self) -> Option<PathBuf> {
         let branch = self.branch.as_ref()?;
         let common_dir = self.cached.git_common_dir.as_ref()?;
-        Some(
-            common_dir
-                .join("wormhole/worktrees")
-                .join(git::encode_branch_for_path(branch.as_str()))
-                .join(self.repo_name.as_str()),
-        )
+        Some(git::task_worktree_path(
+            common_dir,
+            branch.as_str(),
+            self.repo_name.as_str(),
+        ))
     }
 
     pub fn working_tree(&self) -> PathBuf {

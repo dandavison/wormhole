@@ -152,7 +152,7 @@ fn resolve_workspace_file(project: &Project) -> Result<std::path::PathBuf, Strin
         )),
         (Some(root), false) => Ok(root),
         (Option::None, true) => {
-            ensure_workspace_port(&wormhole_ws);
+            ensure_workspace_settings(&wormhole_ws, project);
             Ok(wormhole_ws)
         }
         (Option::None, false) => {
@@ -160,9 +160,18 @@ fn resolve_workspace_file(project: &Project) -> Result<std::path::PathBuf, Strin
             let mut ws = serde_json::json!({
                 "folders": [{"path": project_dir.to_str().unwrap()}],
             });
+            let mut settings = serde_json::Map::new();
             let port = crate::config::wormhole_port();
             if port != 7117 {
-                ws["settings"] = serde_json::json!({"wormhole.port": port});
+                settings.insert("wormhole.port".into(), serde_json::json!(port));
+            }
+            let wt_dir = crate::config::worktree_dir();
+            settings.insert(
+                "wormhole.worktreeDir".into(),
+                serde_json::json!(wt_dir.to_str().unwrap()),
+            );
+            if !settings.is_empty() {
+                ws["settings"] = serde_json::Value::Object(settings);
             }
             if let Some(parent) = wormhole_ws.parent() {
                 let _ = fs::create_dir_all(parent);
@@ -173,8 +182,7 @@ fn resolve_workspace_file(project: &Project) -> Result<std::path::PathBuf, Strin
     }
 }
 
-fn ensure_workspace_port(path: &Path) {
-    let port = crate::config::wormhole_port();
+fn ensure_workspace_settings(path: &Path, project: &Project) {
     let Ok(data) = fs::read_to_string(path) else {
         return;
     };
@@ -182,20 +190,31 @@ fn ensure_workspace_port(path: &Path) {
         return;
     };
     let obj = json.as_object_mut().unwrap();
+
+    let project_dir = project.working_tree();
+    obj.insert(
+        "folders".into(),
+        serde_json::json!([{"path": project_dir.to_str().unwrap()}]),
+    );
+
+    let settings = obj
+        .entry("settings")
+        .or_insert_with(|| serde_json::json!({}));
+    let s = settings.as_object_mut().unwrap();
+
+    let port = crate::config::wormhole_port();
     if port == 7117 {
-        if let Some(settings) = obj.get_mut("settings") {
-            if let Some(s) = settings.as_object_mut() {
-                s.remove("wormhole.port");
-                if s.is_empty() {
-                    obj.remove("settings");
-                }
-            }
-        }
+        s.remove("wormhole.port");
     } else {
-        let settings = obj
-            .entry("settings")
-            .or_insert_with(|| serde_json::json!({}));
-        settings["wormhole.port"] = serde_json::json!(port);
+        s.insert("wormhole.port".into(), serde_json::json!(port));
+    }
+    s.insert(
+        "wormhole.worktreeDir".into(),
+        serde_json::json!(crate::config::worktree_dir().to_str().unwrap()),
+    );
+
+    if s.is_empty() {
+        obj.remove("settings");
     }
     let _ = fs::write(path, serde_json::to_string_pretty(&json).unwrap());
 }

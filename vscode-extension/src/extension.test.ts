@@ -14,10 +14,13 @@ function test(name: string, fn: () => void) {
 
 console.log('projectKeyFromPath');
 
+const worktreeDir = '/Users/dan/worktrees';
+
 test('task worktree', () => {
   assert.strictEqual(
     projectKeyFromPath(
-      '/Users/dan/src/wormhole/.git/wormhole/worktrees/messages/wormhole',
+      '/Users/dan/worktrees/wormhole/messages/wormhole',
+      worktreeDir,
     ),
     'wormhole:messages',
   );
@@ -25,7 +28,10 @@ test('task worktree', () => {
 
 test('task with slash in branch', () => {
   assert.strictEqual(
-    projectKeyFromPath('/repo/.git/wormhole/worktrees/feature--auth/myrepo'),
+    projectKeyFromPath(
+      '/Users/dan/worktrees/myrepo/feature--auth/myrepo',
+      worktreeDir,
+    ),
     'myrepo:feature/auth',
   );
 });
@@ -33,16 +39,30 @@ test('task with slash in branch', () => {
 test('task with nested slash in branch', () => {
   assert.strictEqual(
     projectKeyFromPath(
-      '/repo/.git/wormhole/worktrees/user--nested--deep/myrepo',
+      '/Users/dan/worktrees/myrepo/user--nested--deep/myrepo',
+      worktreeDir,
     ),
     'myrepo:user/nested/deep',
   );
 });
 
 test('non-task project', () => {
-  assert.strictEqual(projectKeyFromPath('/Users/dan/src/wormhole'), 'wormhole');
+  assert.strictEqual(
+    projectKeyFromPath('/Users/dan/src/wormhole', worktreeDir),
+    'wormhole',
+  );
 });
 
 test('non-task project trailing slash', () => {
-  assert.strictEqual(projectKeyFromPath('/Users/dan/src/delta/'), 'delta');
+  assert.strictEqual(
+    projectKeyFromPath('/Users/dan/src/delta/', worktreeDir),
+    'delta',
+  );
+});
+
+test('no worktreeDir falls back to leaf', () => {
+  assert.strictEqual(
+    projectKeyFromPath('/Users/dan/worktrees/myrepo/branch/myrepo'),
+    'myrepo',
+  );
 });

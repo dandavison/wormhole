@@ -129,8 +129,11 @@ function resolveProjectKey(): string | undefined {
   if (!folders || folders.length === 0) {
     return undefined;
   }
-  const key = projectKeyFromPath(folders[0].uri.fsPath);
+  const config = vscode.workspace.getConfiguration('wormhole');
+  const worktreeDir = config.get<string>('worktreeDir');
+  const key = projectKeyFromPath(folders[0].uri.fsPath, worktreeDir);
   log.info(`workspace path: ${folders[0].uri.fsPath}`);
+  log.info(`worktreeDir: ${worktreeDir}`);
   log.info(`resolved project key: ${key}`);
   return key;
 }

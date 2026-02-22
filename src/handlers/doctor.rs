@@ -71,11 +71,12 @@ pub fn conform(dry_run: bool) -> Response<Body> {
     let available = config::available_projects();
     let repo_paths: Vec<_> = available.into_iter().collect();
 
+    let worktree_dir = config::worktree_dir();
     let results: Vec<ConformTaskResult> = repo_paths
         .par_iter()
         .filter(|(_, path)| git::is_git_repo(path))
         .flat_map(|(name, path)| {
-            let worktree_base = git::worktree_base_path(path);
+            let worktree_base = worktree_dir.join(name);
             git::list_worktrees(path)
                 .into_iter()
                 .filter(|wt| wt.path.starts_with(&worktree_base))
@@ -102,8 +103,8 @@ pub fn conform(dry_run: bool) -> Response<Body> {
     let orphans_removed: Vec<String> = repo_paths
         .par_iter()
         .filter(|(_, path)| git::is_git_repo(path))
-        .flat_map(|(_, path)| {
-            git::find_orphan_worktree_dirs(path)
+        .flat_map(|(name, path)| {
+            git::find_orphan_worktree_dirs(path, &worktree_dir.join(name))
                 .into_iter()
                 .filter_map(|orphan| {
                     let display = orphan.display().to_string();
@@ -187,6 +188,7 @@ impl PersistedDataReport {
 pub fn persisted_data() -> Response<Body> {
     let available = config::available_projects();
     let repo_paths: Vec<_> = available.into_iter().collect();
+    let worktree_dir = config::worktree_dir();
 
     let projects: Vec<ProjectPersistedData> = repo_paths
         .par_iter()
@@ -196,7 +198,7 @@ pub fn persisted_data() -> Response<Body> {
             }
 
             let worktrees = git::list_worktrees(path);
-            let worktree_base = git::worktree_base_path(path);
+            let worktree_base = worktree_dir.join(name);
             let wormhole_worktrees: Vec<WorktreeInfo> = worktrees
                 .into_iter()
                 .filter(|wt| wt.path.starts_with(&worktree_base))

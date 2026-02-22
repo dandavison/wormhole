@@ -130,7 +130,6 @@ impl<'a> Projects<'a> {
         let key = ProjectKey::project(&name);
         if !self.0.all.contains_key(&key) {
             ps!("projects::add");
-            let git_common_dir = git::git_common_dir(&path);
             self.0.all.insert(
                 key.clone(),
                 Project {
@@ -138,10 +137,7 @@ impl<'a> Projects<'a> {
                     repo_path: path,
                     branch: None,
                     kv: HashMap::new(),
-                    cached: Cached {
-                        git_common_dir: Some(git_common_dir),
-                        ..Default::default()
-                    },
+                    cached: Cached::default(),
                 },
             );
             self.0.ring.push_front(key);
@@ -300,7 +296,6 @@ pub fn load() {
 
         // Add to all if not already present
         if !projects.0.all.contains_key(&key) {
-            let git_common_dir = git::git_common_dir(&canonical);
             projects.0.all.insert(
                 key.clone(),
                 Project {
@@ -308,10 +303,7 @@ pub fn load() {
                     repo_path: canonical,
                     branch: None,
                     kv: HashMap::new(),
-                    cached: Cached {
-                        git_common_dir: Some(git_common_dir),
-                        ..Default::default()
-                    },
+                    cached: Cached::default(),
                 },
             );
         }
@@ -336,17 +328,17 @@ fn discover_tasks(additional_paths: HashMap<String, PathBuf>) -> HashMap<Project
         project_paths.entry(name).or_insert(path);
     }
 
+    let worktree_dir = config::worktree_dir();
     project_paths
         .into_par_iter()
         .flat_map(|(project_name, project_path)| {
             if !git::is_git_repo(&project_path) {
                 return vec![];
             }
-            let git_common_dir = git::git_common_dir(&project_path);
-            let worktrees_dir = git_common_dir.join("wormhole/worktrees");
+            let worktrees_base = worktree_dir.join(&project_name);
             git::list_worktrees(&project_path)
                 .into_iter()
-                .filter(|wt| wt.path.starts_with(&worktrees_dir))
+                .filter(|wt| wt.path.starts_with(&worktrees_base))
                 .filter_map(|wt| {
                     let branch = wt.branch.as_ref()?;
                     let task = Project {
@@ -354,10 +346,7 @@ fn discover_tasks(additional_paths: HashMap<String, PathBuf>) -> HashMap<Project
                         repo_path: project_path.clone(),
                         branch: Some(BranchName::new(branch.clone())),
                         kv: HashMap::new(),
-                        cached: Cached {
-                            git_common_dir: Some(git_common_dir.clone()),
-                            ..Default::default()
-                        },
+                        cached: Cached::default(),
                     };
                     Some((task.store_key(), task))
                 })

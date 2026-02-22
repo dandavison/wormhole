@@ -261,20 +261,17 @@ fn default_branch(repo_path: &Path) -> Option<String> {
     None
 }
 
-pub fn worktree_base_path(repo_path: &Path) -> PathBuf {
-    git_common_dir(repo_path).join("wormhole/worktrees")
-}
-
-pub fn task_worktree_path(git_common_dir: &Path, branch: &str, repo_name: &str) -> PathBuf {
-    git_common_dir
-        .join("wormhole/worktrees")
+pub fn task_worktree_path(worktree_dir: &Path, repo_name: &str, branch: &str) -> PathBuf {
+    worktree_dir
+        .join(repo_name)
         .join(encode_branch_for_path(branch))
         .join(repo_name)
 }
 
-/// Find directories under the worktree base that are not recognized by git as worktrees.
-pub fn find_orphan_worktree_dirs(repo_path: &Path) -> Vec<PathBuf> {
-    let base = worktree_base_path(repo_path);
+/// Find directories under `worktree_base` that look like worktrees
+/// but are not recognized by git.
+pub fn find_orphan_worktree_dirs(repo_path: &Path, worktree_base: &Path) -> Vec<PathBuf> {
+    let base = worktree_base;
     if !base.exists() {
         return vec![];
     }
@@ -492,14 +489,9 @@ detached
             common
         );
 
-        // worktree_base_path should work
-        let base = worktree_base_path(&submodule);
-        assert!(
-            base.to_string_lossy()
-                .contains("modules/child/wormhole/worktrees"),
-            "worktree base should be in parent's modules: {:?}",
-            base
-        );
+        // task_worktree_path should use the worktree_dir, not the gitdir
+        let wt = task_worktree_path(Path::new("/worktrees"), "child", "my-branch");
+        assert_eq!(wt, PathBuf::from("/worktrees/child/my-branch/child"));
     }
 
     #[test]
@@ -542,6 +534,7 @@ detached
 
         let temp = tempfile::tempdir().unwrap();
         let repo = temp.path().join("repo");
+        let worktree_base = temp.path().join("worktrees/repo");
 
         fs::create_dir_all(&repo).unwrap();
         Command::new("git")
@@ -555,23 +548,21 @@ detached
             .output()
             .unwrap();
 
-        let base = worktree_base_path(&repo);
-
-        // Create a real worktree
+        // Create a real worktree at new-style path
         Command::new("git")
             .args(["branch", "real-branch"])
             .current_dir(&repo)
             .output()
             .unwrap();
-        let real_wt = base.join("real-branch/repo");
+        let real_wt = worktree_base.join("real-branch/repo");
         create_worktree(&repo, &real_wt, "real-branch").unwrap();
 
         // Create an orphan directory (looks like a worktree but not known to git)
-        let orphan = base.join("stale-branch/repo");
+        let orphan = worktree_base.join("stale-branch/repo");
         fs::create_dir_all(&orphan).unwrap();
         fs::write(orphan.join(".git"), "gitdir: fake").unwrap();
 
-        let orphans = find_orphan_worktree_dirs(&repo);
+        let orphans = find_orphan_worktree_dirs(&repo, &worktree_base);
         assert_eq!(orphans, vec![orphan]);
     }
 
@@ -581,6 +572,7 @@ detached
 
         let temp = tempfile::tempdir().unwrap();
         let repo = temp.path().join("repo");
+        let worktree_base = temp.path().join("worktrees/repo");
         fs::create_dir_all(&repo).unwrap();
         Command::new("git")
             .args(["init"])
@@ -593,7 +585,7 @@ detached
             .output()
             .unwrap();
 
-        assert!(find_orphan_worktree_dirs(&repo).is_empty());
+        assert!(find_orphan_worktree_dirs(&repo, &worktree_base).is_empty());
     }
 
     #[test]
@@ -676,6 +668,19 @@ detached
         assert_eq!(
             encode_branch_for_path("user/nested/deep"),
             "user--nested--deep"
+        );
+    }
+
+    #[test]
+    fn test_task_worktree_path() {
+        let wt_dir = Path::new("/home/user/worktrees");
+        assert_eq!(
+            task_worktree_path(wt_dir, "myapp", "ACT-1234"),
+            PathBuf::from("/home/user/worktrees/myapp/ACT-1234/myapp")
+        );
+        assert_eq!(
+            task_worktree_path(wt_dir, "cli", "feature/auth"),
+            PathBuf::from("/home/user/worktrees/cli/feature--auth/cli")
         );
     }
 }

@@ -99,7 +99,6 @@ impl crate::pst::TerminalHyperlink for ProjectKey {
 
 #[derive(Clone, Debug, Default)]
 pub struct Cached {
-    pub git_common_dir: Option<PathBuf>,
     pub github_repo: Option<String>,
     pub github_pr: Option<u64>,
     pub jira: Option<crate::jira::IssueStatus>,
@@ -140,11 +139,10 @@ impl Project {
 
     pub fn worktree_path(&self) -> Option<PathBuf> {
         let branch = self.branch.as_ref()?;
-        let common_dir = self.cached.git_common_dir.as_ref()?;
         Some(git::task_worktree_path(
-            common_dir,
-            branch.as_str(),
+            config::worktree_dir(),
             self.repo_name.as_str(),
+            branch.as_str(),
         ))
     }
 

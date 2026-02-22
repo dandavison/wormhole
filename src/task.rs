@@ -166,7 +166,7 @@ pub fn create_task(repo: &str, branch: &str) -> Result<Project, String> {
         return Err(format!("'{}' is not a git repository", repo));
     }
 
-    let worktree_path = git::task_worktree_path(&git::git_common_dir(&repo_path), branch, repo);
+    let worktree_path = git::task_worktree_path(config::worktree_dir(), repo, branch);
 
     let worktree_preexisted = worktree_path.exists();
     if !worktree_preexisted {

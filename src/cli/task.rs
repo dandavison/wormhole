@@ -118,13 +118,15 @@ pub(super) fn task_create_from_sprint(client: &Client) -> Result<(), String> {
             Ok(line) => {
                 let trimmed = line.trim();
                 if trimmed.is_empty() {
-                    eprintln!("  Skipping (no home)");
+                    eprintln!("  Skipping");
+                    skipped_count += 1;
                     continue;
                 }
                 trimmed.to_string()
             }
             Err(rustyline::error::ReadlineError::Interrupted) => {
                 eprintln!("  Skipping");
+                skipped_count += 1;
                 continue;
             }
             Err(rustyline::error::ReadlineError::Eof) => break,
@@ -153,6 +155,7 @@ pub(super) fn task_create_from_sprint(client: &Client) -> Result<(), String> {
             }
             Err(rustyline::error::ReadlineError::Interrupted) => {
                 eprintln!("  Skipping");
+                skipped_count += 1;
                 continue;
             }
             Err(rustyline::error::ReadlineError::Eof) => break,
@@ -175,6 +178,7 @@ pub(super) fn task_create_from_sprint(client: &Client) -> Result<(), String> {
                 };
                 if confirm != "y" && confirm != "yes" {
                     eprintln!("  Skipping to avoid conflict");
+                    skipped_count += 1;
                     continue;
                 }
             }
@@ -200,6 +204,7 @@ pub(super) fn task_create_from_sprint(client: &Client) -> Result<(), String> {
                 };
                 if confirm != "y" && confirm != "yes" {
                     eprintln!("  Skipping to avoid duplicate");
+                    skipped_count += 1;
                     continue;
                 }
             }

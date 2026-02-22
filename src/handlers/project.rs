@@ -27,7 +27,7 @@ pub fn list_projects(active_only: bool) -> Response<Body> {
         projects::lock().open()
     };
 
-    let mut current: Vec<_> = open_projects
+    let current: Vec<_> = open_projects
         .into_iter()
         .map(|project| {
             let mut obj = serde_json::json!({
@@ -49,20 +49,6 @@ pub fn list_projects(active_only: bool) -> Response<Body> {
             obj
         })
         .collect();
-
-    // Sort: projects (no colon) first alphabetically, then tasks (with colon) by key
-    current.sort_by(|a, b| {
-        let a_key = a.get("project_key").and_then(|k| k.as_str()).unwrap_or("");
-        let b_key = b.get("project_key").and_then(|k| k.as_str()).unwrap_or("");
-        let a_is_task = a_key.contains(':');
-        let b_is_task = b_key.contains(':');
-
-        match (a_is_task, b_is_task) {
-            (false, true) => std::cmp::Ordering::Less,
-            (true, false) => std::cmp::Ordering::Greater,
-            _ => a_key.cmp(b_key),
-        }
-    });
 
     let available = config::available_projects();
     let available: Vec<&str> = available.keys().map(|s| s.as_str()).collect();

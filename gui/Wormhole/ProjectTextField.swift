@@ -48,13 +48,6 @@ struct ProjectTextField<V: Equatable>: NSViewRepresentable {
         if searchField.stringValue != self.text {
             searchField.stringValue = self.text
         }
-
-        if !coordinator.hasActivated, let window = searchField.window {
-            coordinator.hasActivated = true
-            NSApp.activate(ignoringOtherApps: true)
-            window.makeKeyAndOrderFront(nil)
-            window.makeFirstResponder(searchField)
-        }
     }
 
     func makeCoordinator() -> Coordinator {
@@ -70,7 +63,6 @@ struct ProjectTextField<V: Equatable>: NSViewRepresentable {
         var keyEventMonitor: Any?
         var cursorTimer: Timer?
         var updatingSelectedRange: Bool = false
-        var hasActivated: Bool = false
 
         init(text: Binding<String>, model: ProjectSelectorModel<V>, projectsModel: ProjectsModel) {
             self._text = text

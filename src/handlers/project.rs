@@ -339,7 +339,7 @@ pub fn switch(name_or_path: &str, params: &QueryParams, sync: bool) -> Response<
         };
         match project_path {
             Some(pp) => {
-                pp.open(Mutation::Insert, land_in);
+                pp.open_with_options(Mutation::Insert, land_in, skip_editor);
                 Ok(())
             }
             None => Err(format!("Project '{}' not found", name_or_path)),

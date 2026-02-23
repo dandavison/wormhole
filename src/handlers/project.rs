@@ -223,8 +223,7 @@ pub fn navigate(direction: Direction, params: &QueryParams) {
     };
     if let Some(project_path) = p {
         let land_in = params.land_in.clone();
-        let skip_editor = params.skip_editor;
-        thread::spawn(move || project_path.open_with_options(Mutation::None, land_in, skip_editor));
+        thread::spawn(move || project_path.open_with_options(Mutation::None, land_in));
     }
 }
 
@@ -323,15 +322,13 @@ pub fn switch(name_or_path: &str, params: &QueryParams, sync: bool) -> Response<
     let repo = params.home_project.clone();
     let branch = params.branch.clone();
     let land_in = params.land_in.clone();
-    let skip_editor = params.skip_editor;
-    let focus_terminal = params.focus_terminal;
 
     let do_switch = move || -> Result<(), String> {
         if let (Some(repo), Some(branch)) = (repo.as_ref(), branch.as_ref()) {
-            return crate::task::open_task(repo, branch, land_in, skip_editor, focus_terminal);
+            return crate::task::open_task(repo, branch, land_in);
         }
         if let Some((repo, branch)) = name_or_path.split_once(':') {
-            return crate::task::open_task(repo, branch, land_in, skip_editor, focus_terminal);
+            return crate::task::open_task(repo, branch, land_in);
         }
         let project_path = {
             let mut projects = projects::lock();
@@ -339,7 +336,7 @@ pub fn switch(name_or_path: &str, params: &QueryParams, sync: bool) -> Response<
         };
         match project_path {
             Some(pp) => {
-                pp.open_with_options(Mutation::Insert, land_in, skip_editor);
+                pp.open_with_options(Mutation::Insert, land_in);
                 Ok(())
             }
             None => Err(format!("Project '{}' not found", name_or_path)),

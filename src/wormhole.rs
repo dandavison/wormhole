@@ -25,14 +25,44 @@ impl Application {
     }
 }
 
+/// Where to land when switching projects.
+///
+/// - `Editor` / `Terminal`: open both editor and terminal, focus the named app
+/// - `TerminalOnly`: open terminal only, focus terminal
+/// - `Background`: open terminal only, no focus change
+#[derive(Clone, Debug)]
+pub enum LandIn {
+    Editor,
+    Terminal,
+    TerminalOnly,
+    Background,
+}
+
+impl From<Application> for LandIn {
+    fn from(app: Application) -> Self {
+        match app {
+            Application::Editor => LandIn::Editor,
+            Application::Terminal => LandIn::Terminal,
+        }
+    }
+}
+
+pub fn parse_land_in(s: Option<&String>) -> Option<LandIn> {
+    s.and_then(|v| match v.as_str() {
+        "terminal" => Some(LandIn::Terminal),
+        "editor" => Some(LandIn::Editor),
+        "terminal-only" => Some(LandIn::TerminalOnly),
+        "none" => Some(LandIn::Background),
+        _ => None,
+    })
+}
+
 #[derive(Debug)]
 pub struct QueryParams {
-    pub land_in: Option<Application>,
+    pub land_in: Option<LandIn>,
     pub line: Option<usize>,
     pub home_project: Option<String>,
     pub branch: Option<String>,
-    pub skip_editor: bool,
-    pub focus_terminal: bool,
     pub sync: bool,
     pub pwd: Option<String>,
     pub active: bool,
@@ -225,8 +255,8 @@ fn route_file_or_github(path: &str, params: &QueryParams) -> Response<Body> {
 fn determine_requested_operation(
     url_path: &str,
     line: Option<usize>,
-    land_in: Option<Application>,
-) -> Option<(Option<ProjectPath>, Mutation, Option<Application>)> {
+    land_in: Option<LandIn>,
+) -> Option<(Option<ProjectPath>, Mutation, Option<LandIn>)> {
     let projects = projects::lock();
     if let Some(absolute_path) = url_path.strip_prefix("/file/") {
         let p = ProjectPath::from_absolute_path(absolute_path, line, &projects);
@@ -235,11 +265,7 @@ fn determine_requested_operation(
         if url_path.ends_with(".md") {
             None
         } else {
-            Some((
-                Some(project_path),
-                Mutation::Insert,
-                Some(Application::Editor),
-            ))
+            Some((Some(project_path), Mutation::Insert, Some(LandIn::Editor)))
         }
     } else {
         None
@@ -332,8 +358,6 @@ impl QueryParams {
             line: None,
             home_project: None,
             branch: None,
-            skip_editor: false,
-            focus_terminal: false,
             sync: false,
             pwd: None,
             active: false,
@@ -350,16 +374,16 @@ impl QueryParams {
                 match key.to_lowercase().as_str() {
                     "land-in" => {
                         params.land_in = match val.to_lowercase().as_str() {
-                            "terminal" => Some(Application::Terminal),
-                            "editor" => Some(Application::Editor),
+                            "terminal" => Some(LandIn::Terminal),
+                            "editor" => Some(LandIn::Editor),
+                            "terminal-only" => Some(LandIn::TerminalOnly),
+                            "none" => Some(LandIn::Background),
                             _ => None,
                         }
                     }
                     "line" => params.line = val.parse().ok(),
                     "home-project" => params.home_project = Some(val.to_string()),
                     "branch" => params.branch = Some(val.to_string()),
-                    "skip-editor" => params.skip_editor = val.to_lowercase() == "true",
-                    "focus-terminal" => params.focus_terminal = val.to_lowercase() == "true",
                     "sync" => params.sync = val == "true" || val == "1",
                     "pwd" => params.pwd = Some(val.to_string()),
                     "active" => params.active = val == "true" || val == "1",

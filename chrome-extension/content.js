@@ -480,8 +480,7 @@ async function toggleVSCode(projectName, vscodeBtn) {
             vscodeBtn.style.opacity = '';
             vscodeExpanded = true;
 
-            // Also switch to the project (skip editor since we're showing embedded)
-            fetch(`${WORMHOLE_BASE}/project/switch/${projectName}?skip-editor=true`);
+            fetch(`${WORMHOLE_BASE}/project/switch/${projectName}?land-in=none`);
         } catch (err) {
             console.warn('[Wormhole] VSCode error:', err.message);
             vscodeBtn.style.opacity = '';
@@ -578,11 +577,9 @@ async function switchProject(landIn) {
             return;
         }
 
-        const params = new URLSearchParams({ 'land-in': landIn });
-        if (landIn === 'terminal') {
-            params.set('skip-editor', 'true');
-            params.set('focus-terminal', 'true');
-        }
+        const params = new URLSearchParams({
+            'land-in': landIn === 'terminal' ? 'terminal-only' : landIn,
+        });
 
         const switchResp = await fetch(
             `${WORMHOLE_BASE}/project/switch/${info.name}?${params}`

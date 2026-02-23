@@ -268,13 +268,12 @@ let p = {
     pp
 };
 if let Some(project_path) = p {
-    thread::spawn(move || project_path.open_with_options(Mutation::None, land_in, skip_editor));
+    thread::spawn(move || project_path.open_with_options(Mutation::None, land_in));
 }
 ```
 
 Query parameters:
-- `?land-in=terminal|editor` — which app to focus
-- `?skip-editor=true` — don't open/focus editor
+- `?land-in=terminal|editor|terminal-only|none` — which app to focus
 
 #### GET /project/switch/{name_or_path}
 
@@ -283,7 +282,7 @@ Switch to a project or create a task.
 [src/wormhole.rs (`/project/switch`)](https://github.com/dandavison/wormhole/blob/main/src/wormhole.rs#L287-L345)
 ```rust
 if let (Some(repo), Some(branch)) = (repo.as_ref(), branch.as_ref()) {
-    return crate::task::open_task(repo, branch, land_in, skip_editor, focus_terminal);
+    return crate::task::open_task(repo, branch, land_in);
 }
 if let Some((repo, branch)) = name_or_path.split_once(':') {
     // Handle store_key format "repo:branch"
@@ -293,8 +292,7 @@ if let Some((repo, branch)) = name_or_path.split_once(':') {
 Query parameters:
 - `?home-project={repo}` — for task creation
 - `?branch={branch}` — for task creation
-- `?land-in=terminal|editor`
-- `?skip-editor=true`
+- `?land-in=terminal|editor|terminal-only|none`
 - `?sync=true` — wait for completion
 
 #### POST /project/describe

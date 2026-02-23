@@ -364,7 +364,7 @@
             if (!iframe.src) {
               iframe.src = iframe.dataset.src;
             }
-            fetch('/project/switch/' + card.dataset.task + '?skip-editor=true');
+            fetch('/project/switch/' + card.dataset.task + '?land-in=none');
           }
         });
       });
@@ -381,9 +381,7 @@
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
           const task = btn.closest('.card').dataset.task;
-          fetch(
-            '/project/switch/' + task + '?skip-editor=true&focus-terminal=true',
-          );
+          fetch('/project/switch/' + task + '?land-in=terminal-only');
         });
       });
 

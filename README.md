@@ -218,7 +218,7 @@ wormhole completion bash                # Generate shell completions
 | GET    | `/kv/<project>`               | List project KV                   |
 | GET    | `/kv`                         | List all KV                       |
 
-Query params: `land-in=terminal|editor`, `line=N`, `home-project=<project>`, `branch=<branch>`, `active=true`, `current=true`, `completed=true`, `dry-run=true`, `skip-editor=true`, `focus-terminal=true`, `sync=true`, `pwd=<path>`, `run=<id>`, `offset=N`, `role=<role>`, `wait=N`
+Query params: `land-in=terminal|editor|terminal-only|none`, `line=N`, `home-project=<project>`, `branch=<branch>`, `active=true`, `current=true`, `completed=true`, `dry-run=true`, `sync=true`, `pwd=<path>`, `run=<id>`, `offset=N`, `role=<role>`, `wait=N`
 
 ## Message Intents
 

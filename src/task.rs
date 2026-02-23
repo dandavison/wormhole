@@ -9,7 +9,7 @@ use lazy_static::lazy_static;
 use serde::Deserialize;
 
 use crate::project::ProjectKey;
-use crate::wormhole::Application;
+use crate::wormhole::LandIn;
 use crate::{batch, config, editor, git, project::Project, projects, util::warn};
 
 lazy_static! {
@@ -200,9 +200,7 @@ pub fn create_task(repo: &str, branch: &str) -> Result<Project, String> {
 pub fn open_task(
     repo: &str,
     branch: &str,
-    land_in: Option<Application>,
-    skip_editor: bool,
-    focus_terminal: bool,
+    land_in: Option<LandIn>,
 ) -> Result<(), String> {
     let project = if let Some(task) = get_task_by_branch(repo, branch) {
         task
@@ -235,31 +233,31 @@ pub fn open_task(
         }
     };
 
-    if skip_editor {
-        open_terminal();
-        if focus_terminal {
+    let land_in = land_in.or_else(|| crate::wormhole::parse_land_in(project.kv.get("land-in")));
+    match land_in {
+        Some(LandIn::TerminalOnly) => {
+            open_terminal();
             config::TERMINAL.focus();
         }
-    } else {
-        let land_in = land_in.or_else(|| parse_land_in(project.kv.get("land-in")));
-        match land_in {
-            Some(Application::Terminal) => {
-                open_terminal();
-                open_editor();
-                config::TERMINAL.focus();
-            }
-            Some(Application::Editor) => {
-                open_editor();
-                config::editor().focus();
-                open_terminal();
-            }
-            None => {
-                let terminal_thread = thread::spawn(open_terminal);
-                let editor_thread = thread::spawn(open_editor);
-                terminal_thread.join().unwrap();
-                editor_thread.join().unwrap();
-                config::editor().focus();
-            }
+        Some(LandIn::Background) => {
+            open_terminal();
+        }
+        Some(LandIn::Terminal) => {
+            open_terminal();
+            open_editor();
+            config::TERMINAL.focus();
+        }
+        Some(LandIn::Editor) => {
+            open_editor();
+            config::editor().focus();
+            open_terminal();
+        }
+        None => {
+            let terminal_thread = thread::spawn(open_terminal);
+            let editor_thread = thread::spawn(open_editor);
+            terminal_thread.join().unwrap();
+            editor_thread.join().unwrap();
+            config::editor().focus();
         }
     }
 
@@ -656,10 +654,3 @@ mod tests {
     }
 }
 
-fn parse_land_in(s: Option<&String>) -> Option<Application> {
-    s.and_then(|v| match v.as_str() {
-        "terminal" => Some(Application::Terminal),
-        "editor" => Some(Application::Editor),
-        _ => None,
-    })
-}

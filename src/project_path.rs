@@ -4,7 +4,7 @@ use std::thread;
 use crate::project::ProjectKey;
 use crate::projects::{self, Mutation, Projects};
 use crate::util::warn;
-use crate::wormhole::Application;
+use crate::wormhole::LandIn;
 use crate::{config, editor, hammerspoon, project::Project};
 use crate::{ps, util};
 use regex::Regex;
@@ -16,16 +16,11 @@ pub struct ProjectPath {
 }
 
 impl ProjectPath {
-    pub fn open(&self, mutation: Mutation, land_in: Option<Application>) {
-        self.open_with_options(mutation, land_in, false);
+    pub fn open(&self, mutation: Mutation, land_in: Option<LandIn>) {
+        self.open_with_options(mutation, land_in);
     }
 
-    pub fn open_with_options(
-        &self,
-        mutation: Mutation,
-        land_in: Option<Application>,
-        skip_editor: bool,
-    ) {
+    pub fn open_with_options(&self, mutation: Mutation, land_in: Option<LandIn>) {
         let mut projects = projects::lock();
         let current_app = if projects.current().is_some() {
             Some(hammerspoon::current_application())
@@ -34,20 +29,24 @@ impl ProjectPath {
         };
         let project = self.project.clone();
         let is_already_open = project.is_open();
+        let skip_editor = matches!(
+            land_in,
+            Some(LandIn::TerminalOnly) | Some(LandIn::Background)
+        );
         if !is_already_open && !skip_editor {
             editor::open_workspace(&project);
         }
         let land_in = if skip_editor {
-            Some(Application::Terminal)
+            land_in
         } else {
             // navigate() pre-rotates the ring then calls us with Mutation::None;
             // only inherit focus from the current app for explicit opens.
             let is_explicit_switch = !matches!(mutation, Mutation::None);
             land_in
-                .or_else(|| parse_application(self.project.kv.get("land-in")))
+                .or_else(|| crate::wormhole::parse_land_in(self.project.kv.get("land-in")))
                 .or_else(|| {
                     if is_already_open && is_explicit_switch {
-                        current_app
+                        current_app.map(LandIn::from)
                     } else {
                         None
                     }
@@ -69,7 +68,9 @@ impl ProjectPath {
 
         if skip_editor {
             open_terminal();
-            config::TERMINAL.focus();
+            if matches!(land_in, Some(LandIn::TerminalOnly)) {
+                config::TERMINAL.focus();
+            }
             return;
         }
 
@@ -84,17 +85,17 @@ impl ProjectPath {
         };
 
         match &land_in {
-            Some(Application::Terminal) => {
+            Some(LandIn::Terminal) => {
                 open_terminal();
                 open_editor();
                 config::TERMINAL.focus();
             }
-            Some(Application::Editor) => {
+            Some(LandIn::Editor) => {
                 open_editor();
                 config::editor().focus();
                 open_terminal();
             }
-            None => {
+            _ => {
                 let terminal_thread = thread::spawn(open_terminal);
                 let editor_thread = thread::spawn(open_editor);
                 terminal_thread.join().unwrap();
@@ -173,12 +174,4 @@ impl ProjectPath {
                 .unwrap_or(""),
         )
     }
-}
-
-fn parse_application(s: Option<&String>) -> Option<Application> {
-    s.and_then(|v| match v.as_str() {
-        "terminal" => Some(Application::Terminal),
-        "editor" => Some(Application::Editor),
-        _ => None,
-    })
 }

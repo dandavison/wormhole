@@ -1185,6 +1185,51 @@ fn test_task_worktree_agent_instructions() {
 }
 
 #[test]
+fn test_close_publishes_editor_close_message() {
+    // Verify that `project close` publishes editor/close to the message channel
+    // with the correct project key, so the VSCode extension can close the window.
+    // This test works in headless mode (no real editor needed).
+    let test = harness::WormholeTest::new(8965);
+
+    let home_proj = format!("{}close-msg", TEST_PREFIX);
+    let home_dir = format!("/tmp/{}", home_proj);
+    let task_branch = format!("{}CLOSE-MSG", TEST_PREFIX);
+
+    init_git_repo(&home_dir);
+    test.create_project(&home_dir, &home_proj);
+    test.create_task(&task_branch, &home_proj);
+
+    let store_key = test.task_store_key(&task_branch, &home_proj);
+
+    // Register a message consumer for this task's editor role
+    let msgs = test
+        .http_get(&format!(
+            "/project/messages/{}?role=editor&wait=0",
+            store_key
+        ))
+        .unwrap();
+    assert_eq!(msgs, "[]", "No messages before close");
+
+    // Close the task
+    test.cli(&format!("wormhole project close '{}'", store_key))
+        .unwrap();
+
+    // Poll for the editor/close message (wait up to 5s for delivery)
+    let msgs_raw = test
+        .http_get(&format!(
+            "/project/messages/{}?role=editor&wait=5",
+            store_key
+        ))
+        .unwrap();
+    let msgs: Vec<Value> = serde_json::from_str(&msgs_raw).expect("valid JSON");
+    assert!(
+        msgs.iter().any(|m| m["method"] == "editor/close"),
+        "project close should publish editor/close message, got: {}",
+        msgs_raw
+    );
+}
+
+#[test]
 fn test_close_zen_mode_window() {
     // Verify that editor close works even in zen mode, where Hammerspoon-based
     // close fails. Requires the wormhole VSCode extension to be installed.

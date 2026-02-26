@@ -274,8 +274,24 @@ pub enum Command {
         command: DoctorCommand,
     },
 
+    /// Agent conversation operations
+    Conversations {
+        #[command(subcommand)]
+        command: ConversationsCommand,
+    },
+
     /// Refresh in-memory data from external sources
     Refresh,
+}
+
+#[derive(Subcommand)]
+pub enum ConversationsCommand {
+    /// Sync agent conversations to searchable text files
+    Sync {
+        /// Only sync conversations for this project
+        #[arg(short, long, add = ArgValueCompleter::new(complete_projects))]
+        project: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -639,6 +655,24 @@ pub fn run(command: Command) -> Result<(), String> {
             }
             DoctorCommand::Conform { dry_run, output } => {
                 doctor::doctor_conform(&client, dry_run, &output)
+            }
+        },
+
+        Command::Conversations { command } => match command {
+            ConversationsCommand::Sync { project } => {
+                let query = match &project {
+                    Some(p) => format!("?project={}", p),
+                    None => String::new(),
+                };
+                let response = client.post(&format!("/conversations/sync{}", query))?;
+                let result: crate::conversations::SyncResult =
+                    serde_json::from_str(&response).map_err(|e| e.to_string())?;
+                eprintln!(
+                    "Synced {} conversations ({} unchanged)",
+                    result.synced, result.skipped
+                );
+                println!("{}", result.output_dir);
+                Ok(())
             }
         },
 

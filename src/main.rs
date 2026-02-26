@@ -1,4 +1,5 @@
 mod agent;
+mod conversations;
 mod batch;
 mod cli;
 mod config;

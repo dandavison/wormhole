@@ -229,6 +229,12 @@ async fn route_with_params(
     if let Some(name) = path.strip_prefix("/project/vscode/") {
         return cors_response(project::vscode_url(name));
     }
+    if let Some(file_path) = path.strip_prefix("/conversations/resume") {
+        let file_path = file_path.strip_prefix('/').unwrap_or(file_path);
+        return require_post(method, || {
+            handle_conversation_resume(&format!("/{}", file_path))
+        });
+    }
     if let Some(asset_path) = path.strip_prefix("/asset/") {
         return handlers::serve_asset(asset_path);
     }
@@ -359,6 +365,141 @@ async fn handle_kv_request(method: &Method, kv_path: &str, req: Request<Body>) -
             .body(Body::from("Invalid KV path format"))
             .unwrap(),
     }
+}
+
+fn handle_conversation_resume(synced_file_path: &str) -> Response<Body> {
+    let synced_file = std::path::Path::new(synced_file_path);
+
+    // Find the original Cursor transcript
+    let (cursor_path, transcript_id) =
+        match crate::conversations::find_cursor_transcript(synced_file) {
+            Some(result) => result,
+            None => {
+                return Response::builder()
+                    .status(StatusCode::NOT_FOUND)
+                    .body(Body::from("Cursor transcript not found"))
+                    .unwrap();
+            }
+        };
+
+    // Parse the Cursor transcript
+    let messages = if cursor_path.extension().map_or(false, |e| e == "jsonl") {
+        match crate::conversations::parse_cursor_jsonl(&cursor_path) {
+            Ok(m) => m,
+            Err(e) => {
+                return Response::builder()
+                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                    .body(Body::from(format!("Parse error: {}", e)))
+                    .unwrap();
+            }
+        }
+    } else {
+        match crate::conversations::parse_cursor_txt(&cursor_path) {
+            Ok(m) => m,
+            Err(e) => {
+                return Response::builder()
+                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                    .body(Body::from(format!("Parse error: {}", e)))
+                    .unwrap();
+            }
+        }
+    };
+
+    if messages.is_empty() {
+        return Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body(Body::from("Empty conversation"))
+            .unwrap();
+    }
+
+    // Determine which project this belongs to by parsing the synced file path:
+    // ~/.wormhole/conversations/<project_key>/<date>-<id>.txt
+    let conversations_dir = std::fs::canonicalize(crate::conversations::conversations_dir())
+        .unwrap_or_else(|_| crate::conversations::conversations_dir());
+    let rel = match synced_file.strip_prefix(&conversations_dir) {
+        Ok(r) => r,
+        Err(_) => {
+            return Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body(Body::from("Not a conversation file"))
+                .unwrap();
+        }
+    };
+    let project_key_str = rel.parent().and_then(|p| p.to_str()).unwrap_or("unknown");
+    let project_key = crate::project::ProjectKey::parse(project_key_str);
+
+    // Find the project to get its working directory
+    let store = projects::lock();
+    let project = match store.by_key(&project_key) {
+        Some(p) => p,
+        None => {
+            return Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(Body::from(format!("Project not found: {}", project_key)))
+                .unwrap();
+        }
+    };
+    let project_dir = project.working_tree();
+    let branch = project.branch.as_ref().map(|b| b.as_str().to_string());
+    drop(store);
+
+    // Convert to Claude Code format
+    let (session_id, _cc_file) = match crate::conversations::convert_to_claude_code(
+        &transcript_id,
+        &messages,
+        &project_dir,
+        branch.as_deref(),
+    ) {
+        Ok(result) => result,
+        Err(e) => {
+            return Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(Body::from(format!("Conversion error: {}", e)))
+                .unwrap();
+        }
+    };
+
+    // Switch to the project (focus editor), then send resume intent
+    let project_key_str = project_key.to_string();
+    let session_id_str = session_id.to_string();
+    thread::spawn(move || {
+        // Open/switch to the project with editor focus
+        let project_path = {
+            let store = projects::lock();
+            let key = crate::project::ProjectKey::parse(&project_key_str);
+            store.by_key(&key).map(|p| p.as_project_path())
+        };
+        if let Some(pp) = project_path {
+            pp.open(Mutation::Insert, Some(LandIn::Editor));
+        }
+
+        // Brief delay for editor to activate, then send resume intent
+        thread::sleep(std::time::Duration::from_millis(500));
+        let mut msg_store = crate::messages::lock();
+        let notification = crate::messages::Notification {
+            jsonrpc: "2.0".to_string(),
+            method: "claude-code/resume".to_string(),
+            params: Some(serde_json::json!({
+                "sessionId": session_id_str,
+            })),
+        };
+        msg_store.publish(
+            &project_key_str,
+            &crate::messages::Target::Role("editor".to_string()),
+            notification,
+        );
+    });
+
+    Response::builder()
+        .header("Content-Type", "application/json")
+        .body(Body::from(
+            serde_json::json!({
+                "session_id": session_id.to_string(),
+                "project": project_key.to_string(),
+            })
+            .to_string(),
+        ))
+        .unwrap()
 }
 
 fn project_dirs_for_sync() -> Vec<(String, std::path::PathBuf)> {

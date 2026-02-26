@@ -351,6 +351,13 @@ pub enum KvCommand {
     },
 }
 
+fn is_conversation_file(path: &std::path::Path) -> bool {
+    let conversations_dir = std::fs::canonicalize(crate::conversations::conversations_dir())
+        .unwrap_or_else(|_| crate::conversations::conversations_dir());
+    let abs_path = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    abs_path.starts_with(&conversations_dir)
+}
+
 pub fn run(command: Command) -> Result<(), String> {
     let client = Client::new();
 
@@ -533,8 +540,12 @@ pub fn run(command: Command) -> Result<(), String> {
             let (path_str, line) = parse_path_and_line(&target);
             let target_path = std::path::Path::new(&path_str);
 
-            if target_path.is_file() {
-                // File - open in editor
+            if target_path.is_file() && is_conversation_file(target_path) {
+                let abs_path = std::fs::canonicalize(target_path)
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or(path_str);
+                client.post(&format!("/conversations/resume/{}", abs_path))?;
+            } else if target_path.is_file() {
                 let abs_path = std::fs::canonicalize(target_path)
                     .map(|p| p.to_string_lossy().to_string())
                     .unwrap_or(path_str);

@@ -16,14 +16,24 @@ const INTENTS: Record<string, IntentHandler> = {
   'editor/close': vscodeCommand('workbench.action.closeWindow'),
   'editor/toggleZenMode': vscodeCommand('workbench.action.toggleZenMode'),
   echo: (projectKey, port) => putKv(projectKey, port, 'last-message', 'echo'),
-  'claude-code/resume': (_projectKey, _port, params) => {
+  'claude-code/resume': async (_projectKey, _port, params) => {
     const sessionId = params?.sessionId as string | undefined;
-    if (sessionId) {
-      return vscode.commands.executeCommand(
-        'claude-vscode.editor.open',
-        sessionId,
-      );
+    if (!sessionId) {
+      return;
     }
+    const ext = vscode.extensions.getExtension('anthropic.claude-code');
+    if (!ext) {
+      log.error('Claude Code extension not installed');
+      return;
+    }
+    if (!ext.isActive) {
+      log.info('Activating Claude Code extension');
+      await ext.activate();
+    }
+    await vscode.commands.executeCommand(
+      'claude-vscode.editor.open',
+      sessionId,
+    );
   },
 };
 

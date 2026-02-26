@@ -71,6 +71,7 @@ pub struct QueryParams {
     pub dry_run: bool,
     pub run: Option<usize>,
     pub offset: Option<u64>,
+    pub project: Option<String>,
     pub role: Option<String>,
     pub wait: Option<u64>,
 }
@@ -166,6 +167,15 @@ async fn route(
         "/favicon.png" => handlers::favicon(),
         "/shell" => project::shell_env(params.pwd.as_deref()),
         "/kv" => crate::kv::list_all_kv_fresh(),
+        "/conversations/sync" => require_post(method, || {
+            let filter = params.project.as_deref();
+            let projects = project_dirs_for_sync();
+            let result = crate::conversations::sync(&projects, filter);
+            Response::builder()
+                .header("Content-Type", "application/json")
+                .body(Body::from(serde_json::to_string(&result).unwrap()))
+                .unwrap()
+        }),
         _ => route_with_params(req, method, path, params).await,
     }
 }
@@ -351,6 +361,24 @@ async fn handle_kv_request(method: &Method, kv_path: &str, req: Request<Body>) -
     }
 }
 
+fn project_dirs_for_sync() -> Vec<(String, std::path::PathBuf)> {
+    let store = projects::lock();
+    let mut result: Vec<(String, std::path::PathBuf)> = Vec::new();
+    for p in store.all() {
+        let key = p.store_key().to_string();
+        // The Cursor project dir encodes the workspace file path. Compute it
+        // the same way as editor.rs: $gitdir/wormhole/workspaces/$key.code-workspace
+        let store_key_str = p.store_key().to_string();
+        let filename = format!("{}.code-workspace", store_key_str.replace('/', "--"));
+        let gitdir = crate::git::git_common_dir(&p.repo_path);
+        let ws_path = gitdir.join("wormhole/workspaces").join(filename);
+        result.push((key.clone(), ws_path));
+        // Also match by repo path for non-workspace Cursor dirs
+        result.push((key, p.repo_path.clone()));
+    }
+    result
+}
+
 impl QueryParams {
     pub fn from_query(query: Option<&str>) -> Self {
         let mut params = QueryParams {
@@ -366,6 +394,7 @@ impl QueryParams {
             dry_run: false,
             run: None,
             offset: None,
+            project: None,
             role: None,
             wait: None,
         };
@@ -398,6 +427,7 @@ impl QueryParams {
                     "dry-run" => params.dry_run = val == "true" || val == "1",
                     "run" => params.run = val.parse().ok(),
                     "offset" => params.offset = val.parse().ok(),
+                    "project" => params.project = Some(val.to_string()),
                     "role" => params.role = Some(val.to_string()),
                     "wait" => params.wait = val.parse().ok(),
                     _ => {}

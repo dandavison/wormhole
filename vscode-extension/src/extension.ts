@@ -5,6 +5,7 @@ import { projectKeyFromPath } from './project-key';
 type IntentHandler = (
   projectKey: string,
   port: number,
+  params?: Record<string, unknown>,
 ) => void | Thenable<void>;
 
 function vscodeCommand(command: string): IntentHandler {
@@ -15,6 +16,15 @@ const INTENTS: Record<string, IntentHandler> = {
   'editor/close': vscodeCommand('workbench.action.closeWindow'),
   'editor/toggleZenMode': vscodeCommand('workbench.action.toggleZenMode'),
   echo: (projectKey, port) => putKv(projectKey, port, 'last-message', 'echo'),
+  'claude-code/resume': (_projectKey, _port, params) => {
+    const sessionId = params?.sessionId as string | undefined;
+    if (sessionId) {
+      return vscode.commands.executeCommand(
+        'claude-vscode.editor.open',
+        sessionId,
+      );
+    }
+  },
 };
 
 let abortController: AbortController | null = null;
@@ -70,7 +80,7 @@ async function pollLoop(projectKey: string, port: number, signal: AbortSignal) {
         const handler = INTENTS[msg.method];
         if (handler) {
           log.info(`handling intent: ${msg.method}`);
-          await handler(projectKey, port);
+          await handler(projectKey, port, msg.params);
         } else {
           log.warn(`unknown intent: ${msg.method}`);
         }

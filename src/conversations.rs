@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
+use uuid::Uuid;
 
 #[derive(Debug, Clone)]
 pub struct Message {
@@ -29,12 +30,14 @@ struct TranscriptFile {
 }
 
 pub fn parse_cursor_jsonl(path: &Path) -> Result<Vec<Message>, String> {
-    let content = std::fs::read_to_string(path).map_err(|e| format!("read {}: {}", path.display(), e))?;
+    let content =
+        std::fs::read_to_string(path).map_err(|e| format!("read {}: {}", path.display(), e))?;
     parse_cursor_jsonl_str(&content)
 }
 
 pub fn parse_cursor_txt(path: &Path) -> Result<Vec<Message>, String> {
-    let content = std::fs::read_to_string(path).map_err(|e| format!("read {}: {}", path.display(), e))?;
+    let content =
+        std::fs::read_to_string(path).map_err(|e| format!("read {}: {}", path.display(), e))?;
     Ok(parse_cursor_txt_str(&content))
 }
 
@@ -110,7 +113,10 @@ fn flush_message(messages: &mut Vec<Message>, role: &mut Option<Role>, text: &mu
         };
         let cleaned = cleaned.trim().to_string();
         if !cleaned.is_empty() {
-            messages.push(Message { role: r, text: cleaned });
+            messages.push(Message {
+                role: r,
+                text: cleaned,
+            });
         }
         text.clear();
     }
@@ -150,7 +156,12 @@ fn extract_text(content: &[ContentBlock]) -> String {
     parts.join("\n")
 }
 
-pub fn render_conversation(project: &str, date: &str, short_id: &str, messages: &[Message]) -> String {
+pub fn render_conversation(
+    project: &str,
+    date: &str,
+    short_id: &str,
+    messages: &[Message],
+) -> String {
     let mut out = format!("# {} | {} | {}\n", project, date, short_id);
     for msg in messages {
         let heading = match msg.role {
@@ -164,7 +175,7 @@ pub fn render_conversation(project: &str, date: &str, short_id: &str, messages: 
 
 /// Discover Cursor transcript files for a set of projects.
 /// Each project is (project_key, repo_path).
-pub fn discover_cursor_transcripts(projects: &[(String, PathBuf)]) -> Vec<TranscriptFile> {
+fn discover_cursor_transcripts(projects: &[(String, PathBuf)]) -> Vec<TranscriptFile> {
     let cursor_projects_dir = cursor_projects_dir();
     if !cursor_projects_dir.is_dir() {
         return Vec::new();
@@ -191,7 +202,10 @@ pub fn discover_cursor_transcripts(projects: &[(String, PathBuf)]) -> Vec<Transc
             continue;
         }
         // Find best matching project (longest encoded prefix)
-        if let Some((_, project_key)) = encoded.iter().find(|(prefix, _)| dir_name.starts_with(prefix.as_str())) {
+        if let Some((_, project_key)) = encoded
+            .iter()
+            .find(|(prefix, _)| dir_name.starts_with(prefix.as_str()))
+        {
             discover_transcripts_in(&transcripts_dir, project_key, &mut result);
         }
     }
@@ -228,7 +242,10 @@ fn discover_transcripts_in(dir: &Path, project_key: &str, out: &mut Vec<Transcri
     };
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.extension().map_or(false, |e| e == "jsonl" || e == "txt") {
+        if path
+            .extension()
+            .map_or(false, |e| e == "jsonl" || e == "txt")
+        {
             if let Some(id) = path.file_stem().and_then(|s| s.to_str()) {
                 out.push(TranscriptFile {
                     project_key: project_key.to_string(),
@@ -355,6 +372,255 @@ fn source_newer(source: &Path, dest: &Path) -> bool {
     source_mtime > dest_mtime
 }
 
+// Namespace UUID for deterministic session IDs from Cursor transcript IDs
+const WORMHOLE_UUID_NAMESPACE: Uuid = Uuid::from_bytes([
+    0x77, 0x6f, 0x72, 0x6d, 0x68, 0x6f, 0x6c, 0x65, 0x63, 0x6f, 0x6e, 0x76, 0x73, 0x79, 0x6e, 0x63,
+]);
+
+/// Convert a Cursor transcript to Claude Code JSONL format.
+/// Returns the session ID and the path to the written file.
+pub fn convert_to_claude_code(
+    cursor_transcript_id: &str,
+    messages: &[Message],
+    project_dir: &Path,
+    branch: Option<&str>,
+) -> Result<(Uuid, PathBuf), String> {
+    let session_id = Uuid::new_v5(&WORMHOLE_UUID_NAMESPACE, cursor_transcript_id.as_bytes());
+    let cc_project_dir = claude_code_project_dir(project_dir);
+    std::fs::create_dir_all(&cc_project_dir)
+        .map_err(|e| format!("create dir {}: {}", cc_project_dir.display(), e))?;
+
+    let cc_file = cc_project_dir.join(format!("{}.jsonl", session_id));
+    if cc_file.exists() {
+        return Ok((session_id, cc_file));
+    }
+
+    let timestamp_base = "2026-01-01T00:00:00.000Z";
+    let cwd = project_dir.to_string_lossy().to_string();
+    let branch = branch.unwrap_or("main");
+
+    let mut lines = Vec::new();
+
+    // Queue operation: dequeue
+    lines.push(serde_json::json!({
+        "type": "queue-operation",
+        "operation": "dequeue",
+        "timestamp": timestamp_base,
+        "sessionId": session_id.to_string(),
+    }));
+
+    let mut prev_uuid: Option<Uuid> = None;
+    for (i, msg) in messages.iter().enumerate() {
+        let msg_uuid = Uuid::new_v5(&session_id, format!("msg-{}", i).as_bytes());
+        let timestamp = format!("2026-01-01T00:00:{:02}.000Z", (i + 1).min(59));
+
+        match msg.role {
+            Role::User => {
+                lines.push(serde_json::json!({
+                    "type": "user",
+                    "parentUuid": prev_uuid.map(|u| u.to_string()),
+                    "isSidechain": false,
+                    "userType": "external",
+                    "cwd": cwd,
+                    "sessionId": session_id.to_string(),
+                    "version": "2.1.58",
+                    "gitBranch": branch,
+                    "message": {
+                        "role": "user",
+                        "content": msg.text,
+                    },
+                    "uuid": msg_uuid.to_string(),
+                    "timestamp": timestamp,
+                    "permissionMode": "default",
+                }));
+            }
+            Role::Assistant => {
+                lines.push(serde_json::json!({
+                    "type": "assistant",
+                    "parentUuid": prev_uuid.map(|u| u.to_string()),
+                    "isSidechain": false,
+                    "userType": "external",
+                    "cwd": cwd,
+                    "sessionId": session_id.to_string(),
+                    "version": "2.1.58",
+                    "gitBranch": branch,
+                    "message": {
+                        "role": "assistant",
+                        "content": [{ "type": "text", "text": msg.text }],
+                        "model": "claude-sonnet-4-20250514",
+                        "type": "message",
+                        "id": format!("msg_converted_{}", i),
+                        "stop_reason": null,
+                        "stop_sequence": null,
+                        "usage": { "input_tokens": 100, "output_tokens": 50 },
+                    },
+                    "uuid": msg_uuid.to_string(),
+                    "timestamp": timestamp,
+                }));
+            }
+        }
+        prev_uuid = Some(msg_uuid);
+    }
+
+    let content: String = lines
+        .iter()
+        .map(|l| serde_json::to_string(l).unwrap())
+        .collect::<Vec<_>>()
+        .join("\n");
+    std::fs::write(&cc_file, content).map_err(|e| format!("write {}: {}", cc_file.display(), e))?;
+
+    // Update sessions-index.json
+    let first_prompt = messages
+        .iter()
+        .find(|m| m.role == Role::User)
+        .map(|m| {
+            let s = &m.text;
+            if s.len() > 80 {
+                &s[..80]
+            } else {
+                s
+            }
+        })
+        .unwrap_or("")
+        .to_string();
+
+    update_sessions_index(
+        &cc_project_dir,
+        &session_id,
+        &cc_file,
+        &first_prompt,
+        messages.len(),
+        project_dir,
+        branch,
+    )?;
+
+    Ok((session_id, cc_file))
+}
+
+fn claude_code_project_dir(project_dir: &Path) -> PathBuf {
+    let encoded = encode_path_for_claude_code(project_dir);
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("/"))
+        .join(".claude/projects")
+        .join(encoded)
+}
+
+fn encode_path_for_claude_code(path: &Path) -> String {
+    // Claude Code encodes: / → -, . → -- (literal dot becomes double dash)
+    let s = path.to_string_lossy();
+    let mut result = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '/' => result.push('-'),
+            '.' => result.push_str("--"),
+            _ => result.push(c),
+        }
+    }
+    result
+}
+
+fn update_sessions_index(
+    cc_project_dir: &Path,
+    session_id: &Uuid,
+    cc_file: &Path,
+    first_prompt: &str,
+    message_count: usize,
+    project_dir: &Path,
+    branch: &str,
+) -> Result<(), String> {
+    let index_path = cc_project_dir.join("sessions-index.json");
+
+    let mut index: serde_json::Value = if index_path.exists() {
+        let content =
+            std::fs::read_to_string(&index_path).map_err(|e| format!("read index: {}", e))?;
+        serde_json::from_str(&content).map_err(|e| format!("parse index: {}", e))?
+    } else {
+        serde_json::json!({
+            "version": 1,
+            "entries": [],
+            "originalPath": project_dir.to_string_lossy(),
+        })
+    };
+
+    let entries = index
+        .get_mut("entries")
+        .and_then(|e| e.as_array_mut())
+        .ok_or("invalid sessions-index.json")?;
+
+    // Don't add duplicate
+    let sid = session_id.to_string();
+    if entries
+        .iter()
+        .any(|e| e.get("sessionId").and_then(|s| s.as_str()) == Some(&sid))
+    {
+        return Ok(());
+    }
+
+    let now = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+
+    entries.push(serde_json::json!({
+        "sessionId": sid,
+        "fullPath": cc_file.to_string_lossy(),
+        "fileMtime": now as u64,
+        "firstPrompt": first_prompt,
+        "messageCount": message_count,
+        "created": "2026-01-01T00:00:00.000Z",
+        "modified": "2026-01-01T00:00:00.000Z",
+        "gitBranch": branch,
+        "projectPath": project_dir.to_string_lossy(),
+        "isSidechain": false,
+    }));
+
+    std::fs::write(&index_path, serde_json::to_string_pretty(&index).unwrap())
+        .map_err(|e| format!("write index: {}", e))?;
+    Ok(())
+}
+
+/// Find the original Cursor transcript file from a synced conversation file.
+/// The synced file is named <date>-<short_id>.txt, and we need to find the
+/// original Cursor transcript file by the short ID.
+pub fn find_cursor_transcript(synced_file: &Path) -> Option<(PathBuf, String)> {
+    let stem = synced_file.file_stem()?.to_str()?;
+    // Format: YYYY-MM-DD-<short_id>
+    let short_id = stem.splitn(4, '-').nth(3)?;
+
+    let cursor_dir = cursor_projects_dir();
+    if !cursor_dir.is_dir() {
+        return None;
+    }
+
+    // Search all Cursor project dirs for a transcript matching the short ID
+    for entry in std::fs::read_dir(&cursor_dir).ok()?.flatten() {
+        let transcripts_dir = entry.path().join("agent-transcripts");
+        if !transcripts_dir.is_dir() {
+            continue;
+        }
+        for t_entry in std::fs::read_dir(&transcripts_dir).ok()?.flatten() {
+            let path = t_entry.path();
+            let name = t_entry.file_name();
+            let name = name.to_string_lossy();
+            if name.starts_with(short_id) {
+                if path.is_dir() {
+                    let jsonl = path.join(format!("{}.jsonl", name));
+                    if jsonl.is_file() {
+                        return Some((jsonl, name.to_string()));
+                    }
+                } else if path
+                    .extension()
+                    .map_or(false, |e| e == "jsonl" || e == "txt")
+                {
+                    let id = path.file_stem()?.to_str()?.to_string();
+                    return Some((path, id));
+                }
+            }
+        }
+    }
+    None
+}
+
 #[derive(Deserialize)]
 struct CursorJsonlRecord {
     role: String,
@@ -452,12 +718,16 @@ mod tests {
             "Users-dan-src-wormhole"
         );
         assert_eq!(
-            encode_path_for_cursor(Path::new("/Users/dan/src/wormhole/.git/wormhole/workspaces/wormhole.code-workspace")),
+            encode_path_for_cursor(Path::new(
+                "/Users/dan/src/wormhole/.git/wormhole/workspaces/wormhole.code-workspace"
+            )),
             "Users-dan-src-wormhole-git-wormhole-workspaces-wormhole-code-workspace"
         );
         // : in task names becomes -
         assert_eq!(
-            encode_path_for_cursor(Path::new("/Users/dan/src/wormhole/.git/wormhole/workspaces/wormhole:features.code-workspace")),
+            encode_path_for_cursor(Path::new(
+                "/Users/dan/src/wormhole/.git/wormhole/workspaces/wormhole:features.code-workspace"
+            )),
             "Users-dan-src-wormhole-git-wormhole-workspaces-wormhole-features-code-workspace"
         );
     }
@@ -472,7 +742,9 @@ mod tests {
     #[test]
     fn test_sync_materializes_files() {
         let tmp = tempfile::tempdir().unwrap();
-        let cursor_dir = tmp.path().join(".cursor/projects/Users-test-myproject/agent-transcripts");
+        let cursor_dir = tmp
+            .path()
+            .join(".cursor/projects/Users-test-myproject/agent-transcripts");
         std::fs::create_dir_all(&cursor_dir).unwrap();
 
         let jsonl = r#"{"role":"user","message":{"content":[{"type":"text","text":"<user_query>\nHello\n</user_query>"}]}}
@@ -490,10 +762,92 @@ mod tests {
     }
 
     #[test]
+    fn test_encode_path_for_claude_code() {
+        assert_eq!(
+            encode_path_for_claude_code(Path::new("/Users/dan/src/wormhole")),
+            "-Users-dan-src-wormhole"
+        );
+        assert_eq!(
+            encode_path_for_claude_code(Path::new("/Users/dan/src/wormhole/.git")),
+            "-Users-dan-src-wormhole---git"
+        );
+    }
+
+    #[test]
+    fn test_deterministic_session_id() {
+        let id1 = Uuid::new_v5(&WORMHOLE_UUID_NAMESPACE, b"abc123");
+        let id2 = Uuid::new_v5(&WORMHOLE_UUID_NAMESPACE, b"abc123");
+        let id3 = Uuid::new_v5(&WORMHOLE_UUID_NAMESPACE, b"xyz789");
+        assert_eq!(id1, id2);
+        assert_ne!(id1, id3);
+    }
+
+    #[test]
+    fn test_convert_to_claude_code() {
+        let tmp = tempfile::tempdir().unwrap();
+        let project_dir = tmp.path().join("myproject");
+        std::fs::create_dir_all(&project_dir).unwrap();
+
+        let messages = vec![
+            Message {
+                role: Role::User,
+                text: "Hello".to_string(),
+            },
+            Message {
+                role: Role::Assistant,
+                text: "Hi there!".to_string(),
+            },
+        ];
+
+        // Override HOME for the test
+        let cc_dir = claude_code_project_dir(&project_dir);
+
+        let (session_id, cc_file) =
+            convert_to_claude_code("test-transcript-id", &messages, &project_dir, Some("main"))
+                .unwrap();
+
+        assert!(cc_file.exists());
+        let content = std::fs::read_to_string(&cc_file).unwrap();
+        let lines: Vec<&str> = content.lines().collect();
+        assert_eq!(lines.len(), 3); // dequeue + user + assistant
+
+        // Verify determinism
+        let (session_id2, _) =
+            convert_to_claude_code("test-transcript-id", &messages, &project_dir, Some("main"))
+                .unwrap();
+        assert_eq!(session_id, session_id2);
+
+        // Verify JSONL structure
+        let dequeue: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
+        assert_eq!(dequeue["type"], "queue-operation");
+        assert_eq!(dequeue["sessionId"], session_id.to_string());
+
+        let user_msg: serde_json::Value = serde_json::from_str(lines[1]).unwrap();
+        assert_eq!(user_msg["type"], "user");
+        assert_eq!(user_msg["message"]["content"], "Hello");
+
+        let assist_msg: serde_json::Value = serde_json::from_str(lines[2]).unwrap();
+        assert_eq!(assist_msg["type"], "assistant");
+
+        // Check sessions-index.json was created
+        let index_path = cc_dir.join("sessions-index.json");
+        assert!(index_path.exists());
+
+        // Clean up
+        let _ = std::fs::remove_dir_all(&cc_dir);
+    }
+
+    #[test]
     fn test_render_conversation() {
         let messages = vec![
-            Message { role: Role::User, text: "Hello".to_string() },
-            Message { role: Role::Assistant, text: "Hi there!".to_string() },
+            Message {
+                role: Role::User,
+                text: "Hello".to_string(),
+            },
+            Message {
+                role: Role::Assistant,
+                text: "Hi there!".to_string(),
+            },
         ];
         let rendered = render_conversation("wormhole", "2026-02-25", "8afac8bb", &messages);
         assert!(rendered.starts_with("# wormhole | 2026-02-25 | 8afac8bb\n"));

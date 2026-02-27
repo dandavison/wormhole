@@ -297,7 +297,7 @@ pub fn refresh_project(name: &str) -> Response<Body> {
     }
 }
 
-pub fn create_task(branch: &str, home_project: Option<&str>) -> Response<Body> {
+pub fn create_task(branch: &str, home_project: Option<&str>, bug_fix: Option<&str>) -> Response<Body> {
     let branch = branch.trim();
     let repo = match home_project {
         Some(r) => r,
@@ -309,7 +309,12 @@ pub fn create_task(branch: &str, home_project: Option<&str>) -> Response<Body> {
         }
     };
     match crate::task::create_task(repo, branch) {
-        Ok(task) => Response::new(Body::from(format!("Created task: {}", task.store_key()))),
+        Ok(task) => {
+            if let Some(description) = bug_fix {
+                crate::task::write_bug_fix_agents_md(&task.working_tree(), description);
+            }
+            Response::new(Body::from(format!("Created task: {}", task.store_key())))
+        }
         Err(e) => Response::builder()
             .status(StatusCode::BAD_REQUEST)
             .body(Body::from(e))

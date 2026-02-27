@@ -15,6 +15,14 @@ pub fn issue_task(url: &str, title: &str, body: &str) -> Option<String> {
     Some(render(&template, &vars))
 }
 
+pub fn bug_fix_task(description: &str) -> Option<String> {
+    let vars = HashMap::from([("description", description)]);
+    let template = std::fs::read_to_string(prompts_dir().join("bug-fix-task.md"))
+        .map_err(|e| eprintln!("Failed to read prompt template: {}", e))
+        .ok()?;
+    Some(render(&template, &vars))
+}
+
 pub fn review_comments(project: &Project) -> Option<String> {
     let url = project.kv.get("review_pr_url")?;
     let (repo, pr) = parse_github_pr_url(url)?;

@@ -213,7 +213,7 @@ pub(super) fn task_create_from_sprint(client: &Client) -> Result<(), String> {
         // Final confirmation before creating
         let task_key = ProjectKey::task(&home, &branch);
         println!("  Creating {} for {}", task_key.hyperlink(), issue.key);
-        upsert_task(client, &home, &branch, Some(&issue.key))?;
+        upsert_task(client, &home, &branch, Some(&issue.key), None)?;
         println!("  Created {}", task_key.hyperlink());
         created_count += 1;
     }
@@ -371,12 +371,17 @@ pub(super) fn task_upsert(
     client: &Client,
     target: &str,
     home_project: Option<String>,
+    bug_fix: Option<String>,
 ) -> Result<(), String> {
     // Refresh to get latest task list
     let _ = client.post("/project/refresh-tasks");
 
     // Parse target to determine what we're working with
     let (upsert_target, existing_task) = parse_upsert_target(client, target)?;
+
+    if bug_fix.is_some() && existing_task.is_some() {
+        return Err("--bug-fix requires a new task (task already exists)".to_string());
+    }
 
     // Get JIRA info if we have a JIRA key
     let (jira_key, jira_issue) = match &upsert_target {
@@ -484,7 +489,7 @@ pub(super) fn task_upsert(
     }
 
     // Create/ensure new task exists
-    upsert_task(client, &home, &branch, jira_key.as_deref())?;
+    upsert_task(client, &home, &branch, jira_key.as_deref(), bug_fix.as_deref())?;
 
     // Delete old worktree if moving to a new location
     if is_move {
@@ -553,9 +558,14 @@ fn upsert_task(
     home: &str,
     branch: &str,
     jira_key: Option<&str>,
+    bug_fix: Option<&str>,
 ) -> Result<(), String> {
     // Create the worktree/task
-    let url = format!("/project/create/{}?home-project={}", branch, home);
+    let mut url = format!("/project/create/{}?home-project={}", branch, home);
+    if let Some(desc) = bug_fix {
+        let encoded: String = url::form_urlencoded::byte_serialize(desc.as_bytes()).collect();
+        url.push_str(&format!("&bug-fix={}", encoded));
+    }
     client.get(&url)?;
 
     // Store JIRA key if provided

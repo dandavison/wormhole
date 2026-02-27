@@ -443,10 +443,6 @@ pub fn conform_task_worktree(
         }
     }
 
-    if let Some(action) = check_gitattributes_entry(worktree_path, dry_run)? {
-        actions.push(action);
-    }
-
     let agents_path = task_dir.join("AGENTS.md");
     if !agents_path.exists() {
         actions.push("create .task/AGENTS.md".into());
@@ -504,34 +500,6 @@ fn check_agent_symlink(
             .map_err(|e| format!("Failed to create {} symlink: {}", filename, e))?;
     }
     Ok(Some(action))
-}
-
-/// Returns Some(action) if .gitattributes needed updating, None if already correct.
-fn check_gitattributes_entry(
-    worktree_path: &Path,
-    dry_run: bool,
-) -> Result<Option<String>, String> {
-    let gitattributes_path = worktree_path.join(".gitattributes");
-    let entry = ".task/ linguist-generated";
-
-    let contents = fs::read_to_string(&gitattributes_path).unwrap_or_default();
-    if contents.lines().any(|line| line.trim() == entry) {
-        return Ok(None);
-    }
-
-    if !dry_run {
-        let new_contents = if contents.is_empty() || contents.ends_with('\n') {
-            format!("{}{}\n", contents, entry)
-        } else {
-            format!("{}\n{}\n", contents, entry)
-        };
-        fs::write(&gitattributes_path, new_contents)
-            .map_err(|e| format!("Failed to update .gitattributes: {}", e))?;
-    }
-
-    Ok(Some(
-        "add .task/ linguist-generated to .gitattributes".into(),
-    ))
 }
 
 fn diagnose_task_not_found(

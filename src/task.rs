@@ -465,6 +465,13 @@ pub fn create_issue_task(
     })
 }
 
+pub fn write_bug_fix_agents_md(worktree_path: &Path, description: &str) {
+    if let Some(content) = crate::prompts::bug_fix_task(description) {
+        let agents_path = worktree_path.join(".task/AGENTS.md");
+        let _ = fs::write(&agents_path, content);
+    }
+}
+
 fn write_issue_agents_md(worktree_path: &Path, issue: &crate::github::GithubIssue) {
     if let Some(content) = crate::prompts::issue_task(&issue.url, &issue.title, &issue.body) {
         let agents_path = worktree_path.join(".task/AGENTS.md");

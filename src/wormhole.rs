@@ -76,6 +76,7 @@ pub struct QueryParams {
     pub wait: Option<u64>,
     pub since: Option<String>,
     pub issue: Option<String>,
+    pub bug_fix: Option<String>,
 }
 
 pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
@@ -258,7 +259,7 @@ async fn route_with_params(
         return require_post(method, || project::refresh_project(name));
     }
     if let Some(branch) = path.strip_prefix("/project/create/") {
-        return project::create_task(branch, params.home_project.as_deref());
+        return project::create_task(branch, params.home_project.as_deref(), params.bug_fix.as_deref());
     }
     if let Some(name) = path.strip_prefix("/project/switch/") {
         return cors_response(project::switch(name, params, params.sync));
@@ -515,6 +516,7 @@ impl QueryParams {
             wait: None,
             since: None,
             issue: None,
+            bug_fix: None,
         };
         if let Some(query) = query {
             for (key, val) in form_urlencoded::parse(query.as_bytes()) {
@@ -550,6 +552,7 @@ impl QueryParams {
                     "wait" => params.wait = val.parse().ok(),
                     "since" => params.since = Some(val.to_string()),
                     "issue" => params.issue = Some(val.to_string()),
+                    "bug-fix" => params.bug_fix = Some(val.to_string()),
                     _ => {}
                 }
             }

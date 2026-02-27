@@ -80,6 +80,9 @@ pub enum TaskCommand {
         /// Home project for the worktree (required for create)
         #[arg(short = 'p', long, add = ArgValueCompleter::new(complete_projects))]
         home_project: Option<String>,
+        /// Seed AGENTS.md with bug-fix prompt (task must not already exist)
+        #[arg(long)]
+        bug_fix: Option<String>,
     },
     /// Create tasks from current sprint issues
     CreateFromSprint,
@@ -653,7 +656,8 @@ pub fn run(command: Command) -> Result<(), String> {
             TaskCommand::Upsert {
                 target,
                 home_project,
-            } => task::task_upsert(&client, &target, home_project),
+                bug_fix,
+            } => task::task_upsert(&client, &target, home_project, bug_fix),
             TaskCommand::CreateFromSprint => task::task_create_from_sprint(&client),
             TaskCommand::CreateFromReviewRequests { dry_run } => {
                 task::task_create_from_review_requests(&client, dry_run)

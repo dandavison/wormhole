@@ -22,11 +22,18 @@ pub struct SyncResult {
     pub skipped: usize,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum TranscriptSource {
+    Cursor,
+    ClaudeCode,
+}
+
 /// A discovered transcript file with its owning project.
 struct TranscriptFile {
     project_key: String,
     transcript_id: String,
     path: PathBuf,
+    source: TranscriptSource,
 }
 
 pub fn parse_cursor_jsonl(path: &Path) -> Result<Vec<Message>, String> {
@@ -159,10 +166,10 @@ fn extract_text(content: &[ContentBlock]) -> String {
 pub fn render_conversation(
     project: &str,
     date: &str,
-    short_id: &str,
+    session_uuid: &str,
     messages: &[Message],
 ) -> String {
-    let mut out = format!("# {} | {} | {}\n", project, date, short_id);
+    let mut out = format!("# {} | {} | {}\n", project, date, session_uuid);
     for msg in messages {
         let heading = match msg.role {
             Role::User => "User",
@@ -171,6 +178,25 @@ pub fn render_conversation(
         out.push_str(&format!("\n## {}\n\n{}\n", heading, msg.text));
     }
     out
+}
+
+/// Parse the first line of a synced conversation file to extract (project_key, session_uuid).
+pub fn parse_conversation_header(path: &Path) -> Option<(String, String)> {
+    let file = std::fs::File::open(path).ok()?;
+    let mut reader = std::io::BufReader::new(file);
+    let mut first_line = String::new();
+    std::io::BufRead::read_line(&mut reader, &mut first_line).ok()?;
+    parse_header_line(&first_line)
+}
+
+fn parse_header_line(line: &str) -> Option<(String, String)> {
+    let line = line.trim().strip_prefix("# ")?;
+    let parts: Vec<&str> = line.split(" | ").collect();
+    if parts.len() >= 3 {
+        Some((parts[0].to_string(), parts[2].to_string()))
+    } else {
+        None
+    }
 }
 
 /// Discover Cursor transcript files for a set of projects.
@@ -251,6 +277,7 @@ fn discover_transcripts_in(dir: &Path, project_key: &str, out: &mut Vec<Transcri
                     project_key: project_key.to_string(),
                     transcript_id: id.to_string(),
                     path,
+                    source: TranscriptSource::Cursor,
                 });
             }
         } else if path.is_dir() {
@@ -263,53 +290,185 @@ fn discover_transcripts_in(dir: &Path, project_key: &str, out: &mut Vec<Transcri
                     project_key: project_key.to_string(),
                     transcript_id: name.to_string(),
                     path: jsonl,
+                    source: TranscriptSource::Cursor,
                 });
             }
         }
     }
 }
 
-/// Sync: materialize clean text files from Cursor transcripts.
+/// Discover Claude Code transcript files for a set of projects.
+fn discover_claude_code_transcripts(projects: &[(String, PathBuf)]) -> Vec<TranscriptFile> {
+    let cc_projects_dir = claude_code_projects_dir();
+    if !cc_projects_dir.is_dir() {
+        return Vec::new();
+    }
+
+    // Canonicalize project paths for matching, sorted longest-first
+    let mut canonical: Vec<(String, String)> = projects
+        .iter()
+        .filter_map(|(key, path)| {
+            std::fs::canonicalize(path)
+                .ok()
+                .map(|p| (p.to_string_lossy().to_string(), key.clone()))
+        })
+        .collect();
+    canonical.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+    canonical.dedup_by(|a, b| a.0 == b.0);
+
+    let mut result = Vec::new();
+    let entries = match std::fs::read_dir(&cc_projects_dir) {
+        Ok(e) => e,
+        Err(_) => return result,
+    };
+
+    for entry in entries.flatten() {
+        let index_path = entry.path().join("sessions-index.json");
+        if !index_path.is_file() {
+            continue;
+        }
+        let content = match std::fs::read_to_string(&index_path) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        let index: serde_json::Value = match serde_json::from_str(&content) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        let entries_arr = match index.get("entries").and_then(|e| e.as_array()) {
+            Some(a) => a,
+            None => continue,
+        };
+        for sess in entries_arr {
+            if sess.get("isSidechain").and_then(|v| v.as_bool()) == Some(true) {
+                continue;
+            }
+            let msg_count = sess
+                .get("messageCount")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            if msg_count < 2 {
+                continue;
+            }
+            let session_id = match sess.get("sessionId").and_then(|s| s.as_str()) {
+                Some(s) => s,
+                None => continue,
+            };
+            let project_path = match sess.get("projectPath").and_then(|s| s.as_str()) {
+                Some(s) => s,
+                None => continue,
+            };
+            let full_path = match sess.get("fullPath").and_then(|s| s.as_str()) {
+                Some(s) => s,
+                None => continue,
+            };
+            let path = PathBuf::from(full_path);
+            if !path.is_file() {
+                continue;
+            }
+
+            // Match projectPath against known projects (longest prefix wins)
+            let canon_pp = std::fs::canonicalize(project_path)
+                .unwrap_or_else(|_| PathBuf::from(project_path))
+                .to_string_lossy()
+                .to_string();
+            if let Some((_, project_key)) = canonical
+                .iter()
+                .find(|(prefix, _)| canon_pp.starts_with(prefix.as_str()))
+            {
+                result.push(TranscriptFile {
+                    project_key: project_key.clone(),
+                    transcript_id: session_id.to_string(),
+                    path,
+                    source: TranscriptSource::ClaudeCode,
+                });
+            }
+        }
+    }
+    result
+}
+
+fn claude_code_projects_dir() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("/"))
+        .join(".claude/projects")
+}
+
+/// Sync: materialize clean text files from Cursor and Claude Code transcripts.
 /// Returns the output directory and counts.
-pub fn sync(projects: &[(String, PathBuf)], project_filter: Option<&str>) -> SyncResult {
+pub fn sync(
+    projects: &[(String, PathBuf)],
+    project_filter: Option<&[&str]>,
+    since: Option<SystemTime>,
+) -> SyncResult {
     let output_dir = conversations_dir();
-    let transcripts = discover_cursor_transcripts(projects);
+    let mut transcripts = discover_cursor_transcripts(projects);
+    transcripts.extend(discover_claude_code_transcripts(projects));
 
     let mut synced = 0;
     let mut skipped = 0;
     for t in &transcripts {
-        if let Some(filter) = project_filter {
-            if t.project_key != filter {
+        if let Some(filters) = project_filter {
+            if !filters.iter().any(|f| *f == t.project_key) {
                 continue;
             }
         }
+        if let Some(cutoff) = since {
+            let mtime = std::fs::metadata(&t.path)
+                .and_then(|m| m.modified())
+                .unwrap_or(SystemTime::UNIX_EPOCH);
+            if mtime < cutoff {
+                continue;
+            }
+        }
+
+        let messages = match t.source {
+            TranscriptSource::Cursor => {
+                if t.path.extension().is_some_and(|e| e == "jsonl") {
+                    parse_cursor_jsonl(&t.path).ok()
+                } else {
+                    parse_cursor_txt(&t.path).ok()
+                }
+            }
+            TranscriptSource::ClaudeCode => parse_claude_code_jsonl(&t.path).ok(),
+        };
+        let messages = match messages {
+            Some(m) if !m.is_empty() => m,
+            _ => continue,
+        };
+
+        // Determine the CC session UUID (eagerly convert Cursor transcripts)
+        let session_uuid = match t.source {
+            TranscriptSource::ClaudeCode => t.transcript_id.clone(),
+            TranscriptSource::Cursor => {
+                // Find the project dir for conversion
+                let project_dir = projects
+                    .iter()
+                    .find(|(k, _)| *k == t.project_key)
+                    .map(|(_, p)| p.clone());
+                match project_dir {
+                    Some(dir) => {
+                        match convert_to_claude_code(&t.transcript_id, &messages, &dir, None) {
+                            Ok((uuid, _)) => uuid.to_string(),
+                            Err(_) => continue,
+                        }
+                    }
+                    None => continue,
+                }
+            }
+        };
+
         let date = file_date(&t.path);
-        let short_id = &t.transcript_id[..8.min(t.transcript_id.len())];
+        let short_id = &session_uuid[..8.min(session_uuid.len())];
         let out_dir = output_dir.join(&t.project_key);
-        let out_file = out_dir.join(format!("{}-{}.txt", date, short_id));
+        let out_file = out_dir.join(format!("{}-{}.md", date, short_id));
 
         if out_file.exists() && !source_newer(&t.path, &out_file) {
             skipped += 1;
             continue;
         }
 
-        let messages = if t.path.extension().map_or(false, |e| e == "jsonl") {
-            match parse_cursor_jsonl(&t.path) {
-                Ok(m) => m,
-                Err(_) => continue,
-            }
-        } else {
-            match parse_cursor_txt(&t.path) {
-                Ok(m) => m,
-                Err(_) => continue,
-            }
-        };
-
-        if messages.is_empty() {
-            continue;
-        }
-
-        let rendered = render_conversation(&t.project_key, &date, short_id, &messages);
+        let rendered = render_conversation(&t.project_key, &date, &session_uuid, &messages);
         let _ = std::fs::create_dir_all(&out_dir);
         if std::fs::write(&out_file, &rendered).is_ok() {
             synced += 1;
@@ -317,14 +476,34 @@ pub fn sync(projects: &[(String, PathBuf)], project_filter: Option<&str>) -> Syn
     }
 
     let dir = match project_filter {
-        Some(p) => output_dir.join(p).to_string_lossy().to_string(),
-        None => output_dir.to_string_lossy().to_string(),
+        Some(filters) if filters.len() == 1 => {
+            output_dir.join(filters[0]).to_string_lossy().to_string()
+        }
+        _ => output_dir.to_string_lossy().to_string(),
     };
     SyncResult {
         output_dir: dir,
         synced,
         skipped,
     }
+}
+
+/// Parse a duration string like "2w", "3d", "1m" into a SystemTime cutoff.
+pub fn parse_since(s: &str) -> Option<SystemTime> {
+    let s = s.trim();
+    if s.is_empty() {
+        return None;
+    }
+    let (num_str, unit) = s.split_at(s.len() - 1);
+    let n: u64 = num_str.parse().ok()?;
+    let days = match unit {
+        "d" => n,
+        "w" => n * 7,
+        "m" => n * 30,
+        _ => return None,
+    };
+    let duration = std::time::Duration::from_secs(days * 86400);
+    SystemTime::now().checked_sub(duration)
 }
 
 pub fn conversations_dir() -> PathBuf {
@@ -506,13 +685,11 @@ fn claude_code_project_dir(project_dir: &Path) -> PathBuf {
 }
 
 fn encode_path_for_claude_code(path: &Path) -> String {
-    // Claude Code encodes: / → -, . → -- (literal dot becomes double dash)
     let s = path.to_string_lossy();
     let mut result = String::with_capacity(s.len());
     for c in s.chars() {
         match c {
-            '/' => result.push('-'),
-            '.' => result.push_str("--"),
+            '/' | '.' => result.push('-'),
             _ => result.push(c),
         }
     }
@@ -579,46 +756,97 @@ fn update_sessions_index(
     Ok(())
 }
 
-/// Find the original Cursor transcript file from a synced conversation file.
-/// The synced file is named <date>-<short_id>.txt, and we need to find the
-/// original Cursor transcript file by the short ID.
-pub fn find_cursor_transcript(synced_file: &Path) -> Option<(PathBuf, String)> {
-    let stem = synced_file.file_stem()?.to_str()?;
-    // Format: YYYY-MM-DD-<short_id>
-    let short_id = stem.splitn(4, '-').nth(3)?;
 
-    let cursor_dir = cursor_projects_dir();
-    if !cursor_dir.is_dir() {
-        return None;
-    }
+pub fn parse_claude_code_jsonl(path: &Path) -> Result<Vec<Message>, String> {
+    let content =
+        std::fs::read_to_string(path).map_err(|e| format!("read {}: {}", path.display(), e))?;
+    parse_claude_code_jsonl_str(&content)
+}
 
-    // Search all Cursor project dirs for a transcript matching the short ID
-    for entry in std::fs::read_dir(&cursor_dir).ok()?.flatten() {
-        let transcripts_dir = entry.path().join("agent-transcripts");
-        if !transcripts_dir.is_dir() {
+fn parse_claude_code_jsonl_str(content: &str) -> Result<Vec<Message>, String> {
+    let mut messages = Vec::new();
+    for line in content.lines() {
+        if line.trim().is_empty() {
             continue;
         }
-        for t_entry in std::fs::read_dir(&transcripts_dir).ok()?.flatten() {
-            let path = t_entry.path();
-            let name = t_entry.file_name();
-            let name = name.to_string_lossy();
-            if name.starts_with(short_id) {
-                if path.is_dir() {
-                    let jsonl = path.join(format!("{}.jsonl", name));
-                    if jsonl.is_file() {
-                        return Some((jsonl, name.to_string()));
-                    }
-                } else if path
-                    .extension()
-                    .map_or(false, |e| e == "jsonl" || e == "txt")
-                {
-                    let id = path.file_stem()?.to_str()?.to_string();
-                    return Some((path, id));
+        let record: serde_json::Value = match serde_json::from_str(line) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        let msg_type = record.get("type").and_then(|t| t.as_str()).unwrap_or("");
+        match msg_type {
+            "user" => {
+                let text = extract_cc_user_text(&record);
+                let text = strip_user_query_tags(&text).trim().to_string();
+                if !text.is_empty() {
+                    messages.push(Message {
+                        role: Role::User,
+                        text,
+                    });
                 }
+            }
+            "assistant" => {
+                let text = extract_cc_assistant_text(&record);
+                let text = text.trim().to_string();
+                if !text.is_empty() {
+                    messages.push(Message {
+                        role: Role::Assistant,
+                        text,
+                    });
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(messages)
+}
+
+/// Extract user text from CC JSONL. Content may be a string or an array of blocks.
+/// Skip tool_result blocks (those are tool responses, not user-authored text).
+fn extract_cc_user_text(record: &serde_json::Value) -> String {
+    let content = match record.get("message").and_then(|m| m.get("content")) {
+        Some(c) => c,
+        None => return String::new(),
+    };
+    if let Some(s) = content.as_str() {
+        return s.to_string();
+    }
+    let blocks = match content.as_array() {
+        Some(a) => a,
+        None => return String::new(),
+    };
+    let mut parts = Vec::new();
+    for block in blocks {
+        let btype = block.get("type").and_then(|t| t.as_str()).unwrap_or("");
+        if btype == "text" {
+            if let Some(text) = block.get("text").and_then(|t| t.as_str()) {
+                parts.push(text);
             }
         }
     }
-    None
+    parts.join("\n")
+}
+
+/// Extract assistant text from CC JSONL. Content is always an array; keep only text blocks.
+fn extract_cc_assistant_text(record: &serde_json::Value) -> String {
+    let blocks = match record
+        .get("message")
+        .and_then(|m| m.get("content"))
+        .and_then(|c| c.as_array())
+    {
+        Some(a) => a,
+        None => return String::new(),
+    };
+    let mut parts = Vec::new();
+    for block in blocks {
+        let btype = block.get("type").and_then(|t| t.as_str()).unwrap_or("");
+        if btype == "text" {
+            if let Some(text) = block.get("text").and_then(|t| t.as_str()) {
+                parts.push(text);
+            }
+        }
+    }
+    parts.join("\n")
 }
 
 #[derive(Deserialize)]
@@ -769,7 +997,7 @@ mod tests {
         );
         assert_eq!(
             encode_path_for_claude_code(Path::new("/Users/dan/src/wormhole/.git")),
-            "-Users-dan-src-wormhole---git"
+            "-Users-dan-src-wormhole--git"
         );
     }
 
@@ -849,9 +1077,64 @@ mod tests {
                 text: "Hi there!".to_string(),
             },
         ];
-        let rendered = render_conversation("wormhole", "2026-02-25", "8afac8bb", &messages);
-        assert!(rendered.starts_with("# wormhole | 2026-02-25 | 8afac8bb\n"));
+        let uuid = "8afac8bb-1234-5678-9abc-def012345678";
+        let rendered = render_conversation("wormhole", "2026-02-25", uuid, &messages);
+        assert!(rendered.starts_with(&format!("# wormhole | 2026-02-25 | {}\n", uuid)));
         assert!(rendered.contains("## User\n\nHello\n"));
         assert!(rendered.contains("## Assistant\n\nHi there!\n"));
+    }
+
+    #[test]
+    fn test_parse_claude_code_jsonl() {
+        let input = r#"{"type":"queue-operation","operation":"dequeue","sessionId":"abc"}
+{"type":"user","message":{"content":"Hello world"},"uuid":"u1","sessionId":"abc"}
+{"type":"assistant","message":{"content":[{"type":"text","text":"Hi!"},{"type":"tool_use","id":"t1","name":"Read"}]},"uuid":"u2","sessionId":"abc"}
+{"type":"user","message":{"content":[{"tool_use_id":"t1","type":"tool_result","content":"file contents"}]},"uuid":"u3","sessionId":"abc"}
+{"type":"assistant","message":{"content":[{"type":"text","text":"Got it."}]},"uuid":"u4","sessionId":"abc"}"#;
+        let messages = parse_claude_code_jsonl_str(input).unwrap();
+        assert_eq!(messages.len(), 3);
+        assert_eq!(messages[0].role, Role::User);
+        assert_eq!(messages[0].text, "Hello world");
+        assert_eq!(messages[1].role, Role::Assistant);
+        assert_eq!(messages[1].text, "Hi!");
+        assert_eq!(messages[2].role, Role::Assistant);
+        assert_eq!(messages[2].text, "Got it.");
+    }
+
+    #[test]
+    fn test_parse_claude_code_jsonl_strips_user_query() {
+        let input = r#"{"type":"user","message":{"content":"<user_query>\nHello\n</user_query>"},"uuid":"u1","sessionId":"abc"}"#;
+        let messages = parse_claude_code_jsonl_str(input).unwrap();
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].text, "Hello");
+    }
+
+    #[test]
+    fn test_parse_claude_code_jsonl_array_user_content() {
+        let input = r#"{"type":"user","message":{"content":[{"type":"text","text":"Hello"},{"type":"text","text":"World"}]},"uuid":"u1","sessionId":"abc"}"#;
+        let messages = parse_claude_code_jsonl_str(input).unwrap();
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].text, "Hello\nWorld");
+    }
+
+    #[test]
+    fn test_parse_conversation_header() {
+        let uuid = "8afac8bb-1234-5678-9abc-def012345678";
+        let header = format!("# wormhole | 2026-02-25 | {}\n", uuid);
+        let result = parse_header_line(&header);
+        assert_eq!(
+            result,
+            Some(("wormhole".to_string(), uuid.to_string()))
+        );
+    }
+
+    #[test]
+    fn test_parse_since() {
+        assert!(parse_since("2w").is_some());
+        assert!(parse_since("3d").is_some());
+        assert!(parse_since("1m").is_some());
+        assert!(parse_since("").is_none());
+        assert!(parse_since("abc").is_none());
+        assert!(parse_since("2x").is_none());
     }
 }

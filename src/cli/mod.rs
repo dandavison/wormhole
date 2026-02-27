@@ -288,9 +288,12 @@ pub enum Command {
 pub enum ConversationsCommand {
     /// Sync agent conversations to searchable text files
     Sync {
-        /// Only sync conversations for this project
+        /// Only sync conversations for these projects (repeatable)
         #[arg(short, long, add = ArgValueCompleter::new(complete_projects))]
-        project: Option<String>,
+        project: Vec<String>,
+        /// Only include conversations newer than this duration (e.g. 2w, 3d, 1m)
+        #[arg(short, long)]
+        since: Option<String>,
     },
 }
 
@@ -670,10 +673,18 @@ pub fn run(command: Command) -> Result<(), String> {
         },
 
         Command::Conversations { command } => match command {
-            ConversationsCommand::Sync { project } => {
-                let query = match &project {
-                    Some(p) => format!("?project={}", p),
-                    None => String::new(),
+            ConversationsCommand::Sync { project, since } => {
+                let mut params = Vec::new();
+                if !project.is_empty() {
+                    params.push(format!("project={}", project.join(",")));
+                }
+                if let Some(ref s) = since {
+                    params.push(format!("since={}", s));
+                }
+                let query = if params.is_empty() {
+                    String::new()
+                } else {
+                    format!("?{}", params.join("&"))
                 };
                 let response = client.post(&format!("/conversations/sync{}", query))?;
                 let result: crate::conversations::SyncResult =

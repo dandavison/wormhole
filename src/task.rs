@@ -391,6 +391,87 @@ pub fn create_review_tasks(dry_run: bool) -> Result<ReviewTaskResult, String> {
     Ok(result)
 }
 
+#[derive(serde::Serialize)]
+pub struct IssueTaskResult {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub skipped: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+pub fn create_issue_task(
+    issue_ref: &str,
+    home_project: Option<&str>,
+    dry_run: bool,
+) -> Result<IssueTaskResult, String> {
+    let (owner, repo_name, number) = crate::github::parse_issue_ref(issue_ref)
+        .ok_or_else(|| format!("Cannot parse issue reference '{}'. Expected GitHub URL or owner/repo#123", issue_ref))?;
+
+    let issue = crate::github::get_issue(&owner, &repo_name, number)?;
+
+    let home = if let Some(h) = home_project {
+        h.to_string()
+    } else {
+        let repo_map = build_github_repo_map();
+        let nwo = format!("{}/{}", owner, repo_name);
+        repo_map.get(&nwo).cloned().ok_or_else(|| {
+            format!("No local project for {}. Use --home-project to specify.", nwo)
+        })?
+    };
+
+    let slug = crate::util::to_kebab_case(&issue.title);
+    let branch = format!("{}-{}", number, slug);
+
+    projects::refresh_tasks();
+    let existing = {
+        let projects = projects::lock();
+        projects
+            .all()
+            .iter()
+            .any(|p| p.is_task() && p.store_key().to_string() == format!("{}:{}", home, branch))
+    };
+
+    if existing {
+        return Ok(IssueTaskResult {
+            created: None,
+            skipped: Some(format!("{}:{} already exists", home, branch)),
+            error: None,
+        });
+    }
+
+    if dry_run {
+        return Ok(IssueTaskResult {
+            created: Some(format!("{}:{} (dry run)", home, branch)),
+            skipped: None,
+            error: None,
+        });
+    }
+
+    let task = create_task(&home, &branch)?;
+    let worktree = task.working_tree();
+    write_issue_agents_md(&worktree, &issue);
+    let key = ProjectKey::task(&home, &branch);
+    crate::kv::set_value_sync(&key, "task_type", "issue");
+    crate::kv::set_value_sync(&key, "github_issue_url", &issue.url);
+    crate::kv::set_value_sync(&key, "github_issue_number", &number.to_string());
+    projects::refresh_cache();
+
+    Ok(IssueTaskResult {
+        created: Some(format!("{}:{}", home, branch)),
+        skipped: None,
+        error: None,
+    })
+}
+
+fn write_issue_agents_md(worktree_path: &Path, issue: &crate::github::GithubIssue) {
+    if let Some(content) = crate::prompts::issue_task(&issue.url, &issue.title, &issue.body) {
+        let agents_path = worktree_path.join(".task/AGENTS.md");
+        let _ = fs::write(&agents_path, content);
+    }
+}
+
 fn build_github_repo_map() -> std::collections::HashMap<String, String> {
     let mut map = std::collections::HashMap::new();
     for (name, path) in config::available_projects() {

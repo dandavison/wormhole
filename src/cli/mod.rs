@@ -89,6 +89,17 @@ pub enum TaskCommand {
         #[arg(long)]
         dry_run: bool,
     },
+    /// Create a task from a GitHub issue
+    CreateFromIssue {
+        /// GitHub issue URL or owner/repo#123
+        target: String,
+        /// Home project for the worktree
+        #[arg(short = 'p', long)]
+        home_project: Option<String>,
+        /// Show what would be created without actually creating
+        #[arg(long)]
+        dry_run: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -647,6 +658,11 @@ pub fn run(command: Command) -> Result<(), String> {
             TaskCommand::CreateFromReviewRequests { dry_run } => {
                 task::task_create_from_review_requests(&client, dry_run)
             }
+            TaskCommand::CreateFromIssue {
+                target,
+                home_project,
+                dry_run,
+            } => task::task_create_from_issue(&client, &target, home_project.as_deref(), dry_run),
         },
 
         Command::Completion { shell } => {

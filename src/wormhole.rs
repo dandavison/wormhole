@@ -75,6 +75,7 @@ pub struct QueryParams {
     pub role: Option<String>,
     pub wait: Option<u64>,
     pub since: Option<String>,
+    pub issue: Option<String>,
 }
 
 pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
@@ -150,6 +151,31 @@ async fn route(
                     .unwrap(),
                 Err(e) => Response::builder()
                     .status(hyper::StatusCode::INTERNAL_SERVER_ERROR)
+                    .body(Body::from(e))
+                    .unwrap(),
+            }
+        }),
+        "/task/create-from-issue" => require_post(method, || {
+            let issue = match params.issue {
+                Some(ref i) => i.as_str(),
+                None => {
+                    return Response::builder()
+                        .status(StatusCode::BAD_REQUEST)
+                        .body(Body::from("Missing 'issue' query parameter"))
+                        .unwrap();
+                }
+            };
+            match crate::task::create_issue_task(
+                issue,
+                params.home_project.as_deref(),
+                params.dry_run,
+            ) {
+                Ok(result) => Response::builder()
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(serde_json::to_string_pretty(&result).unwrap()))
+                    .unwrap(),
+                Err(e) => Response::builder()
+                    .status(StatusCode::INTERNAL_SERVER_ERROR)
                     .body(Body::from(e))
                     .unwrap(),
             }
@@ -488,6 +514,7 @@ impl QueryParams {
             role: None,
             wait: None,
             since: None,
+            issue: None,
         };
         if let Some(query) = query {
             for (key, val) in form_urlencoded::parse(query.as_bytes()) {
@@ -522,6 +549,7 @@ impl QueryParams {
                     "role" => params.role = Some(val.to_string()),
                     "wait" => params.wait = val.parse().ok(),
                     "since" => params.since = Some(val.to_string()),
+                    "issue" => params.issue = Some(val.to_string()),
                     _ => {}
                 }
             }

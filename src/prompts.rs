@@ -7,6 +7,14 @@ fn prompts_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("prompts")
 }
 
+pub fn issue_task(url: &str, title: &str, body: &str) -> Option<String> {
+    let vars = HashMap::from([("url", url), ("title", title), ("body", body)]);
+    let template = std::fs::read_to_string(prompts_dir().join("issue-task.md"))
+        .map_err(|e| eprintln!("Failed to read prompt template: {}", e))
+        .ok()?;
+    Some(render(&template, &vars))
+}
+
 pub fn review_comments(project: &Project) -> Option<String> {
     let url = project.kv.get("review_pr_url")?;
     let (repo, pr) = parse_github_pr_url(url)?;

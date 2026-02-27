@@ -59,6 +59,24 @@ where
     get_stdout(program, output)
 }
 
+pub fn to_kebab_case(s: &str) -> String {
+    s.chars()
+        .filter_map(|c| {
+            if c.is_alphanumeric() {
+                Some(c.to_ascii_lowercase())
+            } else if c.is_whitespace() || c == '-' || c == '_' {
+                Some('-')
+            } else {
+                None
+            }
+        })
+        .collect::<String>()
+        .split('-')
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join("-")
+}
+
 pub fn get_stdout<S>(program: S, output: Output) -> String
 where
     S: AsRef<OsStr>,

@@ -235,21 +235,7 @@ pub(super) fn build_switch_query(
 }
 
 pub(super) fn to_kebab_case(s: &str) -> String {
-    s.chars()
-        .filter_map(|c| {
-            if c.is_alphanumeric() {
-                Some(c.to_ascii_lowercase())
-            } else if c.is_whitespace() || c == '-' || c == '_' {
-                Some('-')
-            } else {
-                None
-            }
-        })
-        .collect::<String>()
-        .split('-')
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<_>>()
-        .join("-")
+    crate::util::to_kebab_case(s)
 }
 
 /// Returns None if we should prompt, or Some(reason) if we should auto-skip.

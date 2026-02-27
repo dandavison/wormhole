@@ -1,3 +1,4 @@
+use regex::Regex;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::Path;
@@ -197,6 +198,53 @@ pub fn pr_fetch_and_reset(worktree_path: &Path, pr_number: u64) -> Result<(), St
     Ok(())
 }
 
+#[derive(Debug, Deserialize, serde::Serialize)]
+pub struct GithubIssue {
+    pub number: u64,
+    pub title: String,
+    pub url: String,
+    #[serde(default)]
+    pub body: String,
+}
+
+/// Parse a GitHub issue reference: URL or `owner/repo#123`.
+/// Returns `(owner, repo, number)`.
+pub fn parse_issue_ref(input: &str) -> Option<(String, String, u64)> {
+    // URL: https://github.com/owner/repo/issues/123
+    let url_re = Regex::new(r"github\.com/([^/]+)/([^/]+)/issues/(\d+)").ok()?;
+    if let Some(caps) = url_re.captures(input) {
+        let number: u64 = caps[3].parse().ok()?;
+        return Some((caps[1].to_string(), caps[2].to_string(), number));
+    }
+    // Short ref: owner/repo#123
+    let ref_re = Regex::new(r"^([^/]+)/([^#]+)#(\d+)$").ok()?;
+    if let Some(caps) = ref_re.captures(input) {
+        let number: u64 = caps[3].parse().ok()?;
+        return Some((caps[1].to_string(), caps[2].to_string(), number));
+    }
+    None
+}
+
+pub fn get_issue(owner: &str, repo: &str, number: u64) -> Result<GithubIssue, String> {
+    let output = Command::new("gh")
+        .args([
+            "issue",
+            "view",
+            &number.to_string(),
+            "--repo",
+            &format!("{}/{}", owner, repo),
+            "--json",
+            "number,title,url,body",
+        ])
+        .output()
+        .map_err(|e| format!("Failed to run gh: {}", e))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("gh issue view failed: {}", stderr.trim()));
+    }
+    serde_json::from_slice(&output.stdout).map_err(|e| format!("Failed to parse gh output: {}", e))
+}
+
 use crate::project::Project;
 
 /// Get the PR number for a project, checking cached value first
@@ -259,5 +307,34 @@ fn fetch_repo_name(project_path: &Path) -> Option<String> {
         None
     } else {
         Some(name.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_issue_ref_url() {
+        let (owner, repo, number) =
+            parse_issue_ref("https://github.com/temporalio/temporal/issues/42").unwrap();
+        assert_eq!(owner, "temporalio");
+        assert_eq!(repo, "temporal");
+        assert_eq!(number, 42);
+    }
+
+    #[test]
+    fn parse_issue_ref_short() {
+        let (owner, repo, number) = parse_issue_ref("temporalio/temporal#123").unwrap();
+        assert_eq!(owner, "temporalio");
+        assert_eq!(repo, "temporal");
+        assert_eq!(number, 123);
+    }
+
+    #[test]
+    fn parse_issue_ref_invalid() {
+        assert!(parse_issue_ref("not-a-ref").is_none());
+        assert!(parse_issue_ref("ACT-123").is_none());
+        assert!(parse_issue_ref("just/repo").is_none());
     }
 }

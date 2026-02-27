@@ -281,6 +281,45 @@ pub(super) fn task_create_from_review_requests(
     Ok(())
 }
 
+pub(super) fn task_create_from_issue(
+    client: &Client,
+    target: &str,
+    home_project: Option<&str>,
+    dry_run: bool,
+) -> Result<(), String> {
+    let encoded: String = url::form_urlencoded::byte_serialize(target.as_bytes()).collect();
+    let mut url = format!("/task/create-from-issue?issue={}", encoded);
+    if let Some(hp) = home_project {
+        url.push_str(&format!("&home-project={}", hp));
+    }
+    if dry_run {
+        url.push_str("&dry-run=true");
+    }
+    eprint!("Fetching issue...");
+    let response = client.post(&url)?;
+    eprintln!(" done");
+    let result: serde_json::Value =
+        serde_json::from_str(&response).map_err(|e| format!("Failed to parse response: {}", e))?;
+    if let Some(created) = result.get("created").and_then(|v| v.as_str()) {
+        let key_str = created.strip_suffix(" (dry run)").unwrap_or(created);
+        let key = ProjectKey::parse(key_str);
+        if dry_run {
+            println!("  Would create {}", key.hyperlink());
+        } else {
+            println!("  Created {}", key.hyperlink());
+        }
+    }
+    if let Some(skipped) = result.get("skipped").and_then(|v| v.as_str()) {
+        let key_str = skipped.strip_suffix(" already exists").unwrap_or(skipped);
+        let key = ProjectKey::parse(key_str);
+        println!("  Skipped: {} already exists", key.hyperlink());
+    }
+    if let Some(error) = result.get("error").and_then(|v| v.as_str()) {
+        eprintln!("  Error: {}", error);
+    }
+    Ok(())
+}
+
 /// Represents a parsed task target for the upsert command
 enum UpsertTarget {
     /// A project key like "repo:branch"

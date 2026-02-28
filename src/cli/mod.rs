@@ -17,8 +17,22 @@ mod util;
 use project::ProjectDebug;
 use util::*;
 
+fn expand_tilde(input: &std::ffi::OsStr) -> Option<std::ffi::OsString> {
+    let s = input.to_str()?;
+    if s == "~" {
+        Some(std::env::var_os("HOME")?)
+    } else {
+        let rest = s.strip_prefix("~/")?;
+        let mut home = std::env::var_os("HOME")?;
+        home.push("/");
+        home.push(rest);
+        Some(home)
+    }
+}
+
 fn complete_projects(current: &std::ffi::OsStr) -> Vec<CompletionCandidate> {
-    let mut candidates = PathCompleter::any().complete(current);
+    let expanded = expand_tilde(current);
+    let mut candidates = PathCompleter::any().complete(expanded.as_deref().unwrap_or(current));
 
     let url = format!("http://127.0.0.1:{}/project/list", config::wormhole_port());
     let response = match ureq::get(&url).call() {

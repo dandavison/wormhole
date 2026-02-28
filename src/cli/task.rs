@@ -372,7 +372,12 @@ pub(super) fn task_upsert(
     target: &str,
     home_project: Option<String>,
     bug_fix: Option<String>,
+    start: bool,
 ) -> Result<(), String> {
+    if start && bug_fix.is_none() {
+        return Err("--start requires --bug-fix".to_string());
+    }
+
     // Refresh to get latest task list
     let _ = client.post("/project/refresh-tasks");
 
@@ -511,6 +516,22 @@ pub(super) fn task_upsert(
         println!("Created task {} for {}", task_key.hyperlink(), key);
     } else {
         println!("Created task {}", task_key.hyperlink());
+    }
+
+    if start {
+        let store_key = task_key.to_string();
+        client.get(&format!("/project/switch/{}?land-in=editor", store_key))?;
+        let body = serde_json::json!({
+            "target": "editor",
+            "message": {
+                "jsonrpc": "2.0",
+                "method": "claude-code/start",
+                "params": {
+                    "prompt": "Hi. Please work on the task in your instructions."
+                }
+            }
+        });
+        client.post_json(&format!("/project/messages/{}", store_key), &body)?;
     }
 
     Ok(())

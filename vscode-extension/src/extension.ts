@@ -35,6 +35,22 @@ const INTENTS: Record<string, IntentHandler> = {
       sessionId,
     );
   },
+  'claude-code/start': async (_projectKey, _port, params) => {
+    const prompt = params?.prompt as string | undefined;
+    const ext = vscode.extensions.getExtension('anthropic.claude-code');
+    if (!ext) {
+      log.error('Claude Code extension not installed');
+      return;
+    }
+    if (!ext.isActive) {
+      log.info('Activating Claude Code extension');
+      await ext.activate();
+    }
+    await vscode.commands.executeCommand(
+      'claude-vscode.terminal.open',
+      prompt,
+    );
+  },
 };
 
 let abortController: AbortController | null = null;

@@ -83,6 +83,9 @@ pub enum TaskCommand {
         /// Seed AGENTS.md with bug-fix prompt (task must not already exist)
         #[arg(long)]
         bug_fix: Option<String>,
+        /// Start a Claude Code conversation (requires --bug-fix)
+        #[arg(long)]
+        start: bool,
     },
     /// Create tasks from current sprint issues
     CreateFromSprint,
@@ -657,7 +660,8 @@ pub fn run(command: Command) -> Result<(), String> {
                 target,
                 home_project,
                 bug_fix,
-            } => task::task_upsert(&client, &target, home_project, bug_fix),
+                start,
+            } => task::task_upsert(&client, &target, home_project, bug_fix, start),
             TaskCommand::CreateFromSprint => task::task_create_from_sprint(&client),
             TaskCommand::CreateFromReviewRequests { dry_run } => {
                 task::task_create_from_review_requests(&client, dry_run)

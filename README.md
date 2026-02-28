@@ -162,6 +162,7 @@ wormhole kv set myapp land-in editor    # Set KV
 wormhole kv delete myapp land-in        # Delete KV
 wormhole kv list myapp                  # List all KV for project
 wormhole task upsert <target>           # Create or update a task
+wormhole task upsert <target> --bug-fix "desc" --start  # Create bug-fix task and start agent
 wormhole task create-from-sprint        # Create tasks for all sprint issues
 wormhole task create-from-review-requests # Create tasks from PR review requests
 wormhole jira sprint list               # List JIRA sprint issues
@@ -218,7 +219,7 @@ wormhole completion bash                # Generate shell completions
 | GET    | `/kv/<project>`               | List project KV                   |
 | GET    | `/kv`                         | List all KV                       |
 
-Query params: `land-in=terminal|editor|terminal-only|none`, `line=N`, `home-project=<project>`, `branch=<branch>`, `active=true`, `current=true`, `completed=true`, `dry-run=true`, `sync=true`, `pwd=<path>`, `run=<id>`, `offset=N`, `role=<role>`, `wait=N`
+Query params: `land-in=terminal|editor|terminal-only|none`, `line=N`, `home-project=<project>`, `branch=<branch>`, `active=true`, `current=true`, `completed=true`, `dry-run=true`, `sync=true`, `pwd=<path>`, `run=<id>`, `offset=N`, `role=<role>`, `wait=N`, `bug-fix=<description>`
 
 ## Message Intents
 
@@ -231,6 +232,8 @@ internally; intents can also be sent manually via `wormhole project message`.
 | `editor/close`          | `workbench.action.closeWindow`       | Close the editor window  |
 | `editor/toggleZenMode`  | `workbench.action.toggleZenMode`     | Toggle zen mode          |
 | `echo`                  | _(writes KV `last-message=echo`)_    | Test connectivity        |
+| `claude-code/resume`    | `claude-vscode.editor.open`          | Resume CC session        |
+| `claude-code/start`     | `claude-vscode.terminal.open`        | Start CC with prompt     |
 
 ```bash
 wormhole project message myapp -m editor/close

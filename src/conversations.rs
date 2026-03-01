@@ -460,7 +460,7 @@ pub fn sync(
 
         let date = file_date(&t.path);
         let short_id = &session_uuid[..8.min(session_uuid.len())];
-        let out_dir = output_dir.join(&t.project_key);
+        let out_dir = output_dir.join(t.project_key.replace(':', "--"));
         let out_file = out_dir.join(format!("{}-{}.md", date, short_id));
 
         if out_file.exists() && !source_newer(&t.path, &out_file) {
@@ -476,9 +476,10 @@ pub fn sync(
     }
 
     let dir = match project_filter {
-        Some(filters) if filters.len() == 1 => {
-            output_dir.join(filters[0]).to_string_lossy().to_string()
-        }
+        Some(filters) if filters.len() == 1 => output_dir
+            .join(filters[0].replace(':', "--"))
+            .to_string_lossy()
+            .to_string(),
         _ => output_dir.to_string_lossy().to_string(),
     };
     SyncResult {
@@ -755,7 +756,6 @@ fn update_sessions_index(
         .map_err(|e| format!("write index: {}", e))?;
     Ok(())
 }
-
 
 pub fn parse_claude_code_jsonl(path: &Path) -> Result<Vec<Message>, String> {
     let content =
@@ -1122,10 +1122,7 @@ mod tests {
         let uuid = "8afac8bb-1234-5678-9abc-def012345678";
         let header = format!("# wormhole | 2026-02-25 | {}\n", uuid);
         let result = parse_header_line(&header);
-        assert_eq!(
-            result,
-            Some(("wormhole".to_string(), uuid.to_string()))
-        );
+        assert_eq!(result, Some(("wormhole".to_string(), uuid.to_string())));
     }
 
     #[test]

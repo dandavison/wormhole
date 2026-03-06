@@ -354,7 +354,7 @@ impl WormholeTest {
         if editor_is_none() {
             return;
         }
-        let lua = r#"hs.application.launchOrFocus("/Applications/Alacritty.app")"#;
+        let lua = r#"hs.application.launchOrFocus("Alacritty")"#;
         self.run_hs(lua)
             .expect("Failed to run Hammerspoon focus command");
         assert!(
@@ -368,7 +368,7 @@ impl WormholeTest {
         if editor_is_none() {
             return;
         }
-        let lua = r#"hs.application.launchOrFocus("/Applications/Alacritty.app")"#;
+        let lua = r#"hs.application.launchOrFocus("Alacritty")"#;
         let _ = self.run_hs(lua);
         let _ = self.wait_for_app_focus("Alacritty", 5);
     }

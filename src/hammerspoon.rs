@@ -39,7 +39,7 @@ pub fn launch_or_focus(application_name: &str) {
     }
     hammerspoon(&format!(
         r#"
-        hs.application.launchOrFocus("/Applications/{application_name}.app")
+        hs.application.launchOrFocus("{application_name}")
     "#,
     ));
 }

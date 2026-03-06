@@ -41,7 +41,7 @@ local function startSelect(reverse)
     selectReverse = reverse
     local frontApp = hs.application.frontmostApplication()
     if not (frontApp and frontApp:name() == "Wormhole") then
-        hs.application.launchOrFocus("/Applications/Wormhole.app")
+        hs.application.launchOrFocus("Wormhole")
     end
     selectTimer = hs.timer.doEvery(M.selectRepeatInterval, function()
         if not selectTimer or not selectActive then return end
@@ -85,7 +85,7 @@ function M.select()
     if frontApp and frontApp:name() == "Wormhole" then
         hs.eventtap.keyStroke({}, "down")
     else
-        hs.application.launchOrFocus("/Applications/Wormhole.app")
+        hs.application.launchOrFocus("Wormhole")
     end
 end
 

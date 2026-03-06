@@ -5,6 +5,7 @@ local ring = require("ring")
 
 M.host = "http://localhost:7117"
 M.dashboardApp = "Google Chrome"
+M.guiAppPath = "/Applications/Wormhole.app"
 M.selectRepeatInterval = 0.08 -- seconds between cycles when holding key
 M.selectDebounce = 0.02       -- minimum seconds between down arrows
 
@@ -41,7 +42,7 @@ local function startSelect(reverse)
     selectReverse = reverse
     local frontApp = hs.application.frontmostApplication()
     if not (frontApp and frontApp:name() == "Wormhole") then
-        hs.application.launchOrFocus("Wormhole")
+        hs.application.launchOrFocus(M.guiAppPath)
     end
     selectTimer = hs.timer.doEvery(M.selectRepeatInterval, function()
         if not selectTimer or not selectActive then return end
@@ -85,7 +86,7 @@ function M.select()
     if frontApp and frontApp:name() == "Wormhole" then
         hs.eventtap.keyStroke({}, "down")
     else
-        hs.application.launchOrFocus("Wormhole")
+        hs.application.launchOrFocus(M.guiAppPath)
     end
 end
 

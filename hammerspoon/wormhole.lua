@@ -4,6 +4,7 @@ local M = {}
 local ring = require("ring")
 
 M.host = "http://localhost:7117"
+M.dashboardApp = "Google Chrome"
 M.selectRepeatInterval = 0.08 -- seconds between cycles when holding key
 M.selectDebounce = 0.02       -- minimum seconds between down arrows
 
@@ -182,25 +183,26 @@ end
 local dashboardPreviousApp = nil
 
 function M.focusDashboard()
+    local appName = M.dashboardApp
     local frontApp = hs.application.frontmostApplication()
-    local isIsland = frontApp and frontApp:name() == "Island"
+    local isBrowser = frontApp and frontApp:name() == appName
 
-    if isIsland and dashboardPreviousApp then
+    if isBrowser and dashboardPreviousApp then
         dashboardPreviousApp:activate()
         dashboardPreviousApp = nil
         return
     end
 
-    if not isIsland then
+    if not isBrowser then
         dashboardPreviousApp = frontApp
     end
 
     local dashboardUrl = M.host .. "/"
-    local script = [[
+    local script = string.format([[
         (() => {
-            const island = Application("Island");
-            island.activate();
-            const windows = island.windows();
+            const browser = Application("%s");
+            browser.activate();
+            const windows = browser.windows();
             for (const win of windows) {
                 const tabs = win.tabs();
                 for (let i = 0; i < tabs.length; i++) {
@@ -210,10 +212,10 @@ function M.focusDashboard()
                     }
                 }
             }
-            island.openLocation("]] .. dashboardUrl .. [[");
+            browser.openLocation("%s");
             return false;
         })()
-    ]]
+    ]], appName, dashboardUrl)
     hs.osascript.javascript(script)
 end
 

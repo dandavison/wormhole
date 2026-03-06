@@ -51,7 +51,7 @@ struct ProjectTextField<V: Equatable>: NSViewRepresentable {
 
         if !coordinator.hasActivated, let window = searchField.window {
             coordinator.hasActivated = true
-            if ProcessInfo.processInfo.environment["WORMHOLE_GUI_FOCUS_ON_LAUNCH"] != "0" {
+            if !NSApp.isActive {
                 NSApp.activate(ignoringOtherApps: true)
                 window.makeKeyAndOrderFront(nil)
             }

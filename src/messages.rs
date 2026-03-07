@@ -82,6 +82,15 @@ impl<'a> Store<'a> {
         notify_change();
     }
 
+    pub fn projects_with_role(&self, role: &str) -> std::collections::HashSet<String> {
+        self.0
+            .consumers
+            .values()
+            .filter(|c| c.role == role)
+            .map(|c| c.project.clone())
+            .collect()
+    }
+
     pub fn has_messages(&self, id: ConsumerId) -> bool {
         self.0
             .consumers
@@ -223,6 +232,18 @@ mod tests {
         );
         assert_eq!(store.drain(id1).len(), 1);
         assert_eq!(store.drain(id2).len(), 1);
+    }
+
+    #[test]
+    fn test_projects_with_role() {
+        let mut store = lock();
+        store.find_or_register("proj-role-1", "editor");
+        store.find_or_register("proj-role-2", "cli");
+        store.find_or_register("proj-role-3", "editor");
+        let editor_projects = store.projects_with_role("editor");
+        assert!(editor_projects.contains("proj-role-1"));
+        assert!(!editor_projects.contains("proj-role-2"));
+        assert!(editor_projects.contains("proj-role-3"));
     }
 
     #[test]

@@ -77,6 +77,8 @@ pub struct QueryParams {
     pub since: Option<String>,
     pub issue: Option<String>,
     pub bug_fix: Option<String>,
+    pub tasks: bool,
+    pub with_editor: bool,
 }
 
 pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
@@ -119,7 +121,7 @@ async fn route(
         "/project/describe" => {
             require_post_async(method, || async { describe::describe(req).await }).await
         }
-        "/project/list" => project::list_projects(params.active),
+        "/project/list" => project::list_projects(params.active, params.tasks, params.with_editor),
         "/project/neighbors" => project::neighbors(params.active),
         "/project/next" => {
             project::navigate(project::Direction::Next, params);
@@ -517,6 +519,8 @@ impl QueryParams {
             since: None,
             issue: None,
             bug_fix: None,
+            tasks: false,
+            with_editor: false,
         };
         if let Some(query) = query {
             for (key, val) in form_urlencoded::parse(query.as_bytes()) {
@@ -553,6 +557,8 @@ impl QueryParams {
                     "since" => params.since = Some(val.to_string()),
                     "issue" => params.issue = Some(val.to_string()),
                     "bug-fix" => params.bug_fix = Some(val.to_string()),
+                    "tasks" => params.tasks = val == "true" || val == "1",
+                    "with-editor" => params.with_editor = val == "true" || val == "1",
                     _ => {}
                 }
             }

@@ -15,8 +15,8 @@ use crate::{config, hammerspoon, projects, util::debug};
 /// Return JSON with current and available projects (including tasks)
 /// Includes cached JIRA/PR status for tasks
 /// If active=true, only returns projects with tmux windows
-pub fn list_projects(active_only: bool) -> Response<Body> {
-    let open_projects = if active_only {
+pub fn list_projects(active_only: bool, tasks_only: bool, with_editor: bool) -> Response<Body> {
+    let mut open_projects = if active_only {
         let window_names = crate::tmux::window_names();
         projects::lock()
             .open()
@@ -26,6 +26,13 @@ pub fn list_projects(active_only: bool) -> Response<Body> {
     } else {
         projects::lock().open()
     };
+    if tasks_only {
+        open_projects.retain(|p| p.is_task());
+    }
+    if with_editor {
+        let editor_projects = crate::messages::lock().projects_with_role("editor");
+        open_projects.retain(|p| editor_projects.contains(&p.store_key().to_string()));
+    }
 
     let current: Vec<_> = open_projects
         .into_iter()

@@ -154,6 +154,12 @@ pub enum ProjectCommand {
         /// List only projects with a tmux window
         #[arg(long)]
         active: bool,
+        /// List only tasks (projects with a branch)
+        #[arg(long)]
+        tasks: bool,
+        /// List only projects with an editor connected
+        #[arg(long)]
+        with_editor: bool,
     },
     /// Switch to the previous project
     Previous {
@@ -435,13 +441,25 @@ pub fn run(command: Command) -> Result<(), String> {
                 available,
                 name_only,
                 active,
+                tasks,
+                with_editor,
             } => {
-                let path = if active {
-                    "/project/list?active=true"
+                let mut query_parts = vec![];
+                if active {
+                    query_parts.push("active=true");
+                }
+                if tasks {
+                    query_parts.push("tasks=true");
+                }
+                if with_editor {
+                    query_parts.push("with-editor=true");
+                }
+                let path = if query_parts.is_empty() {
+                    "/project/list".to_string()
                 } else {
-                    "/project/list"
+                    format!("/project/list?{}", query_parts.join("&"))
                 };
-                let response = client.get(path)?;
+                let response = client.get(&path)?;
                 if output == "json" {
                     println!("{}", response);
                 } else if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response) {

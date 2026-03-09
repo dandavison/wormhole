@@ -113,7 +113,10 @@ fn remove_project(name: &str) -> Response<Body> {
 fn close_project(name: &str) {
     let key = ProjectKey::parse(name);
     let mut projects = projects::lock();
-    if let Some(p) = projects.by_key(&key) {
+    if let Some(p) = projects
+        .by_key(&key)
+        .or_else(|| projects.by_path(std::path::Path::new(name)))
+    {
         config::TERMINAL.close(&p);
         config::editor().close(&p);
         if p.is_task() {

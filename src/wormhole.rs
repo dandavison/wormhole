@@ -249,6 +249,12 @@ async fn route_with_params(
     if let Some(name) = path.strip_prefix("/project/remove/") {
         return require_post(method, || project::remove(name));
     }
+    if path == "/project/close-all" {
+        return require_post(method, || {
+            project::close_all();
+            Response::new(Body::from(""))
+        });
+    }
     if let Some(name) = path.strip_prefix("/project/close/") {
         return require_post(method, || {
             project::close(name);

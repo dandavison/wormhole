@@ -179,6 +179,8 @@ pub enum ProjectCommand {
         #[arg(add = ArgValueCompleter::new(complete_projects))]
         name: Option<String>,
     },
+    /// Close all open projects
+    CloseAll,
     /// Remove a project from wormhole (removes worktree for tasks)
     Remove {
         /// Project name
@@ -518,6 +520,10 @@ pub fn run(command: Command) -> Result<(), String> {
                         .unwrap_or_default()
                 });
                 client.post(&format!("/project/close/{}", name))?;
+                Ok(())
+            }
+            ProjectCommand::CloseAll => {
+                client.post("/project/close-all")?;
                 Ok(())
             }
             ProjectCommand::Remove { name } => {

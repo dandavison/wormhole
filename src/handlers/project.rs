@@ -126,6 +126,23 @@ fn close_project(name: &str) {
     projects.print();
 }
 
+fn close_all_projects() {
+    let keys: Vec<_> = {
+        let projects = projects::lock();
+        let window_names = config::TERMINAL.window_names();
+        projects
+            .open()
+            .into_iter()
+            .filter(|p| p.is_active(&window_names))
+            .map(|p| p.store_key().to_string())
+            .collect()
+    };
+    for key in &keys {
+        close_project(key);
+        thread::sleep(Duration::from_millis(200));
+    }
+}
+
 /// Refresh all in-memory data from external sources (fs, github)
 pub fn refresh_all() {
     // Refresh tasks from filesystem
@@ -263,6 +280,10 @@ pub fn remove(name: &str) -> Response<Body> {
 pub fn close(name: &str) {
     let name = name.trim().to_string();
     thread::spawn(move || close_project(&name));
+}
+
+pub fn close_all() {
+    thread::spawn(close_all_projects);
 }
 
 pub fn show(name: Option<&str>) -> Response<Body> {

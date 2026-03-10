@@ -252,6 +252,133 @@ pub fn persisted_data() -> Response<Body> {
     json_response(&report)
 }
 
+// --- list-editor-windows ---
+
+#[derive(Serialize, Deserialize)]
+pub struct EditorWindowsReport {
+    pub editor: String,
+    pub windows: Vec<EditorWindow>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct EditorWindow {
+    pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
+    pub visible: bool,
+    pub screen: String,
+}
+
+impl EditorWindowsReport {
+    pub fn render_terminal(&self) -> String {
+        use crate::project::ProjectKey;
+        self.windows
+            .iter()
+            .map(|w| match &w.project {
+                Some(key) => ProjectKey::parse(key).hyperlink(),
+                None => w.title.clone(),
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+}
+
+pub fn list_editor_windows() -> Response<Body> {
+    let editor = config::editor();
+    let app_name = editor.application_name();
+    if app_name.is_empty() {
+        return json_response(&EditorWindowsReport {
+            editor: "none".to_string(),
+            windows: vec![],
+        });
+    }
+
+    // Build lookup from encoded workspace name → project key.
+    // Workspace files encode `/` as `--` in the filename, which becomes
+    // the window title. This isn't reversible (branch names may contain
+    // `--`), so we match against known project keys.
+    let encoded_to_key: HashMap<String, String> = {
+        let projects = crate::projects::lock();
+        projects
+            .keys()
+            .into_iter()
+            .map(|k| {
+                let key_str = k.to_string();
+                let encoded = key_str.replace('/', "--");
+                (encoded, key_str)
+            })
+            .collect()
+    };
+
+    let lua = format!(
+        r#"
+        local app = hs.application.find("{app_name}")
+        if app then
+            for _, win in ipairs(app:allWindows()) do
+                local title = win:title()
+                if title and title ~= "" then
+                    local visible = win:isVisible() and "1" or "0"
+                    local screen = win:screen():name() or ""
+                    print(title .. "\t" .. visible .. "\t" .. screen)
+                end
+            end
+        end
+    "#
+    );
+    let output = crate::hammerspoon::execute(&lua);
+    let windows: Vec<EditorWindow> = String::from_utf8_lossy(&output)
+        .lines()
+        .filter(|l| !l.is_empty())
+        .filter_map(|line| {
+            let mut parts = line.splitn(3, '\t');
+            let title = parts.next()?.to_string();
+            let visible = parts.next().map(|v| v == "1").unwrap_or(true);
+            let screen = parts.next().unwrap_or("").to_string();
+            let project = parse_workspace_name(&title)
+                .and_then(|ws| encoded_to_key.get(ws))
+                .cloned();
+            Some(EditorWindow { title, project, visible, screen })
+        })
+        .collect();
+    json_response(&EditorWindowsReport {
+        editor: app_name.to_string(),
+        windows,
+    })
+}
+
+/// Extract workspace name from a VSCode/Cursor window title.
+///
+/// Titles follow the pattern: `[● ][<tab-title> — ]<workspace> (Workspace)`
+/// Returns the workspace name, or None for non-workspace windows.
+fn parse_workspace_name(title: &str) -> Option<&str> {
+    let rest = title.strip_suffix(" (Workspace)")?;
+    // The workspace name is after the last ` — ` (em dash), or the
+    // whole string if there's no em dash (no active tab title).
+    let ws = rest.rsplit_once(" \u{2014} ").map_or(rest, |(_, ws)| ws);
+    Some(ws)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_workspace_name() {
+        // filename — workspace
+        assert_eq!(parse_workspace_name("init.zsh — shell-config (Workspace)"), Some("shell-config"));
+        // workspace only (no active tab)
+        assert_eq!(parse_workspace_name("sdk-typescript (Workspace)"), Some("sdk-typescript"));
+        // unsaved file — workspace
+        assert_eq!(parse_workspace_name("● client.go — cli (Workspace)"), Some("cli"));
+        // task with encoded branch
+        assert_eq!(parse_workspace_name("cli:release--v1.6.x-standalone-activity (Workspace)"), Some("cli:release--v1.6.x-standalone-activity"));
+        // truncated text — workspace
+        assert_eq!(parse_workspace_name("Good morning. This is th… — bat (Workspace)"), Some("bat"));
+        // non-workspace window
+        assert_eq!(parse_workspace_name("● mcp-resource-1771262755954.txt"), None);
+    }
+}
+
 fn json_response<T: Serialize>(value: &T) -> Response<Body> {
     match serde_json::to_string(value) {
         Ok(json) => Response::builder()

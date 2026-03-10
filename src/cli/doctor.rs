@@ -1,4 +1,4 @@
-use crate::handlers::doctor::{ConformResult, PersistedDataReport};
+use crate::handlers::doctor::{ConformResult, EditorWindowsReport, PersistedDataReport};
 
 use super::util::Client;
 
@@ -8,6 +8,18 @@ pub(super) fn doctor_persisted_data(client: &Client, output: &str) -> Result<(),
         println!("{}", response);
     } else {
         let report: PersistedDataReport =
+            serde_json::from_str(&response).map_err(|e| e.to_string())?;
+        println!("{}", report.render_terminal());
+    }
+    Ok(())
+}
+
+pub(super) fn doctor_list_editor_windows(client: &Client, output: &str) -> Result<(), String> {
+    let response = client.get("/doctor/editor-windows")?;
+    if output == "json" {
+        println!("{}", response);
+    } else {
+        let report: EditorWindowsReport =
             serde_json::from_str(&response).map_err(|e| e.to_string())?;
         println!("{}", report.render_terminal());
     }

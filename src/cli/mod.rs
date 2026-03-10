@@ -342,6 +342,12 @@ pub enum DoctorCommand {
         #[arg(short, long, default_value = "text")]
         output: String,
     },
+    /// List open editor windows
+    ListEditorWindows {
+        /// Output format: text (default) or json
+        #[arg(short, long, default_value = "text")]
+        output: String,
+    },
     /// Conform task worktrees to desired state (.task/AGENTS.md, symlinks, etc.)
     Conform {
         /// Show what would be done without making changes
@@ -722,6 +728,9 @@ pub fn run(command: Command) -> Result<(), String> {
         Command::Doctor { command } => match command {
             DoctorCommand::PersistedData { output } => {
                 doctor::doctor_persisted_data(&client, &output)
+            }
+            DoctorCommand::ListEditorWindows { output } => {
+                doctor::doctor_list_editor_windows(&client, &output)
             }
             DoctorCommand::Conform { dry_run, output } => {
                 doctor::doctor_conform(&client, dry_run, &output)

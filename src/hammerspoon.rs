@@ -6,7 +6,7 @@ use crate::wormhole::Application;
 use crate::{config, ps};
 
 pub fn current_application() -> Application {
-    match str::from_utf8(&hammerspoon(
+    match str::from_utf8(&execute(
         r#"
         local focusedWindow = hs.window.focusedWindow()
         if focusedWindow then
@@ -37,7 +37,7 @@ pub fn launch_or_focus(application_name: &str) {
     if crate::util::debug() {
         ps!("launch_or_focus({application_name})");
     }
-    hammerspoon(&format!(
+    execute(&format!(
         r#"
         hs.application.launchOrFocus("{application_name}")
     "#,
@@ -45,10 +45,10 @@ pub fn launch_or_focus(application_name: &str) {
 }
 
 pub fn alert(message: &str) {
-    hammerspoon(&format!(r#"hs.alert.show("{message}", 0.5)"#,));
+    execute(&format!(r#"hs.alert.show("{message}", 0.5)"#,));
 }
 
-fn hammerspoon(lua: &str) -> Vec<u8> {
+pub fn execute(lua: &str) -> Vec<u8> {
     let output = Command::new("hs")
         .arg("-c")
         .arg(lua)

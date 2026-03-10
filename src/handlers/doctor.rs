@@ -337,7 +337,12 @@ pub fn list_editor_windows() -> Response<Body> {
             let project = parse_workspace_name(&title)
                 .and_then(|ws| encoded_to_key.get(ws))
                 .cloned();
-            Some(EditorWindow { title, project, visible, screen })
+            Some(EditorWindow {
+                title,
+                project,
+                visible,
+                screen,
+            })
         })
         .collect();
     json_response(&EditorWindowsReport {
@@ -365,17 +370,35 @@ mod tests {
     #[test]
     fn test_parse_workspace_name() {
         // filename — workspace
-        assert_eq!(parse_workspace_name("init.zsh — shell-config (Workspace)"), Some("shell-config"));
+        assert_eq!(
+            parse_workspace_name("init.zsh — shell-config (Workspace)"),
+            Some("shell-config")
+        );
         // workspace only (no active tab)
-        assert_eq!(parse_workspace_name("sdk-typescript (Workspace)"), Some("sdk-typescript"));
+        assert_eq!(
+            parse_workspace_name("sdk-typescript (Workspace)"),
+            Some("sdk-typescript")
+        );
         // unsaved file — workspace
-        assert_eq!(parse_workspace_name("● client.go — cli (Workspace)"), Some("cli"));
+        assert_eq!(
+            parse_workspace_name("● client.go — cli (Workspace)"),
+            Some("cli")
+        );
         // task with encoded branch
-        assert_eq!(parse_workspace_name("cli:release--v1.6.x-standalone-activity (Workspace)"), Some("cli:release--v1.6.x-standalone-activity"));
+        assert_eq!(
+            parse_workspace_name("cli:release--v1.6.x-standalone-activity (Workspace)"),
+            Some("cli:release--v1.6.x-standalone-activity")
+        );
         // truncated text — workspace
-        assert_eq!(parse_workspace_name("Good morning. This is th… — bat (Workspace)"), Some("bat"));
+        assert_eq!(
+            parse_workspace_name("Good morning. This is th… — bat (Workspace)"),
+            Some("bat")
+        );
         // non-workspace window
-        assert_eq!(parse_workspace_name("● mcp-resource-1771262755954.txt"), None);
+        assert_eq!(
+            parse_workspace_name("● mcp-resource-1771262755954.txt"),
+            None
+        );
     }
 }
 

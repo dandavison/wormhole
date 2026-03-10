@@ -200,18 +200,15 @@ async fn route(
         "/kv" => crate::kv::list_all_kv_fresh(),
         "/conversations/sync" => require_post(method, || {
             let projects = project_dirs_for_sync();
-            let filter: Option<Vec<&str>> = params.project.as_deref().map(|p| {
-                p.split(',').map(|s| s.trim()).collect()
-            });
+            let filter: Option<Vec<&str>> = params
+                .project
+                .as_deref()
+                .map(|p| p.split(',').map(|s| s.trim()).collect());
             let since = params
                 .since
                 .as_deref()
                 .and_then(crate::conversations::parse_since);
-            let result = crate::conversations::sync(
-                &projects,
-                filter.as_deref(),
-                since,
-            );
+            let result = crate::conversations::sync(&projects, filter.as_deref(), since);
             Response::builder()
                 .header("Content-Type", "application/json")
                 .body(Body::from(serde_json::to_string(&result).unwrap()))
@@ -268,7 +265,11 @@ async fn route_with_params(
         return require_post(method, || project::refresh_project(name));
     }
     if let Some(branch) = path.strip_prefix("/project/create/") {
-        return project::create_task(branch, params.home_project.as_deref(), params.bug_fix.as_deref());
+        return project::create_task(
+            branch,
+            params.home_project.as_deref(),
+            params.bug_fix.as_deref(),
+        );
     }
     if let Some(name) = path.strip_prefix("/project/switch/") {
         return cors_response(project::switch(name, params, params.sync));

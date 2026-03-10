@@ -41,4 +41,3 @@ pub(super) fn doctor_conform(client: &Client, dry_run: bool, output: &str) -> Re
     }
     Ok(())
 }
-

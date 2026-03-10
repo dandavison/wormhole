@@ -494,7 +494,13 @@ pub(super) fn task_upsert(
     }
 
     // Create/ensure new task exists
-    upsert_task(client, &home, &branch, jira_key.as_deref(), bug_fix.as_deref())?;
+    upsert_task(
+        client,
+        &home,
+        &branch,
+        jira_key.as_deref(),
+        bug_fix.as_deref(),
+    )?;
 
     // Delete old worktree if moving to a new location
     if is_move {

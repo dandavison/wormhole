@@ -756,7 +756,6 @@ fn update_sessions_index(
     Ok(())
 }
 
-
 pub fn parse_claude_code_jsonl(path: &Path) -> Result<Vec<Message>, String> {
     let content =
         std::fs::read_to_string(path).map_err(|e| format!("read {}: {}", path.display(), e))?;
@@ -1122,10 +1121,7 @@ mod tests {
         let uuid = "8afac8bb-1234-5678-9abc-def012345678";
         let header = format!("# wormhole | 2026-02-25 | {}\n", uuid);
         let result = parse_header_line(&header);
-        assert_eq!(
-            result,
-            Some(("wormhole".to_string(), uuid.to_string()))
-        );
+        assert_eq!(result, Some(("wormhole".to_string(), uuid.to_string())));
     }
 
     #[test]

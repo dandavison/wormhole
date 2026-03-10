@@ -328,7 +328,11 @@ pub fn refresh_project(name: &str) -> Response<Body> {
     }
 }
 
-pub fn create_task(branch: &str, home_project: Option<&str>, bug_fix: Option<&str>) -> Response<Body> {
+pub fn create_task(
+    branch: &str,
+    home_project: Option<&str>,
+    bug_fix: Option<&str>,
+) -> Response<Body> {
     let branch = branch.trim();
     let repo = match home_project {
         Some(r) => r,

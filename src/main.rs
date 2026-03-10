@@ -1,8 +1,8 @@
 mod agent;
-mod conversations;
 mod batch;
 mod cli;
 mod config;
+mod conversations;
 mod editor;
 mod git;
 mod github;

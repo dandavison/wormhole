@@ -197,11 +197,7 @@ pub fn create_task(repo: &str, branch: &str) -> Result<Project, String> {
     Ok(task)
 }
 
-pub fn open_task(
-    repo: &str,
-    branch: &str,
-    land_in: Option<LandIn>,
-) -> Result<(), String> {
+pub fn open_task(repo: &str, branch: &str, land_in: Option<LandIn>) -> Result<(), String> {
     let project = if let Some(task) = get_task_by_branch(repo, branch) {
         task
     } else {
@@ -406,8 +402,13 @@ pub fn create_issue_task(
     home_project: Option<&str>,
     dry_run: bool,
 ) -> Result<IssueTaskResult, String> {
-    let (owner, repo_name, number) = crate::github::parse_issue_ref(issue_ref)
-        .ok_or_else(|| format!("Cannot parse issue reference '{}'. Expected GitHub URL or owner/repo#123", issue_ref))?;
+    let (owner, repo_name, number) =
+        crate::github::parse_issue_ref(issue_ref).ok_or_else(|| {
+            format!(
+                "Cannot parse issue reference '{}'. Expected GitHub URL or owner/repo#123",
+                issue_ref
+            )
+        })?;
 
     let issue = crate::github::get_issue(&owner, &repo_name, number)?;
 
@@ -417,7 +418,10 @@ pub fn create_issue_task(
         let repo_map = build_github_repo_map();
         let nwo = format!("{}/{}", owner, repo_name);
         repo_map.get(&nwo).cloned().ok_or_else(|| {
-            format!("No local project for {}. Use --home-project to specify.", nwo)
+            format!(
+                "No local project for {}. Use --home-project to specify.",
+                nwo
+            )
         })?
     };
 
@@ -709,4 +713,3 @@ mod tests {
         );
     }
 }
-

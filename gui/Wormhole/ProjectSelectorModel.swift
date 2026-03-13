@@ -117,7 +117,7 @@ internal final class ProjectSelectorModel<V: Equatable>: ObservableObject {
         Task {
             do {
                 if let name = project.value as? String {
-                    try await openProject(name: name, landInTerminal: modifier)
+                    try await openProject(name: name, landInEditor: modifier)
                 }
                 await NSApplication.shared.terminate(nil)
             } catch {
@@ -126,9 +126,9 @@ internal final class ProjectSelectorModel<V: Equatable>: ObservableObject {
         }
     }
 
-    internal func openProject(name: String, landInTerminal: Bool) async throws {
+    internal func openProject(name: String, landInEditor: Bool) async throws {
         var url = "http://localhost:7117/project/switch/" + name
-        if landInTerminal {
+        if !landInEditor {
             url = url + "?land-in=terminal"
         }
         let _ = try await URLSession.shared.data(from: URL(string: url)!)

@@ -172,12 +172,12 @@ struct ProjectTextField<V: Equatable>: NSViewRepresentable {
             }
 
             if commandSelector == #selector(NSResponder.insertNewline(_:)) {
-                let landInTerminal = NSApp.currentEvent?.modifierFlags.contains(.shift) ?? false
+                let landInEditor = NSApp.currentEvent?.modifierFlags.contains(.shift) ?? false
                 if let project = self.model.selectedProject {
-                    self.model.confirmProject(project, modifier: landInTerminal)
+                    self.model.confirmProject(project, modifier: landInEditor)
                 } else if self.model.projects.count == 1, let only = self.model.projects.first {
                     // Auto-select when there's exactly one match
-                    self.model.confirmProject(only, modifier: landInTerminal)
+                    self.model.confirmProject(only, modifier: landInEditor)
                 }
 
                 return true

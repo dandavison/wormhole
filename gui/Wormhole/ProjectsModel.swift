@@ -29,7 +29,7 @@ struct ProjectsResponse: Codable {
 }
 
 enum SelectorMode: Int, CaseIterable {
-    case current = 0
+    case active = 0
     case available = 1
 
     func next() -> SelectorMode {
@@ -40,10 +40,10 @@ enum SelectorMode: Int, CaseIterable {
 }
 
 final class ProjectsModel: ObservableObject {
-    var currentProjects: [ProjectInfo] = []
+    var activeProjects: [ProjectInfo] = []
     var availableProjects: [String] = []
 
-    @Published var mode: SelectorMode = .current
+    @Published var mode: SelectorMode = .active
     @Published var currentText: String = ""
     @Published var projects: [Project<String>] = []
     @Published var currentProject: String?
@@ -51,9 +51,16 @@ final class ProjectsModel: ObservableObject {
     private var cancellables: Set<AnyCancellable> = []
 
     func fetchProjects() async throws -> ProjectsResponse {
-        let url = URL(string: "http://localhost:7117/project/list")!
+        let url = URL(string: "http://localhost:7117/project/list?active=true")!
         let (data, _) = try await URLSession.shared.data(from: url)
         return try JSONDecoder().decode(ProjectsResponse.self, from: data)
+    }
+
+    func fetchAvailable() async throws -> [String] {
+        let url = URL(string: "http://localhost:7117/project/list")!
+        let (data, _) = try await URLSession.shared.data(from: url)
+        let response = try JSONDecoder().decode(ProjectsResponse.self, from: data)
+        return response.available
     }
 
     func toggleMode() {
@@ -66,12 +73,12 @@ final class ProjectsModel: ObservableObject {
     private func updateProjectsList() {
         let text = currentText.lowercased()
         switch mode {
-        case .current:
-            let filtered = text.isEmpty ? currentProjects : currentProjects.filter {
+        case .active:
+            let filtered = text.isEmpty ? activeProjects : activeProjects.filter {
                 $0.name.lowercased().contains(text) ||
                 ($0.branch?.lowercased().contains(text) ?? false)
             }
-            self.projects = formatAligned(filtered, allProjects: currentProjects)
+            self.projects = formatAligned(filtered, allProjects: activeProjects)
         case .available:
             let filtered = text.isEmpty ? availableProjects : availableProjects.filter {
                 $0.lowercased().contains(text)
@@ -112,11 +119,13 @@ final class ProjectsModel: ObservableObject {
     init() {
         Task {
             do {
-                let response = try await fetchProjects()
+                async let activeResponse = fetchProjects()
+                async let availableList = fetchAvailable()
+                let (active, available) = try await (activeResponse, availableList)
 
                 await MainActor.run {
-                    self.currentProjects = response.current
-                    self.availableProjects = response.available
+                    self.activeProjects = active.current
+                    self.availableProjects = available
                     self.updateProjectsList()
                 }
 

@@ -76,7 +76,6 @@ pub struct QueryParams {
     pub wait: Option<u64>,
     pub since: Option<String>,
     pub issue: Option<String>,
-    pub bug_fix: Option<String>,
     pub tasks: bool,
     pub with_editor: bool,
 }
@@ -143,9 +142,10 @@ async fn route(
             projects::refresh_tasks();
             Response::new(Body::from(""))
         }),
-        "/task/notify-agent" => {
-            require_post_async(method, || async { crate::task::notify_agent(req).await }).await
-        }
+        "/task/notify-agent" => Response::builder()
+            .status(StatusCode::GONE)
+            .body(Body::from("removed"))
+            .unwrap(),
         "/task/create-from-review-requests" => require_post(method, || {
             match crate::task::create_review_tasks(params.dry_run) {
                 Ok(result) => Response::builder()
@@ -265,11 +265,7 @@ async fn route_with_params(
         return require_post(method, || project::refresh_project(name));
     }
     if let Some(branch) = path.strip_prefix("/project/create/") {
-        return project::create_task(
-            branch,
-            params.home_project.as_deref(),
-            params.bug_fix.as_deref(),
-        );
+        return project::create_task(branch, params.home_project.as_deref());
     }
     if let Some(name) = path.strip_prefix("/project/switch/") {
         return cors_response(project::switch(name, params, params.sync));
@@ -526,7 +522,6 @@ impl QueryParams {
             wait: None,
             since: None,
             issue: None,
-            bug_fix: None,
             tasks: false,
             with_editor: false,
         };
@@ -564,7 +559,6 @@ impl QueryParams {
                     "wait" => params.wait = val.parse().ok(),
                     "since" => params.since = Some(val.to_string()),
                     "issue" => params.issue = Some(val.to_string()),
-                    "bug-fix" => params.bug_fix = Some(val.to_string()),
                     "tasks" => params.tasks = val == "true" || val == "1",
                     "with-editor" => params.with_editor = val == "true" || val == "1",
                     _ => {}

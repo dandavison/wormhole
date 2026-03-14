@@ -29,7 +29,7 @@ Wormhole is a tool for working on software projects.
   discover it using the repo remote that is stored by git on disk.)
 
 - Wormhole is a process exposing an HTTP API, with a CLI client that is a thin wrapper over the HTTP
-  API. The CLI API includes `wormhole project list`, `wormhole task upsert`,
+  API. The CLI API includes `wormhole project list`, `wormhole task create`,
   `wormhole project switch`, etc.
 
 - On server start, `wormhole project list` lists all tasks discovered on disk.
@@ -161,8 +161,7 @@ wormhole kv get myapp land-in           # Get KV
 wormhole kv set myapp land-in editor    # Set KV
 wormhole kv delete myapp land-in        # Delete KV
 wormhole kv list myapp                  # List all KV for project
-wormhole task upsert <target>           # Create or update a task
-wormhole task upsert <target> --bug-fix "desc" --start  # Create bug-fix task and start agent
+wormhole task create <target>           # Create or update a task
 wormhole task create-from-sprint        # Create tasks for all sprint issues
 wormhole task create-from-review-requests # Create tasks from PR review requests
 wormhole jira sprint list               # List JIRA sprint issues
@@ -197,7 +196,6 @@ wormhole completion bash                # Generate shell completions
 | POST   | `/project/refresh`            | Refresh all in-memory data        |
 | POST   | `/project/refresh/<name>`     | Refresh single project            |
 | POST   | `/project/refresh-tasks`      | Refresh task worktrees            |
-| POST   | `/task/notify-agent`          | Notify agent                      |
 | POST   | `/task/create-from-review-requests` | Create review tasks          |
 | POST   | `/batch`                      | Start a new batch                 |
 | GET    | `/batch`                      | List batches                      |
@@ -219,7 +217,7 @@ wormhole completion bash                # Generate shell completions
 | GET    | `/kv/<project>`               | List project KV                   |
 | GET    | `/kv`                         | List all KV                       |
 
-Query params: `land-in=terminal|editor|terminal-only|none`, `line=N`, `home-project=<project>`, `branch=<branch>`, `active=true`, `current=true`, `completed=true`, `dry-run=true`, `sync=true`, `pwd=<path>`, `run=<id>`, `offset=N`, `role=<role>`, `wait=N`, `bug-fix=<description>`
+Query params: `land-in=terminal|editor|terminal-only|none`, `line=N`, `home-project=<project>`, `branch=<branch>`, `active=true`, `current=true`, `completed=true`, `dry-run=true`, `sync=true`, `pwd=<path>`, `run=<id>`, `offset=N`, `role=<role>`, `wait=N`
 
 ## Message Intents
 

@@ -213,7 +213,7 @@ pub(super) fn task_create_from_sprint(client: &Client) -> Result<(), String> {
         // Final confirmation before creating
         let task_key = ProjectKey::task(&home, &branch);
         println!("  Creating {} for {}", task_key.hyperlink(), issue.key);
-        upsert_task(client, &home, &branch, Some(&issue.key), None)?;
+        ensure_task(client, &home, &branch, Some(&issue.key))?;
         println!("  Created {}", task_key.hyperlink());
         created_count += 1;
     }
@@ -320,8 +320,8 @@ pub(super) fn task_create_from_issue(
     Ok(())
 }
 
-/// Represents a parsed task target for the upsert command
-enum UpsertTarget {
+/// Represents a parsed task target for the create command
+enum CreateTarget {
     /// A project key like "repo:branch"
     ProjectKey { repo: String, branch: String },
     /// A JIRA key (bare like "ACT-123" or extracted from URL)
@@ -367,34 +367,24 @@ fn get_task_info(client: &Client, repo: &str, branch: &str) -> Result<Option<Str
     }
 }
 
-pub(super) fn task_upsert(
+pub(super) fn task_create(
     client: &Client,
     target: &str,
     home_project: Option<String>,
-    bug_fix: Option<String>,
-    start: bool,
 ) -> Result<(), String> {
-    if start && bug_fix.is_none() {
-        return Err("--start requires --bug-fix".to_string());
-    }
-
     // Refresh to get latest task list
     let _ = client.post("/project/refresh-tasks");
 
     // Parse target to determine what we're working with
-    let (upsert_target, existing_task) = parse_upsert_target(client, target)?;
-
-    if bug_fix.is_some() && existing_task.is_some() {
-        return Err("--bug-fix requires a new task (task already exists)".to_string());
-    }
+    let (create_target, existing_task) = parse_create_target(client, target)?;
 
     // Get JIRA info if we have a JIRA key
-    let (jira_key, jira_issue) = match &upsert_target {
-        UpsertTarget::JiraKey(key) => {
+    let (jira_key, jira_issue) = match &create_target {
+        CreateTarget::JiraKey(key) => {
             let issue = jira::get_issue(key)?;
             (Some(key.clone()), issue)
         }
-        UpsertTarget::ProjectKey { repo, branch } => {
+        CreateTarget::ProjectKey { repo, branch } => {
             // Check if existing task has a JIRA key
             match get_task_info(client, repo, branch)? {
                 Some(key) => {
@@ -416,10 +406,10 @@ pub(super) fn task_upsert(
     }
 
     // Determine defaults
-    let (default_home, default_branch) = match (&existing_task, &upsert_target) {
+    let (default_home, default_branch) = match (&existing_task, &create_target) {
         (Some((repo, branch)), _) => (repo.clone(), branch.clone()),
-        (None, UpsertTarget::ProjectKey { repo, branch }) => (repo.clone(), branch.clone()),
-        (None, UpsertTarget::JiraKey(_)) => {
+        (None, CreateTarget::ProjectKey { repo, branch }) => (repo.clone(), branch.clone()),
+        (None, CreateTarget::JiraKey(_)) => {
             let home = home_project
                 .clone()
                 .or_else(|| std::env::var("WORMHOLE_DEFAULT_HOME_PROJECT").ok())
@@ -494,13 +484,7 @@ pub(super) fn task_upsert(
     }
 
     // Create/ensure new task exists
-    upsert_task(
-        client,
-        &home,
-        &branch,
-        jira_key.as_deref(),
-        bug_fix.as_deref(),
-    )?;
+    ensure_task(client, &home, &branch, jira_key.as_deref())?;
 
     // Delete old worktree if moving to a new location
     if is_move {
@@ -524,33 +508,17 @@ pub(super) fn task_upsert(
         println!("Created task {}", task_key.hyperlink());
     }
 
-    if start {
-        let store_key = task_key.to_string();
-        client.get(&format!("/project/switch/{}?land-in=editor", store_key))?;
-        let body = serde_json::json!({
-            "target": "editor",
-            "message": {
-                "jsonrpc": "2.0",
-                "method": "claude-code/start",
-                "params": {
-                    "prompt": "Hi. Please work on the task in your instructions."
-                }
-            }
-        });
-        client.post_json(&format!("/project/messages/{}", store_key), &body)?;
-    }
-
     Ok(())
 }
 
-fn parse_upsert_target(
+fn parse_create_target(
     client: &Client,
     target: &str,
-) -> Result<(UpsertTarget, Option<(String, String)>), String> {
+) -> Result<(CreateTarget, Option<(String, String)>), String> {
     // First, check if it's a JIRA URL or key
     if let Some(jira_key) = crate::handlers::describe::parse_jira_key_or_url(target) {
         let existing = find_task_by_jira_key(client, &jira_key)?;
-        return Ok((UpsertTarget::JiraKey(jira_key), existing));
+        return Ok((CreateTarget::JiraKey(jira_key), existing));
     }
 
     // Check if it's a project key (repo:branch)
@@ -565,7 +533,7 @@ fn parse_upsert_target(
             None
         };
         return Ok((
-            UpsertTarget::ProjectKey {
+            CreateTarget::ProjectKey {
                 repo: repo.to_string(),
                 branch: branch.to_string(),
             },
@@ -580,19 +548,14 @@ fn parse_upsert_target(
 }
 
 /// Create or update a task with optional JIRA key
-fn upsert_task(
+fn ensure_task(
     client: &Client,
     home: &str,
     branch: &str,
     jira_key: Option<&str>,
-    bug_fix: Option<&str>,
 ) -> Result<(), String> {
     // Create the worktree/task
-    let mut url = format!("/project/create/{}?home-project={}", branch, home);
-    if let Some(desc) = bug_fix {
-        let encoded: String = url::form_urlencoded::byte_serialize(desc.as_bytes()).collect();
-        url.push_str(&format!("&bug-fix={}", encoded));
-    }
+    let url = format!("/project/create/{}?home-project={}", branch, home);
     client.get(&url)?;
 
     // Store JIRA key if provided

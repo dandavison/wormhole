@@ -1,148 +1,10 @@
-use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 use std::thread;
-
-use hyper::{Body, Request, Response, StatusCode};
-use lazy_static::lazy_static;
-use serde::Deserialize;
 
 use crate::project::ProjectKey;
 use crate::wormhole::LandIn;
-use crate::{batch, config, editor, git, project::Project, projects, util::warn};
-
-lazy_static! {
-    static ref AGENT_BATCHES: Mutex<HashMap<String, String>> = Mutex::new(HashMap::new());
-}
-
-/// Look up the current agent batch ID for a task (if still running).
-pub fn agent_batch_id(task: &str) -> Option<String> {
-    let map = AGENT_BATCHES.lock().unwrap();
-    let batch_id = map.get(task)?;
-    let store = batch::lock();
-    store
-        .get(batch_id)
-        .filter(|b| !b.is_done())
-        .map(|_| batch_id.clone())
-}
-
-#[derive(Deserialize)]
-struct NotifyAgentRequest {
-    task: String,
-    prompt: Option<String>,
-    agent: Option<String>,
-}
-
-/// HTTP handler for POST /task/notify-agent
-pub async fn notify_agent(req: Request<Body>) -> Response<Body> {
-    let body_bytes = hyper::body::to_bytes(req.into_body()).await.unwrap();
-    let request: Result<NotifyAgentRequest, _> = serde_json::from_slice(&body_bytes);
-    let request = match request {
-        Ok(r) => r,
-        Err(e) => {
-            return Response::builder()
-                .status(StatusCode::BAD_REQUEST)
-                .body(Body::from(format!("Invalid JSON: {}", e)))
-                .unwrap();
-        }
-    };
-
-    // Check concurrency: one agent per task
-    {
-        let map = AGENT_BATCHES.lock().unwrap();
-        if let Some(batch_id) = map.get(&request.task) {
-            let store = batch::lock();
-            if let Some(b) = store.get(batch_id) {
-                if !b.is_done() {
-                    let agent = crate::agent::default_agent();
-                    let json = serde_json::json!({
-                        "status": "running",
-                        "batch_id": batch_id,
-                        "agent": agent.name(),
-                    });
-                    return Response::builder()
-                        .status(StatusCode::CONFLICT)
-                        .header("Content-Type", "application/json")
-                        .body(Body::from(json.to_string()))
-                        .unwrap();
-                }
-            }
-        }
-    }
-
-    // Look up task to get worktree path
-    let key = ProjectKey::parse(&request.task);
-    let project = {
-        let projects = projects::lock();
-        projects.by_key(&key)
-    };
-    let project = match project {
-        Some(p) => p,
-        None => {
-            return Response::builder()
-                .status(StatusCode::NOT_FOUND)
-                .body(Body::from(format!("Task not found: {}", request.task)))
-                .unwrap();
-        }
-    };
-    let prompt = request
-        .prompt
-        .or_else(|| resolve_prompt(&project))
-        .unwrap_or_default();
-    let agent = request
-        .agent
-        .as_deref()
-        .and_then(crate::agent::Agent::parse)
-        .unwrap_or_else(crate::agent::default_agent);
-    let command = agent.command(&prompt);
-
-    if agent.is_interactive() {
-        if let Err(e) = crate::tmux::split_pane(&project, &command) {
-            return Response::builder()
-                .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .body(Body::from(format!("Failed to open tmux pane: {}", e)))
-                .unwrap();
-        }
-        let json = serde_json::json!({ "status": "interactive" });
-        return Response::builder()
-            .header("Content-Type", "application/json")
-            .body(Body::from(json.to_string()))
-            .unwrap();
-    }
-
-    let dir = project.working_tree();
-    let batch_id = batch::create_batch(batch::BatchRequest {
-        command,
-        runs: vec![batch::RunSpec {
-            key: request.task.clone(),
-            dir,
-        }],
-    });
-    batch::spawn_batch(&batch_id);
-
-    {
-        let mut map = AGENT_BATCHES.lock().unwrap();
-        map.insert(request.task, batch_id.clone());
-    }
-
-    let json = serde_json::json!({
-        "status": "running",
-        "batch_id": batch_id,
-        "agent": agent.name(),
-    });
-    Response::builder()
-        .header("Content-Type", "application/json")
-        .body(Body::from(json.to_string()))
-        .unwrap()
-}
-
-fn resolve_prompt(project: &Project) -> Option<String> {
-    match project.kv.get("task_type").map(|s| s.as_str()) {
-        Some("review") => crate::prompts::review_comments(project),
-        _ => None,
-    }
-}
+use crate::{config, editor, git, project::Project, projects, util::warn};
 
 pub fn get_task(key: &ProjectKey) -> Option<Project> {
     let projects = projects::lock();
@@ -363,7 +225,6 @@ pub fn create_review_tasks(dry_run: bool) -> Result<ReviewTaskResult, String> {
                     result.errors.push(format!("{}: {}", task_key, e));
                     continue;
                 }
-                write_review_agents_md(&worktree, &pr.url, &pr.title);
                 let key = ProjectKey::task(&home, &branch);
                 crate::kv::set_value_sync(&key, "task_type", "review");
                 crate::kv::set_value_sync(&key, "review_pr_url", &pr.url);
@@ -453,9 +314,7 @@ pub fn create_issue_task(
         });
     }
 
-    let task = create_task(&home, &branch)?;
-    let worktree = task.working_tree();
-    write_issue_agents_md(&worktree, &issue);
+    let _task = create_task(&home, &branch)?;
     let key = ProjectKey::task(&home, &branch);
     crate::kv::set_value_sync(&key, "task_type", "issue");
     crate::kv::set_value_sync(&key, "github_issue_url", &issue.url);
@@ -469,20 +328,6 @@ pub fn create_issue_task(
     })
 }
 
-pub fn write_bug_fix_agents_md(worktree_path: &Path, description: &str) {
-    if let Some(content) = crate::prompts::bug_fix_task(description) {
-        let agents_path = worktree_path.join(".task/AGENTS.md");
-        let _ = fs::write(&agents_path, content);
-    }
-}
-
-fn write_issue_agents_md(worktree_path: &Path, issue: &crate::github::GithubIssue) {
-    if let Some(content) = crate::prompts::issue_task(&issue.url, &issue.title, &issue.body) {
-        let agents_path = worktree_path.join(".task/AGENTS.md");
-        let _ = fs::write(&agents_path, content);
-    }
-}
-
 fn build_github_repo_map() -> std::collections::HashMap<String, String> {
     let mut map = std::collections::HashMap::new();
     for (name, path) in config::available_projects() {
@@ -491,15 +336,6 @@ fn build_github_repo_map() -> std::collections::HashMap<String, String> {
         }
     }
     map
-}
-
-fn write_review_agents_md(worktree_path: &Path, pr_url: &str, pr_title: &str) {
-    let agents_path = worktree_path.join(".task/AGENTS.md");
-    let content = format!(
-        "Your task is to review this pull request:\n\n{}\n\nTitle: {}\n",
-        pr_url, pr_title
-    );
-    let _ = fs::write(&agents_path, content);
 }
 
 fn resolve_project_path(project_name: &str) -> Result<PathBuf, String> {
@@ -671,32 +507,6 @@ mod tests {
         assert!(!actions.is_empty());
         assert!(!worktree.join(".task").exists());
         assert!(!worktree.join("CLAUDE.md").exists());
-    }
-
-    #[test]
-    fn agent_batch_id_none_when_done() {
-        let batch = batch::Batch {
-            id: "test-done".into(),
-            command: vec!["echo".into()],
-            created_at: std::time::SystemTime::now(),
-            runs: vec![batch::Run {
-                key: "r".into(),
-                dir: PathBuf::from("/tmp"),
-                status: batch::RunStatus::Failed,
-                exit_code: Some(1),
-                stdout_path: PathBuf::from("/dev/null"),
-                stderr_path: PathBuf::from("/dev/null"),
-                pid: None,
-                started_at: None,
-                finished_at: None,
-            }],
-        };
-        batch::lock().insert(batch);
-        AGENT_BATCHES
-            .lock()
-            .unwrap()
-            .insert("my-task".into(), "test-done".into());
-        assert!(agent_batch_id("my-task").is_none());
     }
 
     #[test]

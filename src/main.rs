@@ -1,4 +1,3 @@
-mod agent;
 mod batch;
 mod cli;
 mod config;
@@ -14,7 +13,6 @@ mod messages;
 mod project;
 mod project_path;
 mod projects;
-mod prompts;
 mod serve_web;
 mod status;
 mod task;

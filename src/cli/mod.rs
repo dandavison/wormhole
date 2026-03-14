@@ -87,19 +87,13 @@ pub enum JiraCommand {
 #[derive(Subcommand)]
 pub enum TaskCommand {
     /// Create or update a task
-    Upsert {
+    Create {
         /// Target: project key (repo:branch), JIRA URL, or JIRA key (ACT-123)
         #[arg(add = ArgValueCompleter::new(complete_projects))]
         target: String,
         /// Home project for the worktree (required for create)
         #[arg(short = 'p', long, add = ArgValueCompleter::new(complete_projects))]
         home_project: Option<String>,
-        /// Seed AGENTS.md with bug-fix prompt (task must not already exist)
-        #[arg(long)]
-        bug_fix: Option<String>,
-        /// Start a Claude Code conversation (requires --bug-fix)
-        #[arg(long)]
-        start: bool,
     },
     /// Create tasks from current sprint issues
     CreateFromSprint,
@@ -700,12 +694,10 @@ pub fn run(command: Command) -> Result<(), String> {
         },
 
         Command::Task { command } => match command {
-            TaskCommand::Upsert {
+            TaskCommand::Create {
                 target,
                 home_project,
-                bug_fix,
-                start,
-            } => task::task_upsert(&client, &target, home_project, bug_fix, start),
+            } => task::task_create(&client, &target, home_project),
             TaskCommand::CreateFromSprint => task::task_create_from_sprint(&client),
             TaskCommand::CreateFromReviewRequests { dry_run } => {
                 task::task_create_from_review_requests(&client, dry_run)

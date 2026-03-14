@@ -26,8 +26,6 @@ pub struct DescribeResponse {
     pub github_label: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub task_type: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub agent_batch_id: Option<String>,
 }
 
 impl DescribeResponse {
@@ -42,7 +40,6 @@ impl DescribeResponse {
             github_url: None,
             github_label: None,
             task_type: None,
-            agent_batch_id: None,
         }
     }
 }
@@ -132,7 +129,6 @@ fn describe_github(gh: &GitHubUrl) -> DescribeResponse {
     match task_match {
         Some(task) => {
             let name = task.store_key.to_string();
-            let agent_batch_id = crate::task::agent_batch_id(&name);
             DescribeResponse {
                 name: Some(name),
                 kind: Some("task".to_string()),
@@ -143,7 +139,6 @@ fn describe_github(gh: &GitHubUrl) -> DescribeResponse {
                 github_url: None,
                 github_label: None,
                 task_type: task.task_type,
-                agent_batch_id,
             }
         }
         None if gh.pr.is_some() => {
@@ -158,7 +153,6 @@ fn describe_github(gh: &GitHubUrl) -> DescribeResponse {
                 github_url: None,
                 github_label: None,
                 task_type: None,
-                agent_batch_id: None,
             }
         }
         None => DescribeResponse {
@@ -171,7 +165,6 @@ fn describe_github(gh: &GitHubUrl) -> DescribeResponse {
             github_url: None,
             github_label: None,
             task_type: None,
-            agent_batch_id: None,
         },
     }
 }
@@ -234,7 +227,6 @@ fn describe_jira(jira_key: &str) -> DescribeResponse {
         let jira_url = jira_url_for_key(jira_key);
         let name = project.store_key().to_string();
         let task_type = project.kv.get("task_type").cloned();
-        let agent_batch_id = crate::task::agent_batch_id(&name);
 
         DescribeResponse {
             name: Some(name),
@@ -250,7 +242,6 @@ fn describe_jira(jira_key: &str) -> DescribeResponse {
             github_url,
             github_label,
             task_type,
-            agent_batch_id,
         }
     } else {
         // No task found - don't show buttons
@@ -264,7 +255,6 @@ fn describe_jira(jira_key: &str) -> DescribeResponse {
             github_url: None,
             github_label: None,
             task_type: None,
-            agent_batch_id: None,
         }
     }
 }

@@ -226,8 +226,8 @@ pub fn open_workspace(project: &Project) {
         return;
     }
     let project_dir = project.root().absolute_path();
-    match editor {
-        None => {}
+    let result = match editor {
+        None => Ok(()),
         Cursor | VSCode | VSCodeInsiders => {
             let workspace_path = match resolve_workspace_file(project) {
                 Ok(p) => p,
@@ -240,21 +240,22 @@ pub fn open_workspace(project: &Project) {
                 editor.cli_executable_name(),
                 ["--new-window", workspace_path.to_str().unwrap()],
                 project_dir,
-            );
+            )
+            .map(|_| ())
         }
-        Emacs => {
-            execute_command("emacsclient", ["-n", "."], project_dir);
-        }
-        IntelliJ | PyCharm | PyCharmCE => {
-            execute_command(
-                "bash",
-                [
-                    "-c",
-                    &format!("{} . >& /dev/null &", editor.cli_executable_name()),
-                ],
-                project_dir,
-            );
-        }
+        Emacs => execute_command("emacsclient", ["-n", "."], project_dir).map(|_| ()),
+        IntelliJ | PyCharm | PyCharmCE => execute_command(
+            "bash",
+            [
+                "-c",
+                &format!("{} . >& /dev/null &", editor.cli_executable_name()),
+            ],
+            project_dir,
+        )
+        .map(|_| ()),
+    };
+    if let Err(e) = result {
+        crate::util::error(&e);
     }
 }
 
@@ -288,14 +289,14 @@ pub fn open_path(path: &ProjectPath) -> Result<(), String> {
     let root_abspath = root.absolute_path();
 
     if *editor == Emacs {
-        execute_command("emacsclient", ["-n", "."], &root_abspath);
+        execute_command("emacsclient", ["-n", "."], &root_abspath)?;
         return Ok(());
     }
 
     // Open workspace file (fast via URI, sets correct window title)
     let workspace_path = resolve_workspace_file(&path.project)?;
     if let Some(uri) = editor.open_directory_uri(&workspace_path) {
-        execute_command("open", ["-g", uri.as_str()], &root_abspath);
+        execute_command("open", ["-g", uri.as_str()], &root_abspath)?;
     }
 
     let file_line_uri = if path.absolute_path().is_dir() {
@@ -304,7 +305,7 @@ pub fn open_path(path: &ProjectPath) -> Result<(), String> {
         editor.open_file_uri(&path.absolute_path(), line)
     };
     if let Some(file_line_uri) = file_line_uri {
-        execute_command("open", [file_line_uri.as_str()], &root_abspath);
+        execute_command("open", [file_line_uri.as_str()], &root_abspath)?;
     }
     Ok(())
 }

@@ -48,7 +48,7 @@ pub fn open(project: &Project) -> Result<(), String> {
         "wezterm",
         ["cli", "activate-tab", "--tab-id", &pane.tab_id.to_string()],
         &project.repo_path,
-    );
+    )?;
     Ok(())
 }
 
@@ -59,6 +59,7 @@ fn new_tab(title: &str, cwd: &str) -> Pane {
         ["cli", "spawn", "--window-id", "0", "--cwd", cwd],
         cwd,
     )
+    .unwrap_or_else(|e| panic(&e))
     .parse()
     .unwrap_or_else(|_| panic("failed to parse `wezterm cli spawn` output"));
     let pane = Pane::get_by_id(pane_id).unwrap_or_else(|| {
@@ -66,7 +67,7 @@ fn new_tab(title: &str, cwd: &str) -> Pane {
             "wezterm pane returned by spawn not found: {pane_id}"
         ))
     });
-    execute_command(
+    let _ = execute_command(
         "wezterm",
         [
             "cli",
@@ -81,7 +82,8 @@ fn new_tab(title: &str, cwd: &str) -> Pane {
 }
 
 fn list_panes() -> Vec<Pane> {
-    let output = execute_command("wezterm", ["cli", "list", "--format", "json"], "/tmp");
+    let output = execute_command("wezterm", ["cli", "list", "--format", "json"], "/tmp")
+        .unwrap_or_else(|e| panic(&e));
     serde_json::from_str(&output).unwrap_or_else(|err| {
         panic(&format!(
             "Failed to parse `wezterm cli list` output: {err}\n{output}"

@@ -241,7 +241,9 @@ impl<'a> Projects<'a> {
 
         thread::spawn(move || {
             thread::sleep(Duration::from_secs(2));
-            println!("{}", execute_command("vscode-summary", [], "/tmp"));
+            if let Ok(summary) = execute_command("vscode-summary", [], "/tmp") {
+                println!("{}", summary);
+            }
             println!();
             ps!("..., {}, {}*, {}, ... ({})", previous, current, next, len,);
         });

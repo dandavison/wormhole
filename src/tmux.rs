@@ -127,5 +127,5 @@ fn tmux_vec(args: Vec<String>) -> String {
         .args(&args)
         .output()
         .unwrap_or_else(|_| panic("Failed to execute command"));
-    get_stdout(program, output)
+    get_stdout(program, output).unwrap_or_else(|e| panic(&e))
 }

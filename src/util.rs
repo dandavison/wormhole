@@ -38,7 +38,7 @@ pub fn desktop_notification(msg: &str) {
         .map(|mut child| child.wait());
 }
 
-pub fn execute_command<S, I, P>(program: S, args: I, current_dir: P) -> String
+pub fn execute_command<S, I, P>(program: S, args: I, current_dir: P) -> Result<String, String>
 where
     S: AsRef<OsStr>,
     I: IntoIterator<Item = S>,
@@ -55,7 +55,7 @@ where
         .args(args)
         .current_dir(current_dir)
         .output()
-        .unwrap_or_else(|_| panic(&format!("failed to execute {program}")));
+        .map_err(|e| format!("failed to execute {program}: {e}"))?;
     get_stdout(program, output)
 }
 
@@ -77,21 +77,21 @@ pub fn to_kebab_case(s: &str) -> String {
         .join("-")
 }
 
-pub fn get_stdout<S>(program: S, output: Output) -> String
+pub fn get_stdout<S>(program: S, output: Output) -> Result<String, String>
 where
     S: AsRef<OsStr>,
     S: Display,
 {
     let stdout = str::from_utf8(&output.stdout)
-        .unwrap_or_else(|err| panic(&format!("failed to parse stdout from {program}: {err}")))
+        .map_err(|e| format!("failed to parse stdout from {program}: {e}"))?
         .trim_end()
         .to_string();
     if !output.stderr.is_empty() {
         let stderr = str::from_utf8(&output.stderr)
-            .unwrap_or_else(|err| panic(&format!("failed to parse stderr from {program}: {err}")));
-        panic(&format!(
+            .map_err(|e| format!("failed to parse stderr from {program}: {e}"))?;
+        return Err(format!(
             "program {program} produced output on stderr: {stderr}"
         ));
     }
-    stdout
+    Ok(stdout)
 }

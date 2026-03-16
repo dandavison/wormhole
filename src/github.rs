@@ -225,6 +225,24 @@ pub fn parse_issue_ref(input: &str) -> Option<(String, String, u64)> {
     None
 }
 
+/// Parse a GitHub PR reference: URL or `owner/repo#123`.
+/// Returns `(owner, repo, number)`.
+pub fn parse_pr_ref(input: &str) -> Option<(String, String, u64)> {
+    // URL: https://github.com/owner/repo/pull/123
+    let url_re = Regex::new(r"github\.com/([^/]+)/([^/]+)/pull/(\d+)").ok()?;
+    if let Some(caps) = url_re.captures(input) {
+        let number: u64 = caps[3].parse().ok()?;
+        return Some((caps[1].to_string(), caps[2].to_string(), number));
+    }
+    // Short ref: owner/repo#123
+    let ref_re = Regex::new(r"^([^/]+)/([^#]+)#(\d+)$").ok()?;
+    if let Some(caps) = ref_re.captures(input) {
+        let number: u64 = caps[3].parse().ok()?;
+        return Some((caps[1].to_string(), caps[2].to_string(), number));
+    }
+    None
+}
+
 pub fn get_issue(owner: &str, repo: &str, number: u64) -> Result<GithubIssue, String> {
     let output = Command::new("gh")
         .args([
@@ -336,5 +354,27 @@ mod tests {
         assert!(parse_issue_ref("not-a-ref").is_none());
         assert!(parse_issue_ref("ACT-123").is_none());
         assert!(parse_issue_ref("just/repo").is_none());
+    }
+
+    #[test]
+    fn parse_pr_ref_url() {
+        let (owner, repo, number) =
+            parse_pr_ref("https://github.com/temporalio/temporal/pull/9515").unwrap();
+        assert_eq!(owner, "temporalio");
+        assert_eq!(repo, "temporal");
+        assert_eq!(number, 9515);
+    }
+
+    #[test]
+    fn parse_pr_ref_short() {
+        let (owner, repo, number) = parse_pr_ref("temporalio/temporal#9515").unwrap();
+        assert_eq!(owner, "temporalio");
+        assert_eq!(repo, "temporal");
+        assert_eq!(number, 9515);
+    }
+
+    #[test]
+    fn parse_pr_ref_no_issue_url() {
+        assert!(parse_pr_ref("https://github.com/temporalio/temporal/issues/42").is_none());
     }
 }

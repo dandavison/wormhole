@@ -76,6 +76,7 @@ pub struct QueryParams {
     pub wait: Option<u64>,
     pub since: Option<String>,
     pub issue: Option<String>,
+    pub pr: Option<String>,
     pub tasks: bool,
     pub with_editor: bool,
 }
@@ -170,6 +171,31 @@ async fn route(
             };
             match crate::task::create_issue_task(
                 issue,
+                params.home_project.as_deref(),
+                params.dry_run,
+            ) {
+                Ok(result) => Response::builder()
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(serde_json::to_string_pretty(&result).unwrap()))
+                    .unwrap(),
+                Err(e) => Response::builder()
+                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                    .body(Body::from(e))
+                    .unwrap(),
+            }
+        }),
+        "/task/create-from-pr" => require_post(method, || {
+            let pr = match params.pr {
+                Some(ref p) => p.as_str(),
+                None => {
+                    return Response::builder()
+                        .status(StatusCode::BAD_REQUEST)
+                        .body(Body::from("Missing 'pr' query parameter"))
+                        .unwrap();
+                }
+            };
+            match crate::task::create_pr_task(
+                pr,
                 params.home_project.as_deref(),
                 params.dry_run,
             ) {
@@ -522,6 +548,7 @@ impl QueryParams {
             wait: None,
             since: None,
             issue: None,
+            pr: None,
             tasks: false,
             with_editor: false,
         };
@@ -559,6 +586,7 @@ impl QueryParams {
                     "wait" => params.wait = val.parse().ok(),
                     "since" => params.since = Some(val.to_string()),
                     "issue" => params.issue = Some(val.to_string()),
+                    "pr" => params.pr = Some(val.to_string()),
                     "tasks" => params.tasks = val == "true" || val == "1",
                     "with-editor" => params.with_editor = val == "true" || val == "1",
                     _ => {}

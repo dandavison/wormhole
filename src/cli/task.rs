@@ -326,6 +326,8 @@ enum CreateTarget {
     ProjectKey { repo: String, branch: String },
     /// A JIRA key (bare like "ACT-123" or extracted from URL)
     JiraKey(String),
+    /// A GitHub PR URL or owner/repo#number
+    GithubPr(String),
 }
 
 /// Find an existing task by JIRA key from the project list
@@ -378,6 +380,11 @@ pub(super) fn task_create(
     // Parse target to determine what we're working with
     let (create_target, existing_task) = parse_create_target(client, target)?;
 
+    // GitHub PR: non-interactive flow via server
+    if let CreateTarget::GithubPr(ref pr_ref) = create_target {
+        return task_create_from_pr(client, pr_ref, home_project.as_deref());
+    }
+
     // Get JIRA info if we have a JIRA key
     let (jira_key, jira_issue) = match &create_target {
         CreateTarget::JiraKey(key) => {
@@ -394,6 +401,7 @@ pub(super) fn task_create(
                 None => (None, None),
             }
         }
+        CreateTarget::GithubPr(_) => unreachable!(),
     };
 
     // Print header with JIRA info if available
@@ -420,6 +428,7 @@ pub(super) fn task_create(
                 .unwrap_or_default();
             (home, branch)
         }
+        (None, CreateTarget::GithubPr(_)) => unreachable!(),
     };
 
     let available_projects = get_available_projects(client)?;
@@ -515,15 +524,19 @@ fn parse_create_target(
     client: &Client,
     target: &str,
 ) -> Result<(CreateTarget, Option<(String, String)>), String> {
-    // First, check if it's a JIRA URL or key
+    // GitHub PR URL (must check before JIRA, since both can be URLs)
+    if crate::github::parse_pr_ref(target).is_some() {
+        return Ok((CreateTarget::GithubPr(target.to_string()), None));
+    }
+
+    // JIRA URL or key
     if let Some(jira_key) = crate::handlers::describe::parse_jira_key_or_url(target) {
         let existing = find_task_by_jira_key(client, &jira_key)?;
         return Ok((CreateTarget::JiraKey(jira_key), existing));
     }
 
-    // Check if it's a project key (repo:branch)
+    // Project key (repo:branch)
     if let Some((repo, branch)) = target.split_once(':') {
-        // Verify the task exists (or at least the repo exists)
         let existing = if client
             .get(&format!("/kv/{}:{}/jira_key", repo, branch))
             .is_ok()
@@ -542,9 +555,35 @@ fn parse_create_target(
     }
 
     Err(format!(
-        "Could not parse target '{}'. Expected: project key (repo:branch), JIRA URL, or JIRA key (ACT-123)",
+        "Could not parse target '{}'. Expected: repo:branch, PR URL, owner/repo#N, JIRA URL, or JIRA key",
         target
     ))
+}
+
+fn task_create_from_pr(
+    client: &Client,
+    pr_ref: &str,
+    home_project: Option<&str>,
+) -> Result<(), String> {
+    let encoded: String = url::form_urlencoded::byte_serialize(pr_ref.as_bytes()).collect();
+    let mut url = format!("/task/create-from-pr?pr={}", encoded);
+    if let Some(hp) = home_project {
+        url.push_str(&format!("&home-project={}", hp));
+    }
+    eprint!("Fetching PR...");
+    let response = client.post(&url)?;
+    eprintln!(" done");
+    let result: serde_json::Value =
+        serde_json::from_str(&response).map_err(|e| format!("Failed to parse response: {}", e))?;
+    if let Some(created) = result.get("created").and_then(|v| v.as_str()) {
+        let key = ProjectKey::parse(created.split(" (").next().unwrap_or(created));
+        println!("  {}", key.hyperlink());
+    }
+    if let Some(error) = result.get("error").and_then(|v| v.as_str()) {
+        eprintln!("  Error: {}", error);
+    }
+    let _ = client.post("/project/refresh");
+    Ok(())
 }
 
 /// Create or update a task with optional JIRA key

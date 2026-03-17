@@ -1,3 +1,8 @@
+_This is a personal project under development, implemented only for MacOS (e.g. it uses hammerspoon
+in places, and the `open` command). The terminal emulator must either be Alacritty+Tmux or Wezterm.
+VSCode/Cursor + Tmux is the only combination tested. It could be made to work with other editors (e.g. Zed, JetBrains
+products)._
+
 Wormhole is a tool for working on software projects.
 
 - A set of directories to search for projects is configured in `~/.wormhole/wormhole.toml` (or via
@@ -73,10 +78,6 @@ Wormhole is a tool for working on software projects.
   OSC8 hyperlinks, and (2) exposing a `cd` utility that `cd`s to the project root dir.
 
 
-_This is a personal project under development, implemented only for MacOS (e.g. it uses hammerspoon
-in places, and the `open` command). The terminal emulator must either be Alacritty+Tmux or Wezterm.
-VSCode/Cursor is the only editor tested. It could be made to work with other editors (e.g. JetBrains
-products)._
 
 
 ## Design Principles

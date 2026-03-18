@@ -240,7 +240,10 @@ pub(super) fn to_kebab_case(s: &str) -> String {
 
 /// Returns None if we should prompt, or Some(reason) if we should auto-skip.
 /// Only skips issues that have a non-draft PR (work is already submitted).
-pub(super) fn should_skip_issue(has_pr: bool) -> Option<&'static str> {
+pub(super) fn should_skip_issue(has_pr: bool, status: &str) -> Option<&'static str> {
+    if status == "Done" {
+        return Some("done");
+    }
     if has_pr {
         return Some("has PR");
     }
@@ -267,11 +270,16 @@ mod tests {
 
     #[test]
     fn test_should_skip_issues_with_pr() {
-        assert_eq!(should_skip_issue(true), Some("has PR"));
+        assert_eq!(should_skip_issue(true, "In Progress"), Some("has PR"));
     }
 
     #[test]
     fn test_should_not_skip_issues_without_pr() {
-        assert_eq!(should_skip_issue(false), None);
+        assert_eq!(should_skip_issue(false, "In Progress"), None);
+    }
+
+    #[test]
+    fn test_should_skip_done_issues() {
+        assert_eq!(should_skip_issue(false, "Done"), Some("done"));
     }
 }

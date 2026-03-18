@@ -75,7 +75,7 @@ pub(super) fn task_create_from_sprint(client: &Client) -> Result<(), String> {
 
         let indicator = jira::status_indicator(&issue.status);
 
-        if let Some(reason) = should_skip_issue(has_pr) {
+        if let Some(reason) = should_skip_issue(has_pr, &issue.status) {
             println!("{} {} {} [{}]", indicator, issue.key, issue.summary, reason);
             skipped_count += 1;
             continue;

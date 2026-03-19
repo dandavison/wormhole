@@ -323,62 +323,45 @@ fn discover_claude_code_transcripts(projects: &[(String, PathBuf)]) -> Vec<Trans
     };
 
     for entry in entries.flatten() {
-        let index_path = entry.path().join("sessions-index.json");
-        if !index_path.is_file() {
+        result.extend(discover_cc_from_jsonl_files(&entry.path(), &canonical));
+    }
+    result
+}
+
+/// Discover sessions by scanning JSONL files in a CC project directory.
+fn discover_cc_from_jsonl_files(
+    dir: &Path,
+    canonical: &[(String, String)],
+) -> Vec<TranscriptFile> {
+    let mut result = Vec::new();
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return result,
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("jsonl") {
             continue;
         }
-        let content = match std::fs::read_to_string(&index_path) {
-            Ok(c) => c,
-            Err(_) => continue,
-        };
-        let index: serde_json::Value = match serde_json::from_str(&content) {
-            Ok(v) => v,
-            Err(_) => continue,
-        };
-        let entries_arr = match index.get("entries").and_then(|e| e.as_array()) {
-            Some(a) => a,
+        let session_id = match path.file_stem().and_then(|s| s.to_str()) {
+            Some(s) => s.to_string(),
             None => continue,
         };
-        for sess in entries_arr {
-            if sess.get("isSidechain").and_then(|v| v.as_bool()) == Some(true) {
+        if let Some(meta) = read_cc_jsonl_metadata(&path) {
+            if meta.is_sidechain {
                 continue;
             }
-            let msg_count = sess
-                .get("messageCount")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0);
-            if msg_count < 2 {
+            if meta.message_count < 2 {
                 continue;
             }
-            let session_id = match sess.get("sessionId").and_then(|s| s.as_str()) {
-                Some(s) => s,
+            let project_path = match meta.cwd {
+                Some(p) => p,
                 None => continue,
             };
-            let project_path = match sess.get("projectPath").and_then(|s| s.as_str()) {
-                Some(s) => s,
-                None => continue,
-            };
-            let full_path = match sess.get("fullPath").and_then(|s| s.as_str()) {
-                Some(s) => s,
-                None => continue,
-            };
-            let path = PathBuf::from(full_path);
-            if !path.is_file() {
-                continue;
-            }
-
-            // Match projectPath against known projects (longest prefix wins)
-            let canon_pp = std::fs::canonicalize(project_path)
-                .unwrap_or_else(|_| PathBuf::from(project_path))
-                .to_string_lossy()
-                .to_string();
-            if let Some((_, project_key)) = canonical
-                .iter()
-                .find(|(prefix, _)| canon_pp.starts_with(prefix.as_str()))
-            {
+            if let Some(key) = match_project_path(&project_path, canonical) {
                 result.push(TranscriptFile {
-                    project_key: project_key.clone(),
-                    transcript_id: session_id.to_string(),
+                    project_key: key,
+                    transcript_id: session_id,
                     path,
                     source: TranscriptSource::ClaudeCode,
                 });
@@ -386,6 +369,72 @@ fn discover_claude_code_transcripts(projects: &[(String, PathBuf)]) -> Vec<Trans
         }
     }
     result
+}
+
+struct CcJsonlMetadata {
+    cwd: Option<String>,
+    is_sidechain: bool,
+    message_count: u64,
+}
+
+/// Read metadata from the first lines of a CC JSONL file without parsing the whole file.
+fn read_cc_jsonl_metadata(path: &Path) -> Option<CcJsonlMetadata> {
+    use std::io::BufRead;
+    let file = std::fs::File::open(path).ok()?;
+    let reader = std::io::BufReader::new(file);
+    let mut cwd = None;
+    let mut is_sidechain = false;
+    let mut message_count: u64 = 0;
+    for line in reader.lines() {
+        let line = match line {
+            Ok(l) => l,
+            Err(_) => break,
+        };
+        if line.trim().is_empty() {
+            continue;
+        }
+        let record: serde_json::Value = match serde_json::from_str(&line) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        let msg_type = record.get("type").and_then(|t| t.as_str()).unwrap_or("");
+        match msg_type {
+            "user" | "assistant" => {
+                message_count += 1;
+                if cwd.is_none() {
+                    cwd = record
+                        .get("cwd")
+                        .and_then(|v| v.as_str())
+                        .map(String::from);
+                }
+                if record.get("isSidechain").and_then(|v| v.as_bool()) == Some(true) {
+                    is_sidechain = true;
+                }
+                // Once we have cwd and enough messages, stop reading
+                if cwd.is_some() && message_count >= 2 {
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    Some(CcJsonlMetadata {
+        cwd,
+        is_sidechain,
+        message_count,
+    })
+}
+
+/// Match a project path against known wormhole projects (longest prefix wins).
+fn match_project_path(project_path: &str, canonical: &[(String, String)]) -> Option<String> {
+    let canon_pp = std::fs::canonicalize(project_path)
+        .unwrap_or_else(|_| PathBuf::from(project_path))
+        .to_string_lossy()
+        .to_string();
+    canonical
+        .iter()
+        .find(|(prefix, _)| canon_pp.starts_with(prefix.as_str()))
+        .map(|(_, key)| key.clone())
 }
 
 fn claude_code_projects_dir() -> PathBuf {
@@ -1133,4 +1182,83 @@ mod tests {
         assert!(parse_since("abc").is_none());
         assert!(parse_since("2x").is_none());
     }
+
+    #[test]
+    fn test_read_cc_jsonl_metadata() {
+        let dir = tempfile::tempdir().unwrap();
+        let jsonl = dir.path().join("abc123.jsonl");
+        std::fs::write(
+            &jsonl,
+            r#"{"type":"queue-operation","operation":"enqueue","timestamp":"2026-03-19T12:00:00Z","sessionId":"abc123"}
+{"type":"queue-operation","operation":"dequeue","timestamp":"2026-03-19T12:00:00Z","sessionId":"abc123"}
+{"parentUuid":null,"isSidechain":false,"type":"user","uuid":"u1","timestamp":"2026-03-19T12:00:01Z","cwd":"/Users/dan/worktrees/wormhole/conversation-search/wormhole","sessionId":"abc123","message":{"role":"user","content":[{"type":"text","text":"Hello"}]}}
+{"type":"assistant","uuid":"a1","timestamp":"2026-03-19T12:00:02Z","cwd":"/Users/dan/worktrees/wormhole/conversation-search/wormhole","sessionId":"abc123","message":{"role":"assistant","content":[{"type":"text","text":"Hi there"}]}}
+"#,
+        )
+        .unwrap();
+        let meta = read_cc_jsonl_metadata(&jsonl).unwrap();
+        assert_eq!(
+            meta.cwd.as_deref(),
+            Some("/Users/dan/worktrees/wormhole/conversation-search/wormhole")
+        );
+        assert!(!meta.is_sidechain);
+        assert_eq!(meta.message_count, 2);
+    }
+
+    #[test]
+    fn test_discover_cc_from_jsonl_files() {
+        let cc_dir = tempfile::tempdir().unwrap();
+        let project_dir = tempfile::tempdir().unwrap();
+        let project_path = std::fs::canonicalize(project_dir.path())
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+
+        // Write a JSONL file with cwd pointing to our project
+        let jsonl = cc_dir.path().join("sess-001.jsonl");
+        std::fs::write(
+            &jsonl,
+            format!(
+                r#"{{"type":"user","isSidechain":false,"uuid":"u1","cwd":"{}","sessionId":"sess-001","message":{{"role":"user","content":[{{"type":"text","text":"Hello"}}]}}}}
+{{"type":"assistant","uuid":"a1","cwd":"{}","sessionId":"sess-001","message":{{"role":"assistant","content":[{{"type":"text","text":"Hi"}}]}}}}
+"#,
+                project_path, project_path
+            ),
+        )
+        .unwrap();
+
+        let canonical = vec![(project_path.clone(), "myproject".to_string())];
+        let result = discover_cc_from_jsonl_files(cc_dir.path(), &canonical);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].project_key, "myproject");
+        assert_eq!(result[0].transcript_id, "sess-001");
+        assert_eq!(result[0].source, TranscriptSource::ClaudeCode);
+    }
+
+    #[test]
+    fn test_discover_cc_from_jsonl_skips_sidechain() {
+        let cc_dir = tempfile::tempdir().unwrap();
+        let project_dir = tempfile::tempdir().unwrap();
+        let project_path = std::fs::canonicalize(project_dir.path())
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+
+        let jsonl = cc_dir.path().join("sess-002.jsonl");
+        std::fs::write(
+            &jsonl,
+            format!(
+                r#"{{"type":"user","isSidechain":true,"uuid":"u1","cwd":"{}","sessionId":"sess-002","message":{{"role":"user","content":[{{"type":"text","text":"Hello"}}]}}}}
+{{"type":"assistant","uuid":"a1","cwd":"{}","sessionId":"sess-002","message":{{"role":"assistant","content":[{{"type":"text","text":"Hi"}}]}}}}
+"#,
+                project_path, project_path
+            ),
+        )
+        .unwrap();
+
+        let canonical = vec![(project_path.clone(), "myproject".to_string())];
+        let result = discover_cc_from_jsonl_files(cc_dir.path(), &canonical);
+        assert_eq!(result.len(), 0);
+    }
+
 }

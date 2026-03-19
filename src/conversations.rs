@@ -1,3 +1,4 @@
+use crate::project::ProjectKey;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
@@ -451,6 +452,7 @@ pub fn sync(
     since: Option<SystemTime>,
 ) -> SyncResult {
     let output_dir = conversations_dir();
+    migrate_colon_dirs(&output_dir);
     let mut transcripts = discover_cursor_transcripts(projects);
     transcripts.extend(discover_claude_code_transcripts(projects));
 
@@ -507,9 +509,10 @@ pub fn sync(
             }
         };
 
+        let dir_name = project_key_to_dir_name(&t.project_key);
         let date = file_date(&t.path);
         let short_id = &session_uuid[..8.min(session_uuid.len())];
-        let out_dir = output_dir.join(&t.project_key);
+        let out_dir = output_dir.join(&dir_name);
         let out_file = out_dir.join(format!("{}-{}.md", date, short_id));
 
         if out_file.exists() && !source_newer(&t.path, &out_file) {
@@ -525,15 +528,57 @@ pub fn sync(
     }
 
     let dir = match project_filter {
-        Some(filters) if filters.len() == 1 => {
-            output_dir.join(filters[0]).to_string_lossy().to_string()
-        }
+        Some(filters) if filters.len() == 1 => output_dir
+            .join(project_key_to_dir_name(filters[0]))
+            .to_string_lossy()
+            .to_string(),
         _ => output_dir.to_string_lossy().to_string(),
     };
     SyncResult {
         output_dir: dir,
         synced,
         skipped,
+    }
+}
+
+fn project_key_to_dir_name(key: &str) -> String {
+    ProjectKey::parse(key).to_path_string()
+}
+
+/// Migrate conversation directories from `repo:branch` to `repo--branch` naming.
+fn migrate_colon_dirs(output_dir: &Path) {
+    let entries = match std::fs::read_dir(output_dir) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+    for entry in entries.flatten() {
+        let name = match entry.file_name().into_string() {
+            Ok(n) => n,
+            Err(_) => continue,
+        };
+        if !name.contains(':') {
+            continue;
+        }
+        let new_name = ProjectKey::parse(&name).to_path_string();
+        let old_path = entry.path();
+        let new_path = output_dir.join(&new_name);
+        if new_path == old_path {
+            continue;
+        }
+        if new_path.is_dir() {
+            // Merge: move files from old into new, then remove old
+            if let Ok(files) = std::fs::read_dir(&old_path) {
+                for f in files.flatten() {
+                    let dest = new_path.join(f.file_name());
+                    if !dest.exists() {
+                        let _ = std::fs::rename(f.path(), dest);
+                    }
+                }
+            }
+            let _ = std::fs::remove_dir_all(&old_path);
+        } else {
+            let _ = std::fs::rename(&old_path, &new_path);
+        }
     }
 }
 

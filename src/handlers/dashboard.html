@@ -19,7 +19,7 @@
           linear-gradient(90deg, #eef1f4 1px, transparent 1px);
         background-size: 20px 20px;
         min-height: 100vh;
-        padding: 3rem 2rem 3rem 3rem;
+        padding: 3rem 2rem 2rem 3rem;
       }
       header {
         margin-bottom: 2rem;
@@ -302,29 +302,57 @@
       .card.maximized .btn-vscode {
         display: none;
       }
+      .filters-trigger {
+        margin-top: 2rem;
+        text-align: center;
+      }
+      .filters-trigger .dot {
+        display: inline-block;
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: #ddd;
+        cursor: pointer;
+      }
+      .filters-trigger .dot:hover {
+        background: #999;
+      }
       .dashboard-filters {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        padding: 0.5rem 3rem;
-        background: #f8f9fa;
-        border-top: 1px solid #ddd;
-        display: flex;
+        display: none;
+        margin-top: 0.5rem;
+        justify-content: center;
         gap: 1.5rem;
-        font-size: 0.75rem;
-        color: #666;
-        z-index: 100;
+        font-size: 0.7rem;
+        color: #bbb;
+        user-select: none;
+      }
+      .filters-trigger:hover .dashboard-filters,
+      .dashboard-filters:hover {
+        display: flex;
       }
       .dashboard-filters label {
         cursor: pointer;
         display: flex;
         align-items: center;
-        gap: 0.35rem;
-        user-select: none;
+        gap: 0.3rem;
+      }
+      .dashboard-filters label:hover {
+        color: #888;
       }
       .dashboard-filters input[type="checkbox"] {
+        appearance: none;
+        -webkit-appearance: none;
+        width: 8px;
+        height: 8px;
+        border: 1px solid #ccc;
+        border-radius: 1px;
         margin: 0;
+        cursor: pointer;
+        position: relative;
+      }
+      .dashboard-filters input[type="checkbox"]:checked {
+        background: #bbb;
+        border-color: #aaa;
       }
       .section-divider {
         font-size: 0.7rem;
@@ -358,9 +386,12 @@
   </head>
   <body>
     <div class="grid">{{CARDS}}</div>
-    <div class="dashboard-filters">
-      <label><input type="checkbox" id="filter-hide-done"> Hide done</label>
-      <label><input type="checkbox" id="filter-hide-projects"> Hide non-task projects</label>
+    <div class="filters-trigger">
+      <span class="dot"></span>
+      <div class="dashboard-filters">
+        <label><input type="checkbox" id="filter-hide-done"> Hide done</label>
+        <label><input type="checkbox" id="filter-hide-projects"> Hide non-task projects</label>
+      </div>
     </div>
     <script>
       document.querySelectorAll('.card:not(.current)').forEach((card) => {

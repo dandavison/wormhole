@@ -19,7 +19,7 @@
           linear-gradient(90deg, #eef1f4 1px, transparent 1px);
         background-size: 20px 20px;
         min-height: 100vh;
-        padding: 3rem 2rem 2rem 3rem;
+        padding: 3rem 2rem 3rem 3rem;
       }
       header {
         margin-bottom: 2rem;
@@ -302,6 +302,30 @@
       .card.maximized .btn-vscode {
         display: none;
       }
+      .dashboard-filters {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        padding: 0.5rem 3rem;
+        background: #f8f9fa;
+        border-top: 1px solid #ddd;
+        display: flex;
+        gap: 1.5rem;
+        font-size: 0.75rem;
+        color: #666;
+        z-index: 100;
+      }
+      .dashboard-filters label {
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        user-select: none;
+      }
+      .dashboard-filters input[type="checkbox"] {
+        margin: 0;
+      }
       .section-divider {
         font-size: 0.7rem;
         font-weight: 600;
@@ -334,6 +358,10 @@
   </head>
   <body>
     <div class="grid">{{CARDS}}</div>
+    <div class="dashboard-filters">
+      <label><input type="checkbox" id="filter-hide-done"> Hide done</label>
+      <label><input type="checkbox" id="filter-hide-projects"> Hide non-task projects</label>
+    </div>
     <script>
       document.querySelectorAll('.card:not(.current)').forEach((card) => {
         card.classList.add('folded');
@@ -446,6 +474,28 @@
         document.execCommand('copy');
         document.body.removeChild(ta);
       }
+
+      // Dashboard filters (persisted in localStorage)
+      function applyFilters() {
+        const hideDone = document.getElementById('filter-hide-done').checked;
+        const hideProjects = document.getElementById('filter-hide-projects').checked;
+        document.querySelectorAll('.card').forEach((card) => {
+          const isDone = card.dataset.status === 'done';
+          const isTask = card.dataset.task && card.dataset.task.includes(':');
+          const hidden = (hideDone && isDone) || (hideProjects && !isTask);
+          card.style.display = hidden ? 'none' : '';
+        });
+      }
+      ['filter-hide-done', 'filter-hide-projects'].forEach((id) => {
+        const el = document.getElementById(id);
+        const stored = localStorage.getItem(id);
+        if (stored === 'true') el.checked = true;
+        el.addEventListener('change', () => {
+          localStorage.setItem(id, el.checked);
+          applyFilters();
+        });
+      });
+      applyFilters();
 
       // Long-poll for current project changes, reload on change
       (async function poll(current, isFirstPoll) {

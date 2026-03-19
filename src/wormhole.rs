@@ -509,6 +509,7 @@ fn handle_conversation_resume(synced_file_path: &str) -> Response<Body> {
 fn project_dirs_for_sync() -> Vec<(String, std::path::PathBuf)> {
     let store = projects::lock();
     let mut result: Vec<(String, std::path::PathBuf)> = Vec::new();
+    let mut repo_paths_seen = std::collections::HashSet::new();
     for p in store.all() {
         let key = p.store_key().to_string();
         // Workspace file path (for Cursor matching)
@@ -517,12 +518,17 @@ fn project_dirs_for_sync() -> Vec<(String, std::path::PathBuf)> {
         let gitdir = crate::git::git_common_dir(&p.repo_path);
         let ws_path = gitdir.join("wormhole/workspaces").join(filename);
         result.push((key.clone(), ws_path));
-        // Repo path (matches both Cursor and CC)
-        result.push((key.clone(), p.repo_path.clone()));
-        // Working tree (for CC matching - may differ from repo_path for tasks)
+        // Task projects get their worktree path only. The repo path is
+        // claimed by the non-task (bare repo) project below.
         let wt = p.working_tree();
         if wt != p.repo_path {
             result.push((key, wt));
+        }
+        // Ensure each repo path maps to the non-task project key exactly
+        // once, even if no non-task project is in the store.
+        if repo_paths_seen.insert(p.repo_path.clone()) {
+            let repo_key = crate::project::ProjectKey::project(p.repo_name.as_str()).to_string();
+            result.push((repo_key, p.repo_path.clone()));
         }
     }
     result

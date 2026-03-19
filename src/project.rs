@@ -74,6 +74,16 @@ impl ProjectKey {
     }
 }
 
+impl ProjectKey {
+    /// Filesystem-safe encoding: `repo--branch` (or just `repo` for non-tasks).
+    pub fn to_path_string(&self) -> String {
+        match &self.branch {
+            Some(branch) => format!("{}--{}", self.repo, branch),
+            None => self.repo.to_string(),
+        }
+    }
+}
+
 impl fmt::Display for ProjectKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.branch {

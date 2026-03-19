@@ -154,6 +154,9 @@ pub enum ProjectCommand {
         /// List only projects with an editor connected
         #[arg(long)]
         with_editor: bool,
+        /// Filter by JIRA status (e.g. "Done", "In Progress")
+        #[arg(long)]
+        status: Option<String>,
     },
     /// Switch to the previous project
     Previous {
@@ -445,6 +448,7 @@ pub fn run(command: Command) -> Result<(), String> {
                 active,
                 tasks,
                 with_editor,
+                status,
             } => {
                 let mut query_parts = vec![];
                 if active {
@@ -478,6 +482,15 @@ pub fn run(command: Command) -> Result<(), String> {
                         }
                     } else if let Some(current) = json.get("current").and_then(|v| v.as_array()) {
                         let mut sorted = current.clone();
+                        if let Some(ref s) = status {
+                            let s_lower = s.to_lowercase();
+                            sorted.retain(|item| {
+                                item.get("jira")
+                                    .and_then(|j| j.get("status"))
+                                    .and_then(|v| v.as_str())
+                                    .is_some_and(|st| st.to_lowercase() == s_lower)
+                            });
+                        }
                         sorted.sort_by(|a, b| {
                             let a_key = a.get("project_key").and_then(|k| k.as_str()).unwrap_or("");
                             let b_key = b.get("project_key").and_then(|k| k.as_str()).unwrap_or("");

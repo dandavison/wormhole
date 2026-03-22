@@ -328,6 +328,8 @@ enum CreateTarget {
     JiraKey(String),
     /// A GitHub PR URL or owner/repo#number
     GithubPr(String),
+    /// A GitHub issue URL or owner/repo#number
+    GithubIssue(String),
 }
 
 /// Find an existing task by JIRA key from the project list
@@ -385,6 +387,13 @@ pub(super) fn task_create(
         return task_create_from_pr(client, pr_ref, home_project.as_deref());
     }
 
+    // GitHub issue: non-interactive flow via server
+    if let CreateTarget::GithubIssue(ref issue_ref) = create_target {
+        task_create_from_issue(client, issue_ref, home_project.as_deref(), false)?;
+        let _ = client.post("/project/refresh");
+        return Ok(());
+    }
+
     // Get JIRA info if we have a JIRA key
     let (jira_key, jira_issue) = match &create_target {
         CreateTarget::JiraKey(key) => {
@@ -401,7 +410,7 @@ pub(super) fn task_create(
                 None => (None, None),
             }
         }
-        CreateTarget::GithubPr(_) => unreachable!(),
+        CreateTarget::GithubPr(_) | CreateTarget::GithubIssue(_) => unreachable!(),
     };
 
     // Print header with JIRA info if available
@@ -428,7 +437,9 @@ pub(super) fn task_create(
                 .unwrap_or_default();
             (home, branch)
         }
-        (None, CreateTarget::GithubPr(_)) => unreachable!(),
+        (None, CreateTarget::GithubPr(_)) | (None, CreateTarget::GithubIssue(_)) => {
+            unreachable!()
+        }
     };
 
     let available_projects = get_available_projects(client)?;
@@ -529,6 +540,11 @@ fn parse_create_target(
         return Ok((CreateTarget::GithubPr(target.to_string()), None));
     }
 
+    // GitHub issue URL
+    if crate::github::parse_issue_ref(target).is_some() {
+        return Ok((CreateTarget::GithubIssue(target.to_string()), None));
+    }
+
     // JIRA URL or key
     if let Some(jira_key) = crate::handlers::describe::parse_jira_key_or_url(target) {
         let existing = find_task_by_jira_key(client, &jira_key)?;
@@ -555,7 +571,7 @@ fn parse_create_target(
     }
 
     Err(format!(
-        "Could not parse target '{}'. Expected: repo:branch, PR URL, owner/repo#N, JIRA URL, or JIRA key",
+        "Could not parse target '{}'. Expected: repo:branch, issue URL, PR URL, owner/repo#N, JIRA URL, or JIRA key",
         target
     ))
 }

@@ -135,7 +135,7 @@ pub(super) fn task_create_from_sprint(client: &Client) -> Result<(), String> {
 
         // Get branches from the selected repo for completion
         let branches = config::resolve_project_name(&home)
-            .map(|path| crate::git::list_branches(&path))
+            .map(|(_, path)| crate::git::list_branches(&path))
             .unwrap_or_default();
         let mut branch_rl = create_branch_editor(branches)?;
 
@@ -467,7 +467,7 @@ pub(super) fn task_create(
 
     // Get branches from the selected repo for completion
     let branches = config::resolve_project_name(&home)
-        .map(|path| crate::git::list_branches(&path))
+        .map(|(_, path)| crate::git::list_branches(&path))
         .unwrap_or_default();
     let mut branch_rl = create_branch_editor(branches)?;
 

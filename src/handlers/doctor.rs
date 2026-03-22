@@ -83,7 +83,7 @@ pub fn conform(dry_run: bool) -> Response<Body> {
                 .filter_map(|wt| {
                     let branch = wt.branch.as_deref()?;
                     let task_key = format!("{}:{}", name, branch);
-                    match task::conform_task_worktree(&wt.path, name, branch, dry_run) {
+                    match task::conform_task_worktree(&wt.path, name.as_str(), branch, dry_run) {
                         Ok(actions) => Some(ConformTaskResult {
                             task: task_key,
                             actions,
@@ -240,7 +240,7 @@ pub fn persisted_data() -> Response<Body> {
             }
 
             Some(ProjectPersistedData {
-                name: name.clone(),
+                name: name.to_string(),
                 path: path.display().to_string(),
                 worktrees: wormhole_worktrees,
                 kv: all_kv,

@@ -218,14 +218,14 @@ pub fn create_review_tasks(dry_run: bool) -> Result<ReviewTaskResult, String> {
             continue;
         }
 
-        match create_task(&home, &branch) {
+        match create_task(home.as_str(), &branch) {
             Ok(task) => {
                 let worktree = task.working_tree();
                 if let Err(e) = crate::github::pr_fetch_and_reset(&worktree, pr.number) {
                     result.errors.push(format!("{}: {}", task_key, e));
                     continue;
                 }
-                let key = ProjectKey::task(&home, &branch);
+                let key = ProjectKey::task(home.as_str(), &branch);
                 crate::kv::set_value_sync(&key, "task_type", "review");
                 crate::kv::set_value_sync(&key, "review_pr_url", &pr.url);
                 crate::kv::set_value_sync(&key, "review_pr_title", &pr.title);
@@ -292,12 +292,15 @@ pub fn create_pr_task(
     } else {
         let repo_map = build_github_repo_map();
         let nwo = format!("{}/{}", owner, repo_name);
-        repo_map.get(&nwo).cloned().ok_or_else(|| {
-            format!(
-                "No local project for {}. Use --home-project to specify.",
-                nwo
-            )
-        })?
+        repo_map
+            .get(&nwo)
+            .map(|n| n.to_string())
+            .ok_or_else(|| {
+                format!(
+                    "No local project for {}. Use --home-project to specify.",
+                    nwo
+                )
+            })?
     };
 
     projects::refresh_tasks();
@@ -360,12 +363,15 @@ pub fn create_issue_task(
     } else {
         let repo_map = build_github_repo_map();
         let nwo = format!("{}/{}", owner, repo_name);
-        repo_map.get(&nwo).cloned().ok_or_else(|| {
-            format!(
-                "No local project for {}. Use --home-project to specify.",
-                nwo
-            )
-        })?
+        repo_map
+            .get(&nwo)
+            .map(|n| n.to_string())
+            .ok_or_else(|| {
+                format!(
+                    "No local project for {}. Use --home-project to specify.",
+                    nwo
+                )
+            })?
     };
 
     let slug = crate::util::to_kebab_case(&issue.title);
@@ -410,7 +416,7 @@ pub fn create_issue_task(
     })
 }
 
-fn build_github_repo_map() -> std::collections::HashMap<String, String> {
+fn build_github_repo_map() -> std::collections::HashMap<String, config::CanonicalName> {
     let mut map = std::collections::HashMap::new();
     for (name, path) in config::available_projects() {
         if let Some(github_repo) = git::github_repo_from_remote(&path) {
@@ -422,6 +428,7 @@ fn build_github_repo_map() -> std::collections::HashMap<String, String> {
 
 fn resolve_project_path(project_name: &str) -> Result<PathBuf, String> {
     config::resolve_project_name(project_name)
+        .map(|(_, path)| path)
         .or_else(|| {
             projects::lock()
                 .by_key(&ProjectKey::project(project_name))

@@ -179,13 +179,13 @@ pub fn list_all_kv_fresh() -> Response<Body> {
             }
 
             // Add the main project
-            result.push((ProjectKey::project(name.clone()), path.clone()));
+            result.push((ProjectKey::project(name.as_str()), path.clone()));
 
             let worktrees_base = config::worktree_dir().join(&name);
             for wt in git::list_worktrees(&path) {
                 if wt.path.starts_with(&worktrees_base) {
                     if let Some(branch) = wt.branch {
-                        result.push((ProjectKey::task(name.clone(), branch), path.clone()));
+                        result.push((ProjectKey::task(name.as_str(), branch), path.clone()));
                     }
                 }
             }

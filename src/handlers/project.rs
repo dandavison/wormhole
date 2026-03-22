@@ -440,18 +440,17 @@ fn resolve_project(
         if let Some(project) = projects.by_path(&path) {
             return Ok(Some(project.as_project_path()));
         }
-        let name = path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or(name_or_path);
-        let key = ProjectKey::project(name);
+        let name = config::canonical_project_name(&path);
+        let key = ProjectKey::project(name.as_str());
         if projects.by_key(&key).is_none() {
-            projects.add(name_or_path, None)?;
+            projects.add(&path, name)?;
         }
         Ok(projects.by_key(&key).map(|p| p.as_project_path()))
-    } else if let Some(path) = config::resolve_project_name(name_or_path) {
-        let path_str = path.to_string_lossy().to_string();
-        projects.add(&path_str, Some(name_or_path))?;
+    } else if let Some((name, path)) = config::resolve_project_name(name_or_path) {
+        let key = ProjectKey::project(name.as_str());
+        if projects.by_key(&key).is_none() {
+            projects.add(&path, name)?;
+        }
         Ok(projects.by_key(&key).map(|p| p.as_project_path()))
     } else {
         Ok(None)

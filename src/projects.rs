@@ -1,4 +1,5 @@
-use crate::project::{BranchName, Cached, Project, ProjectKey, RepoName};
+use crate::config::CanonicalName;
+use crate::project::{BranchName, Cached, Project, ProjectKey};
 use crate::util::execute_command;
 use crate::{config, git, ps};
 use lazy_static::lazy_static;
@@ -115,25 +116,21 @@ impl<'a> Projects<'a> {
             .collect()
     }
 
-    pub fn add(&mut self, path: &str, name: Option<&str>) -> Result<(), String> {
-        let path = PathBuf::from(path.to_string());
-        let path = std::fs::canonicalize(&path).unwrap_or(path);
+    pub fn add(&mut self, path: &Path, name: CanonicalName) -> Result<(), String> {
+        let path = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
         if Some(path.as_path()) == dirs::home_dir().as_deref() {
             return Err("Cannot add home directory as a project".to_string());
         }
         if !git::is_git_repo(&path) {
             return Err(format!("'{}' is not a git repository", path.display()));
         }
-        let name = name
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| canonical_project_name(&path));
-        let key = ProjectKey::project(&name);
+        let key = ProjectKey::project(name.as_str());
         if !self.0.all.contains_key(&key) {
             ps!("projects::add");
             self.0.all.insert(
                 key.clone(),
                 Project {
-                    repo_name: RepoName::new(name),
+                    repo_name: name,
                     repo_path: path,
                     branch: None,
                     kv: HashMap::new(),
@@ -264,7 +261,7 @@ pub fn load() {
 
     // Build a reverse map from canonical path to disambiguated name
     let available = config::available_projects();
-    let path_to_name: HashMap<PathBuf, String> = available
+    let path_to_name: HashMap<PathBuf, CanonicalName> = available
         .into_iter()
         .filter_map(|(name, path)| {
             std::fs::canonicalize(&path)
@@ -287,21 +284,19 @@ pub fn load() {
             continue;
         }
 
-        let name = path_to_name.get(&canonical).cloned().unwrap_or_else(|| {
-            path.file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("unknown")
-                .to_string()
-        });
+        let name = path_to_name
+            .get(&canonical)
+            .cloned()
+            .unwrap_or_else(|| config::canonical_project_name(&path));
 
-        let key = ProjectKey::project(&name);
+        let key = ProjectKey::project(name.as_str());
 
         // Add to all if not already present
         if !projects.0.all.contains_key(&key) {
             projects.0.all.insert(
                 key.clone(),
                 Project {
-                    repo_name: RepoName::new(name),
+                    repo_name: name,
                     repo_path: canonical,
                     branch: None,
                     kv: HashMap::new(),
@@ -322,24 +317,10 @@ pub fn load() {
     }
 }
 
-/// Look up the canonical name for a project path, respecting search-path precedence.
-/// Falls back to the directory name if the path isn't in any search path.
-fn canonical_project_name(path: &Path) -> String {
-    let dir_name = path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("")
-        .to_string();
-    for (name, available_path) in config::available_projects() {
-        if available_path == path {
-            return name;
-        }
-    }
-    dir_name
-}
-
-fn discover_tasks(additional_paths: HashMap<String, PathBuf>) -> HashMap<ProjectKey, Project> {
-    let mut project_paths: HashMap<String, PathBuf> =
+fn discover_tasks(
+    additional_paths: HashMap<CanonicalName, PathBuf>,
+) -> HashMap<ProjectKey, Project> {
+    let mut project_paths: HashMap<CanonicalName, PathBuf> =
         config::available_projects().into_iter().collect();
 
     for (name, path) in additional_paths {
@@ -353,14 +334,14 @@ fn discover_tasks(additional_paths: HashMap<String, PathBuf>) -> HashMap<Project
             if !git::is_git_repo(&project_path) {
                 return vec![];
             }
-            let worktrees_base = worktree_dir.join(&project_name);
+            let worktrees_base = worktree_dir.join(project_name.as_str());
             git::list_worktrees(&project_path)
                 .into_iter()
                 .filter(|wt| wt.path.starts_with(&worktrees_base))
                 .filter_map(|wt| {
                     let branch = wt.branch.as_ref()?;
                     let task = Project {
-                        repo_name: RepoName::new(project_name.clone()),
+                        repo_name: project_name.clone(),
                         repo_path: project_path.clone(),
                         branch: Some(BranchName::new(branch.clone())),
                         kv: HashMap::new(),
@@ -374,13 +355,13 @@ fn discover_tasks(additional_paths: HashMap<String, PathBuf>) -> HashMap<Project
 }
 
 pub fn refresh_tasks() {
-    let additional_paths: HashMap<String, PathBuf> = {
+    let additional_paths: HashMap<CanonicalName, PathBuf> = {
         let store = PROJECTS_STORE.lock().unwrap();
         store
             .all
             .iter()
             .filter(|(_, p)| !p.is_task())
-            .map(|(key, project)| (key.repo.to_string(), project.repo_path.clone()))
+            .map(|(_, project)| (project.repo_name.clone(), project.repo_path.clone()))
             .collect()
     };
 

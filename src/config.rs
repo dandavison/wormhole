@@ -2,8 +2,57 @@ use crate::editor::Editor;
 use crate::terminal::Terminal;
 use glob::Pattern;
 use serde::Deserialize;
+use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
+
+/// A project name that has been canonicalized with respect to search-path precedence.
+/// Can only be constructed within this module, ensuring that all project names
+/// respect the disambiguation rules in `available_projects_from_paths`.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
+pub struct CanonicalName(String);
+
+impl CanonicalName {
+    fn new(s: String) -> Self {
+        Self(s)
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for CanonicalName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl std::borrow::Borrow<str> for CanonicalName {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
+impl AsRef<str> for CanonicalName {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl AsRef<std::path::Path> for CanonicalName {
+    fn as_ref(&self) -> &std::path::Path {
+        self.0.as_ref()
+    }
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+impl CanonicalName {
+    pub fn for_test(s: impl Into<String>) -> Self {
+        Self(s.into())
+    }
+}
 
 pub const TERMINAL: Terminal = Terminal::Alacritty { tmux: true };
 
@@ -166,17 +215,17 @@ pub fn is_excluded(name: &str, search_dir: &Path) -> bool {
     false
 }
 
-pub fn available_projects() -> std::collections::BTreeMap<String, PathBuf> {
+pub fn available_projects() -> std::collections::BTreeMap<CanonicalName, PathBuf> {
     let paths: Vec<PathBuf> = search_paths().iter().map(|sp| sp.path.clone()).collect();
     available_projects_from_paths(&paths)
 }
 
 fn available_projects_from_paths(
     search_paths: &[PathBuf],
-) -> std::collections::BTreeMap<String, PathBuf> {
+) -> std::collections::BTreeMap<CanonicalName, PathBuf> {
     use std::collections::{BTreeMap, HashSet};
 
-    let mut result: BTreeMap<String, PathBuf> = BTreeMap::new();
+    let mut result: BTreeMap<CanonicalName, PathBuf> = BTreeMap::new();
     let mut seen_names: HashSet<String> = HashSet::new();
 
     for search_dir in search_paths {
@@ -204,10 +253,10 @@ fn available_projects_from_paths(
 
                 if seen_names.contains(&dir_name) {
                     let prefixed = format!("{}-{}", parent_name, dir_name);
-                    result.entry(prefixed).or_insert(path);
+                    result.entry(CanonicalName::new(prefixed)).or_insert(path);
                 } else {
                     seen_names.insert(dir_name.clone());
-                    result.insert(dir_name, path);
+                    result.insert(CanonicalName::new(dir_name), path);
                 }
             }
         }
@@ -215,8 +264,24 @@ fn available_projects_from_paths(
     result
 }
 
-pub fn resolve_project_name(name: &str) -> Option<PathBuf> {
-    available_projects().get(name).cloned()
+/// Look up the canonical name for a project path, respecting search-path precedence.
+/// Falls back to the directory name if the path isn't in any search path.
+pub fn canonical_project_name(path: &Path) -> CanonicalName {
+    let dir_name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("")
+        .to_string();
+    for (name, available_path) in available_projects() {
+        if available_path == path {
+            return name;
+        }
+    }
+    CanonicalName::new(dir_name)
+}
+
+pub fn resolve_project_name(name: &str) -> Option<(CanonicalName, PathBuf)> {
+    available_projects().remove_entry(name)
 }
 
 #[cfg(test)]

@@ -14,10 +14,6 @@ impl RepoName {
     pub fn new(s: impl Into<String>) -> Self {
         Self(s.into())
     }
-
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
 }
 
 impl fmt::Display for RepoName {
@@ -118,7 +114,7 @@ pub struct Cached {
 #[derive(Clone, Debug)]
 pub struct Project {
     // Identity
-    pub repo_name: RepoName,
+    pub repo_name: crate::config::CanonicalName,
     pub repo_path: PathBuf,
     pub branch: Option<BranchName>,
 

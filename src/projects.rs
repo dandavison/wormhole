@@ -126,7 +126,7 @@ impl<'a> Projects<'a> {
         }
         let name = name
             .map(|s| s.to_string())
-            .unwrap_or_else(|| path.file_name().unwrap().to_str().unwrap().to_string());
+            .unwrap_or_else(|| canonical_project_name(&path));
         let key = ProjectKey::project(&name);
         if !self.0.all.contains_key(&key) {
             ps!("projects::add");
@@ -320,6 +320,22 @@ pub fn load() {
     if crate::util::debug() {
         projects.print();
     }
+}
+
+/// Look up the canonical name for a project path, respecting search-path precedence.
+/// Falls back to the directory name if the path isn't in any search path.
+fn canonical_project_name(path: &Path) -> String {
+    let dir_name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("")
+        .to_string();
+    for (name, available_path) in config::available_projects() {
+        if available_path == path {
+            return name;
+        }
+    }
+    dir_name
 }
 
 fn discover_tasks(additional_paths: HashMap<String, PathBuf>) -> HashMap<ProjectKey, Project> {

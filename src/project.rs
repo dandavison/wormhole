@@ -136,6 +136,10 @@ impl Project {
         window_names.contains(&self.store_key().to_string())
     }
 
+    pub fn is_done(&self) -> bool {
+        self.kv.get("status").is_some_and(|v| v == "done")
+    }
+
     pub fn store_key(&self) -> ProjectKey {
         match &self.branch {
             Some(branch) => ProjectKey::task(self.repo_name.as_str(), branch.as_str()),

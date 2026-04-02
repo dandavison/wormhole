@@ -114,6 +114,18 @@ pub enum TaskCommand {
         #[arg(long)]
         dry_run: bool,
     },
+    /// Mark a task as done (hides from dashboard)
+    Done {
+        /// Task key (defaults to current directory)
+        #[arg(add = ArgValueCompleter::new(complete_projects))]
+        name: Option<String>,
+    },
+    /// Reopen a dismissed task
+    Reopen {
+        /// Task key (defaults to current directory)
+        #[arg(add = ArgValueCompleter::new(complete_projects))]
+        name: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -720,6 +732,24 @@ pub fn run(command: Command) -> Result<(), String> {
                 home_project,
                 dry_run,
             } => task::task_create_from_issue(&client, &target, home_project.as_deref(), dry_run),
+            TaskCommand::Done { name } => {
+                let name = name.unwrap_or_else(|| {
+                    std::env::current_dir()
+                        .map(|p| p.to_string_lossy().to_string())
+                        .unwrap_or_default()
+                });
+                client.put(&format!("/kv/{}/status", name), "done")?;
+                Ok(())
+            }
+            TaskCommand::Reopen { name } => {
+                let name = name.unwrap_or_else(|| {
+                    std::env::current_dir()
+                        .map(|p| p.to_string_lossy().to_string())
+                        .unwrap_or_default()
+                });
+                client.delete(&format!("/kv/{}/status", name))?;
+                Ok(())
+            }
         },
 
         Command::Completion { shell } => {

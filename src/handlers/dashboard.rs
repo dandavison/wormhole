@@ -13,6 +13,7 @@ pub fn dashboard() -> Response<Body> {
             .into_iter()
             .filter(|p| {
                 p.is_task()
+                    && !p.is_done()
                     && (p.kv.contains_key("jira_key")
                         || p.kv.get("task_type").is_some_and(|v| v == "review")
                         || p.is_active(&window_names))
@@ -303,6 +304,10 @@ fn render_iframe(task: &crate::project::Project) -> String {
     if !iframe_html.is_empty() {
         actions.push_str(r#"<button class="btn btn-maximize">Maximize</button>"#);
     }
+    actions.push_str(&format!(
+        r#"<button class="btn btn-done" data-task="{}" title="Mark done">Done</button>"#,
+        html_escape(&task.store_key().to_string())
+    ));
     actions.push_str(r#"<button class="btn btn-close" title="Close project">&times;</button>"#);
 
     format!(
@@ -385,11 +390,11 @@ fn rewrite_img_src(html: &mut String) {
 
 fn status_sort_order(status: Option<&str>) -> u8 {
     match status.map(|s| s.to_lowercase()).as_deref() {
-        Some("done") | Some("closed") | Some("resolved") => 0,
-        Some("in review") => 1,
-        Some("in progress") => 2,
-        Some("to do") => 3,
-        _ => 4,
+        Some("in progress") | Some("in development") => 0,
+        Some("in review") | Some("code review") | Some("review") => 1,
+        Some("to do") => 2,
+        Some("done") | Some("closed") | Some("resolved") => 4,
+        _ => 3,
     }
 }
 

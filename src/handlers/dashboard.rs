@@ -209,9 +209,19 @@ fn render_task_card(
     let task_id = task.store_key().to_string();
     let current_class = if is_current { " current" } else { "" };
 
+    let dismiss_html = format!(
+        concat!(
+            r#"<span class="card-dismiss">"#,
+            r#"<span class="dismiss-link dismiss-done" data-task="{0}">done</span>"#,
+            r#"<span class="dismiss-link dismiss-hide" data-task="{0}">hide</span>"#,
+            r#"</span>"#,
+        ),
+        html_escape(&task_id),
+    );
+
     format!(
         r#"<div class="card{}" data-task="{}"{}>
-<div class="card-header">{}<span class="card-summary">{}</span>{}</div>
+<div class="card-header">{}<span class="card-summary">{}</span>{}{}</div>
 <div class="card-meta">{}{}{}{}</div>
 {}{}
 </div>"#,
@@ -221,6 +231,7 @@ fn render_task_card(
         repo_branch,
         summary,
         status_html,
+        dismiss_html,
         jira_html,
         sprint_html,
         pr_html,
@@ -298,15 +309,6 @@ fn render_iframe(task: &crate::project::Project) -> String {
     if !iframe_html.is_empty() {
         actions.push_str(r#"<button class="btn btn-maximize">Maximize</button>"#);
     }
-    let task_key = html_escape(&task.store_key().to_string());
-    actions.push_str(&format!(
-        r#"<button class="btn btn-done" data-task="{}" title="Mark done">Done</button>"#,
-        task_key
-    ));
-    actions.push_str(&format!(
-        r#"<button class="btn btn-hide" data-task="{}" title="Hide from dashboard">Hide</button>"#,
-        task_key
-    ));
     actions.push_str(r#"<button class="btn btn-close" title="Close project">&times;</button>"#);
 
     format!(

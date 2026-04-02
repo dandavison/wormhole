@@ -367,8 +367,9 @@
         opacity: 0;
         transition: opacity 0.15s;
       }
-      .card:hover .btn-done { opacity: 1; }
+      .card:hover .btn-done, .card:hover .btn-hide { opacity: 1; }
       .btn-done:hover { background: #16a34a; color: #fff; border-color: #16a34a; }
+      .btn-hide:hover { background: #6b7280; color: #fff; border-color: #6b7280; }
       .btn-close {
         border: none;
         background: transparent;
@@ -488,11 +489,12 @@
         });
       });
 
-      document.querySelectorAll('.btn-done').forEach((btn) => {
+      document.querySelectorAll('.btn-done, .btn-hide').forEach((btn) => {
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
           const task = btn.dataset.task;
-          fetch('/kv/' + task + '/status', { method: 'PUT', body: 'done' });
+          const status = btn.classList.contains('btn-done') ? 'done' : 'hidden';
+          fetch('/kv/' + task + '/status', { method: 'PUT', body: status });
           btn.closest('.card').remove();
         });
       });

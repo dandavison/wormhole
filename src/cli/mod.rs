@@ -120,7 +120,13 @@ pub enum TaskCommand {
         #[arg(add = ArgValueCompleter::new(complete_projects))]
         name: Option<String>,
     },
-    /// Reopen a dismissed task
+    /// Hide a task from the dashboard
+    Hide {
+        /// Task key (defaults to current directory)
+        #[arg(add = ArgValueCompleter::new(complete_projects))]
+        name: Option<String>,
+    },
+    /// Unhide a done or hidden task
     Reopen {
         /// Task key (defaults to current directory)
         #[arg(add = ArgValueCompleter::new(complete_projects))]
@@ -739,6 +745,15 @@ pub fn run(command: Command) -> Result<(), String> {
                         .unwrap_or_default()
                 });
                 client.put(&format!("/kv/{}/status", name), "done")?;
+                Ok(())
+            }
+            TaskCommand::Hide { name } => {
+                let name = name.unwrap_or_else(|| {
+                    std::env::current_dir()
+                        .map(|p| p.to_string_lossy().to_string())
+                        .unwrap_or_default()
+                });
+                client.put(&format!("/kv/{}/status", name), "hidden")?;
                 Ok(())
             }
             TaskCommand::Reopen { name } => {

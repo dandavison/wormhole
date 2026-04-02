@@ -136,8 +136,10 @@ impl Project {
         window_names.contains(&self.store_key().to_string())
     }
 
-    pub fn is_done(&self) -> bool {
-        self.kv.get("status").is_some_and(|v| v == "done")
+    pub fn is_hidden(&self) -> bool {
+        self.kv
+            .get("status")
+            .is_some_and(|v| v == "done" || v == "hidden")
     }
 
     pub fn store_key(&self) -> ProjectKey {

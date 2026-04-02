@@ -11,7 +11,7 @@ pub fn dashboard() -> Response<Body> {
         let tasks = projects
             .all()
             .into_iter()
-            .filter(|p| p.is_task() && !p.is_done())
+            .filter(|p| p.is_task() && !p.is_hidden())
             .cloned()
             .collect();
         let current = projects.current().map(|p| p.store_key().to_string());
@@ -298,9 +298,14 @@ fn render_iframe(task: &crate::project::Project) -> String {
     if !iframe_html.is_empty() {
         actions.push_str(r#"<button class="btn btn-maximize">Maximize</button>"#);
     }
+    let task_key = html_escape(&task.store_key().to_string());
     actions.push_str(&format!(
         r#"<button class="btn btn-done" data-task="{}" title="Mark done">Done</button>"#,
-        html_escape(&task.store_key().to_string())
+        task_key
+    ));
+    actions.push_str(&format!(
+        r#"<button class="btn btn-hide" data-task="{}" title="Hide from dashboard">Hide</button>"#,
+        task_key
     ));
     actions.push_str(r#"<button class="btn btn-close" title="Close project">&times;</button>"#);
 

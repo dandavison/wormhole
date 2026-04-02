@@ -11,13 +11,7 @@ pub fn dashboard() -> Response<Body> {
         let tasks = projects
             .all()
             .into_iter()
-            .filter(|p| {
-                p.is_task()
-                    && !p.is_done()
-                    && (p.kv.contains_key("jira_key")
-                        || p.kv.get("task_type").is_some_and(|v| v == "review")
-                        || p.is_active(&window_names))
-            })
+            .filter(|p| p.is_task() && !p.is_done())
             .cloned()
             .collect();
         let current = projects.current().map(|p| p.store_key().to_string());

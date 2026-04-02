@@ -187,3 +187,26 @@ impl Project {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_percent_encoded_task_key_does_not_match() {
+        // The JS dashboard must NOT percent-encode the task key in URL paths,
+        // because the server parses keys by splitting on ':' — a literal colon.
+        // Percent-encoding the colon (%3A) causes a lookup miss.
+        let raw = ProjectKey::parse("temporal:my-branch");
+        let encoded = ProjectKey::parse("temporal%3Amy-branch");
+        assert_ne!(raw, encoded, "percent-encoded colon must not match raw key");
+        assert!(
+            raw.branch.is_some(),
+            "raw key should parse as task (has branch)"
+        );
+        assert!(
+            encoded.branch.is_none(),
+            "encoded key parses as project (no colon found)"
+        );
+    }
+}

@@ -492,7 +492,7 @@
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
           const task = btn.dataset.task;
-          fetch('/kv/' + encodeURIComponent(task) + '/status', { method: 'PUT', body: 'done' });
+          fetch('/kv/' + task + '/status', { method: 'PUT', body: 'done' });
           btn.closest('.card').remove();
         });
       });

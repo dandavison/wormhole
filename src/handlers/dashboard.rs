@@ -11,12 +11,7 @@ pub fn dashboard() -> Response<Body> {
         let tasks = projects
             .all()
             .into_iter()
-            .filter(|p| {
-                p.is_task()
-                    && (p.kv.contains_key("jira_key")
-                        || p.kv.get("task_type").is_some_and(|v| v == "review")
-                        || p.is_active(&window_names))
-            })
+            .filter(|p| p.is_task() && !p.is_hidden())
             .cloned()
             .collect();
         let current = projects.current().map(|p| p.store_key().to_string());
@@ -214,9 +209,19 @@ fn render_task_card(
     let task_id = task.store_key().to_string();
     let current_class = if is_current { " current" } else { "" };
 
+    let dismiss_html = format!(
+        concat!(
+            r#"<span class="card-dismiss">"#,
+            r#"<span class="dismiss-link dismiss-done" data-task="{0}">done</span>"#,
+            r#"<span class="dismiss-link dismiss-hide" data-task="{0}">hide</span>"#,
+            r#"</span>"#,
+        ),
+        html_escape(&task_id),
+    );
+
     format!(
         r#"<div class="card{}" data-task="{}"{}>
-<div class="card-header">{}<span class="card-summary">{}</span>{}</div>
+<div class="card-header">{}<span class="card-summary">{}</span>{}{}</div>
 <div class="card-meta">{}{}{}{}</div>
 {}{}
 </div>"#,
@@ -226,6 +231,7 @@ fn render_task_card(
         repo_branch,
         summary,
         status_html,
+        dismiss_html,
         jira_html,
         sprint_html,
         pr_html,
@@ -385,11 +391,11 @@ fn rewrite_img_src(html: &mut String) {
 
 fn status_sort_order(status: Option<&str>) -> u8 {
     match status.map(|s| s.to_lowercase()).as_deref() {
-        Some("done") | Some("closed") | Some("resolved") => 0,
-        Some("in review") => 1,
-        Some("in progress") => 2,
-        Some("to do") => 3,
-        _ => 4,
+        Some("in progress") | Some("in development") => 0,
+        Some("in review") | Some("code review") | Some("review") => 1,
+        Some("to do") => 2,
+        Some("done") | Some("closed") | Some("resolved") => 4,
+        _ => 3,
     }
 }
 

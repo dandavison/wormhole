@@ -136,6 +136,12 @@ impl Project {
         window_names.contains(&self.store_key().to_string())
     }
 
+    pub fn is_hidden(&self) -> bool {
+        self.kv
+            .get("status")
+            .is_some_and(|v| v == "done" || v == "hidden")
+    }
+
     pub fn store_key(&self) -> ProjectKey {
         match &self.branch {
             Some(branch) => ProjectKey::task(self.repo_name.as_str(), branch.as_str()),
@@ -181,5 +187,28 @@ impl Project {
         } else {
             config::editor()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_percent_encoded_task_key_does_not_match() {
+        // The JS dashboard must NOT percent-encode the task key in URL paths,
+        // because the server parses keys by splitting on ':' — a literal colon.
+        // Percent-encoding the colon (%3A) causes a lookup miss.
+        let raw = ProjectKey::parse("temporal:my-branch");
+        let encoded = ProjectKey::parse("temporal%3Amy-branch");
+        assert_ne!(raw, encoded, "percent-encoded colon must not match raw key");
+        assert!(
+            raw.branch.is_some(),
+            "raw key should parse as task (has branch)"
+        );
+        assert!(
+            encoded.branch.is_none(),
+            "encoded key parses as project (no colon found)"
+        );
     }
 }

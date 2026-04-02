@@ -362,8 +362,23 @@
         text-transform: uppercase;
         margin-top: 0.5rem;
       }
-      .btn-close {
+      .card-dismiss {
         margin-left: auto;
+        flex-shrink: 0;
+        display: flex;
+        gap: 0.5rem;
+        opacity: 0;
+        transition: opacity 0.15s;
+      }
+      .card:hover .card-dismiss { opacity: 1; }
+      .dismiss-link {
+        font-size: 0.65rem;
+        color: #bbb;
+        cursor: pointer;
+        user-select: none;
+      }
+      .dismiss-link:hover { color: #888; }
+      .btn-close {
         border: none;
         background: transparent;
         color: #999;
@@ -479,6 +494,16 @@
           const task = card.dataset.task;
           fetch('/project/close/' + task, { method: 'POST' });
           card.remove();
+        });
+      });
+
+      document.querySelectorAll('.dismiss-link').forEach((link) => {
+        link.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const task = link.dataset.task;
+          const status = link.classList.contains('dismiss-done') ? 'done' : 'hidden';
+          fetch('/kv/' + task + '/status', { method: 'PUT', body: status });
+          link.closest('.card').remove();
         });
       });
 

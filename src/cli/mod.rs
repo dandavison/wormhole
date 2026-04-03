@@ -88,29 +88,21 @@ pub enum JiraCommand {
 pub enum TaskCommand {
     /// Create or update a task
     Create {
-        /// Target: PR number (#123), PR URL, owner/repo#123, project key (repo:branch), JIRA URL, or JIRA key
+        /// Target: PR number (#123), PR/issue URL, owner/repo#123, project key (repo:branch), JIRA URL, or JIRA key
         #[arg(add = ArgValueCompleter::new(complete_projects))]
         target: String,
-        /// Home project for the worktree (required for create)
+        /// Home project for the worktree
         #[arg(short = 'p', long, add = ArgValueCompleter::new(complete_projects))]
         home_project: Option<String>,
+        /// Show what would be created without actually creating
+        #[arg(long)]
+        dry_run: bool,
     },
     /// Create tasks from current sprint issues
     CreateFromSprint,
     /// Create tasks from GitHub PRs requesting your review
     CreateFromReviewRequests {
         /// Show what would be created without actually creating tasks
-        #[arg(long)]
-        dry_run: bool,
-    },
-    /// Create a task from a GitHub issue
-    CreateFromIssue {
-        /// GitHub issue URL or owner/repo#123
-        target: String,
-        /// Home project for the worktree
-        #[arg(short = 'p', long)]
-        home_project: Option<String>,
-        /// Show what would be created without actually creating
         #[arg(long)]
         dry_run: bool,
     },
@@ -728,16 +720,12 @@ pub fn run(command: Command) -> Result<(), String> {
             TaskCommand::Create {
                 target,
                 home_project,
-            } => task::task_create(&client, &target, home_project),
+                dry_run,
+            } => task::task_create(&client, &target, home_project, dry_run),
             TaskCommand::CreateFromSprint => task::task_create_from_sprint(&client),
             TaskCommand::CreateFromReviewRequests { dry_run } => {
                 task::task_create_from_review_requests(&client, dry_run)
             }
-            TaskCommand::CreateFromIssue {
-                target,
-                home_project,
-                dry_run,
-            } => task::task_create_from_issue(&client, &target, home_project.as_deref(), dry_run),
             TaskCommand::Done { name } => {
                 let name = name.unwrap_or_else(|| {
                     std::env::current_dir()

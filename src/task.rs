@@ -249,7 +249,7 @@ pub fn create_review_tasks(dry_run: bool) -> Result<ReviewTaskResult, String> {
 }
 
 #[derive(serde::Serialize)]
-pub struct IssueTaskResult {
+pub struct GithubTaskResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -258,40 +258,20 @@ pub struct IssueTaskResult {
     pub error: Option<String>,
 }
 
-#[derive(serde::Serialize)]
-pub struct PrTaskResult {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub created: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub skipped: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-}
-
-pub fn create_pr_task(
-    pr_ref: &str,
+pub fn create_github_ref_task(
+    r: &crate::github::GithubRef,
     home_project: Option<&str>,
     dry_run: bool,
-) -> Result<PrTaskResult, String> {
-    let (owner, repo_name, number) = crate::github::parse_pr_ref(pr_ref).ok_or_else(|| {
-        format!(
-            "Cannot parse PR reference '{}'. Expected GitHub PR URL or owner/repo#123",
-            pr_ref
-        )
-    })?;
+) -> Result<GithubTaskResult, String> {
+    use crate::github::GithubRefKind;
 
-    let branch = crate::github::get_pr_branch(&owner, &repo_name, number).ok_or_else(|| {
-        format!(
-            "Failed to get branch for PR #{} in {}/{}",
-            number, owner, repo_name
-        )
-    })?;
+    let kind = crate::github::resolve_github_ref_kind(r)?;
+    let nwo = format!("{}/{}", r.owner, r.repo);
 
     let home = if let Some(h) = home_project {
         h.to_string()
     } else {
         let repo_map = build_github_repo_map();
-        let nwo = format!("{}/{}", owner, repo_name);
         repo_map
             .get(&nwo)
             .map(|n| n.to_string())
@@ -301,6 +281,22 @@ pub fn create_pr_task(
                     nwo
                 )
             })?
+    };
+
+    let branch = match kind {
+        GithubRefKind::Pr => {
+            crate::github::get_pr_branch(&r.owner, &r.repo, r.number).ok_or_else(|| {
+                format!(
+                    "Failed to get branch for PR #{} in {}",
+                    r.number, nwo
+                )
+            })?
+        }
+        GithubRefKind::Issue => {
+            let issue = crate::github::get_issue(&r.owner, &r.repo, r.number)?;
+            let slug = crate::util::to_kebab_case(&issue.title);
+            format!("{}-{}", r.number, slug)
+        }
     };
 
     projects::refresh_tasks();
@@ -313,9 +309,17 @@ pub fn create_pr_task(
             .any(|p| p.is_task() && p.store_key().to_string() == task_key_str)
     };
 
+    if kind == GithubRefKind::Issue && existing {
+        return Ok(GithubTaskResult {
+            created: None,
+            skipped: Some(format!("{} already exists", task_key_str)),
+            error: None,
+        });
+    }
+
     if dry_run {
         let label = if existing { "update" } else { "create" };
-        return Ok(PrTaskResult {
+        return Ok(GithubTaskResult {
             created: Some(format!("{} (dry run: {})", task_key_str, label)),
             skipped: None,
             error: None,
@@ -323,94 +327,33 @@ pub fn create_pr_task(
     }
 
     let task = create_task(&home, &branch)?;
-    let worktree = task.working_tree();
-    crate::github::pr_checkout(&worktree, &owner, &repo_name, number)?;
-
     let key = ProjectKey::task(&home, &branch);
-    crate::kv::set_value_sync(&key, "task_type", "review");
-    crate::kv::set_value_sync(
-        &key,
-        "review_pr_url",
-        &format!("https://github.com/{}/{}/pull/{}", owner, repo_name, number),
-    );
+
+    match kind {
+        GithubRefKind::Pr => {
+            crate::github::pr_checkout(&task.working_tree(), &r.owner, &r.repo, r.number)?;
+            crate::kv::set_value_sync(&key, "task_type", "review");
+            crate::kv::set_value_sync(
+                &key,
+                "review_pr_url",
+                &format!("https://github.com/{}/pull/{}", nwo, r.number),
+            );
+        }
+        GithubRefKind::Issue => {
+            crate::kv::set_value_sync(&key, "task_type", "issue");
+            crate::kv::set_value_sync(
+                &key,
+                "github_issue_url",
+                &format!("https://github.com/{}/issues/{}", nwo, r.number),
+            );
+            crate::kv::set_value_sync(&key, "github_issue_number", &r.number.to_string());
+        }
+    }
     projects::refresh_cache();
 
     let label = if existing { "updated" } else { "created" };
-    Ok(PrTaskResult {
+    Ok(GithubTaskResult {
         created: Some(format!("{} ({})", task_key_str, label)),
-        skipped: None,
-        error: None,
-    })
-}
-
-pub fn create_issue_task(
-    issue_ref: &str,
-    home_project: Option<&str>,
-    dry_run: bool,
-) -> Result<IssueTaskResult, String> {
-    let (owner, repo_name, number) =
-        crate::github::parse_issue_ref(issue_ref).ok_or_else(|| {
-            format!(
-                "Cannot parse issue reference '{}'. Expected GitHub URL or owner/repo#123",
-                issue_ref
-            )
-        })?;
-
-    let issue = crate::github::get_issue(&owner, &repo_name, number)?;
-
-    let home = if let Some(h) = home_project {
-        h.to_string()
-    } else {
-        let repo_map = build_github_repo_map();
-        let nwo = format!("{}/{}", owner, repo_name);
-        repo_map
-            .get(&nwo)
-            .map(|n| n.to_string())
-            .ok_or_else(|| {
-                format!(
-                    "No local project for {}. Use --home-project to specify.",
-                    nwo
-                )
-            })?
-    };
-
-    let slug = crate::util::to_kebab_case(&issue.title);
-    let branch = format!("{}-{}", number, slug);
-
-    projects::refresh_tasks();
-    let existing = {
-        let projects = projects::lock();
-        projects
-            .all()
-            .iter()
-            .any(|p| p.is_task() && p.store_key().to_string() == format!("{}:{}", home, branch))
-    };
-
-    if existing {
-        return Ok(IssueTaskResult {
-            created: None,
-            skipped: Some(format!("{}:{} already exists", home, branch)),
-            error: None,
-        });
-    }
-
-    if dry_run {
-        return Ok(IssueTaskResult {
-            created: Some(format!("{}:{} (dry run)", home, branch)),
-            skipped: None,
-            error: None,
-        });
-    }
-
-    let _task = create_task(&home, &branch)?;
-    let key = ProjectKey::task(&home, &branch);
-    crate::kv::set_value_sync(&key, "task_type", "issue");
-    crate::kv::set_value_sync(&key, "github_issue_url", &issue.url);
-    crate::kv::set_value_sync(&key, "github_issue_number", &number.to_string());
-    projects::refresh_cache();
-
-    Ok(IssueTaskResult {
-        created: Some(format!("{}:{}", home, branch)),
         skipped: None,
         error: None,
     })

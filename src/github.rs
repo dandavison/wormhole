@@ -281,23 +281,6 @@ pub fn resolve_github_ref_kind(r: &GithubRef) -> Result<GithubRefKind, String> {
     ))
 }
 
-// Keep these around temporarily for callers that haven't been migrated yet.
-pub fn parse_pr_ref(input: &str) -> Option<(String, String, u64)> {
-    let r = parse_github_ref(input)?;
-    // Accept if URL-confirmed PR, or ambiguous short form
-    if r.kind == Some(GithubRefKind::Issue) {
-        return None;
-    }
-    Some((r.owner, r.repo, r.number))
-}
-
-pub fn parse_issue_ref(input: &str) -> Option<(String, String, u64)> {
-    let r = parse_github_ref(input)?;
-    if r.kind == Some(GithubRefKind::Pr) {
-        return None;
-    }
-    Some((r.owner, r.repo, r.number))
-}
 
 pub fn get_issue(owner: &str, repo: &str, number: u64) -> Result<GithubIssue, String> {
     let output = Command::new("gh")
@@ -423,12 +406,14 @@ mod tests {
     }
 
     #[test]
-    fn parse_pr_ref_no_issue_url() {
-        assert!(parse_pr_ref("https://github.com/temporalio/temporal/issues/42").is_none());
+    fn parse_github_ref_pr_url_not_issue() {
+        let r = parse_github_ref("https://github.com/temporalio/temporal/pull/42").unwrap();
+        assert_eq!(r.kind, Some(GithubRefKind::Pr));
     }
 
     #[test]
-    fn parse_issue_ref_no_pr_url() {
-        assert!(parse_issue_ref("https://github.com/temporalio/temporal/pull/42").is_none());
+    fn parse_github_ref_issue_url_not_pr() {
+        let r = parse_github_ref("https://github.com/temporalio/temporal/issues/42").unwrap();
+        assert_eq!(r.kind, Some(GithubRefKind::Issue));
     }
 }

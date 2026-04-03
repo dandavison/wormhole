@@ -281,44 +281,6 @@ pub(super) fn task_create_from_review_requests(
     Ok(())
 }
 
-pub(super) fn task_create_from_issue(
-    client: &Client,
-    target: &str,
-    home_project: Option<&str>,
-    dry_run: bool,
-) -> Result<(), String> {
-    let encoded: String = url::form_urlencoded::byte_serialize(target.as_bytes()).collect();
-    let mut url = format!("/task/create-from-issue?issue={}", encoded);
-    if let Some(hp) = home_project {
-        url.push_str(&format!("&home-project={}", hp));
-    }
-    if dry_run {
-        url.push_str("&dry-run=true");
-    }
-    eprint!("Fetching issue...");
-    let response = client.post(&url)?;
-    eprintln!(" done");
-    let result: serde_json::Value =
-        serde_json::from_str(&response).map_err(|e| format!("Failed to parse response: {}", e))?;
-    if let Some(created) = result.get("created").and_then(|v| v.as_str()) {
-        let key_str = created.strip_suffix(" (dry run)").unwrap_or(created);
-        let key = ProjectKey::parse(key_str);
-        if dry_run {
-            println!("  Would create {}", key.hyperlink());
-        } else {
-            println!("  Created {}", key.hyperlink());
-        }
-    }
-    if let Some(skipped) = result.get("skipped").and_then(|v| v.as_str()) {
-        let key_str = skipped.strip_suffix(" already exists").unwrap_or(skipped);
-        let key = ProjectKey::parse(key_str);
-        println!("  Skipped: {} already exists", key.hyperlink());
-    }
-    if let Some(error) = result.get("error").and_then(|v| v.as_str()) {
-        eprintln!("  Error: {}", error);
-    }
-    Ok(())
-}
 
 /// Represents a parsed task target for the create command
 enum CreateTarget {
@@ -326,10 +288,8 @@ enum CreateTarget {
     ProjectKey { repo: String, branch: String },
     /// A JIRA key (bare like "ACT-123" or extracted from URL)
     JiraKey(String),
-    /// A GitHub PR URL or owner/repo#number
-    GithubPr(String),
-    /// A GitHub issue URL or owner/repo#number
-    GithubIssue(String),
+    /// A GitHub PR or issue reference (URL, owner/repo#N, or bare number)
+    GithubRef(String),
 }
 
 /// Find an existing task by JIRA key from the project list
@@ -375,6 +335,7 @@ pub(super) fn task_create(
     client: &Client,
     target: &str,
     home_project: Option<String>,
+    dry_run: bool,
 ) -> Result<(), String> {
     // Refresh to get latest task list
     let _ = client.post("/project/refresh-tasks");
@@ -382,16 +343,9 @@ pub(super) fn task_create(
     // Parse target to determine what we're working with
     let (create_target, existing_task) = parse_create_target(client, target)?;
 
-    // GitHub PR: non-interactive flow via server
-    if let CreateTarget::GithubPr(ref pr_ref) = create_target {
-        return task_create_from_pr(client, pr_ref, home_project.as_deref());
-    }
-
-    // GitHub issue: non-interactive flow via server
-    if let CreateTarget::GithubIssue(ref issue_ref) = create_target {
-        task_create_from_issue(client, issue_ref, home_project.as_deref(), false)?;
-        let _ = client.post("/project/refresh");
-        return Ok(());
+    // GitHub ref (PR or issue): non-interactive flow via server
+    if let CreateTarget::GithubRef(ref github_ref) = create_target {
+        return task_create_from_github_ref(client, github_ref, home_project.as_deref(), dry_run);
     }
 
     // Get JIRA info if we have a JIRA key
@@ -410,7 +364,7 @@ pub(super) fn task_create(
                 None => (None, None),
             }
         }
-        CreateTarget::GithubPr(_) | CreateTarget::GithubIssue(_) => unreachable!(),
+        CreateTarget::GithubRef(_) => unreachable!(),
     };
 
     // Print header with JIRA info if available
@@ -437,9 +391,7 @@ pub(super) fn task_create(
                 .unwrap_or_default();
             (home, branch)
         }
-        (None, CreateTarget::GithubPr(_)) | (None, CreateTarget::GithubIssue(_)) => {
-            unreachable!()
-        }
+        (None, CreateTarget::GithubRef(_)) => unreachable!(),
     };
 
     let available_projects = get_available_projects(client)?;
@@ -535,14 +487,9 @@ fn parse_create_target(
     client: &Client,
     target: &str,
 ) -> Result<(CreateTarget, Option<(String, String)>), String> {
-    // GitHub PR URL (must check before JIRA, since both can be URLs)
-    if crate::github::parse_pr_ref(target).is_some() {
-        return Ok((CreateTarget::GithubPr(target.to_string()), None));
-    }
-
-    // GitHub issue URL
-    if crate::github::parse_issue_ref(target).is_some() {
-        return Ok((CreateTarget::GithubIssue(target.to_string()), None));
+    // GitHub PR/issue URL or owner/repo#N
+    if crate::github::parse_github_ref(target).is_some() {
+        return Ok((CreateTarget::GithubRef(target.to_string()), None));
     }
 
     // JIRA URL or key
@@ -551,7 +498,7 @@ fn parse_create_target(
         return Ok((CreateTarget::JiraKey(jira_key), existing));
     }
 
-    // Bare PR number (#123 or 123): resolve against current directory's GitHub remote
+    // Bare number (#123 or 123): resolve against current directory's GitHub remote
     if let Ok(number) = target
         .strip_prefix('#')
         .unwrap_or(target)
@@ -560,12 +507,12 @@ fn parse_create_target(
         let cwd = std::env::current_dir().map_err(|e| format!("Cannot get cwd: {}", e))?;
         let github_repo = crate::git::github_repo_from_remote(&cwd).ok_or_else(|| {
             format!(
-                "Cannot resolve bare PR number '{}': no GitHub remote in current directory",
+                "Cannot resolve '{}': no GitHub remote in current directory",
                 target
             )
         })?;
-        let pr_ref = format!("{}#{}", github_repo, number);
-        return Ok((CreateTarget::GithubPr(pr_ref), None));
+        let github_ref = format!("{}#{}", github_repo, number);
+        return Ok((CreateTarget::GithubRef(github_ref), None));
     }
 
     // Project key (repo:branch)
@@ -593,24 +540,34 @@ fn parse_create_target(
     ))
 }
 
-fn task_create_from_pr(
+fn task_create_from_github_ref(
     client: &Client,
-    pr_ref: &str,
+    github_ref: &str,
     home_project: Option<&str>,
+    dry_run: bool,
 ) -> Result<(), String> {
-    let encoded: String = url::form_urlencoded::byte_serialize(pr_ref.as_bytes()).collect();
-    let mut url = format!("/task/create-from-pr?pr={}", encoded);
+    let encoded: String = url::form_urlencoded::byte_serialize(github_ref.as_bytes()).collect();
+    let mut url = format!("/task/create?ref={}", encoded);
     if let Some(hp) = home_project {
         url.push_str(&format!("&home-project={}", hp));
     }
-    eprint!("Fetching PR...");
+    if dry_run {
+        url.push_str("&dry-run=true");
+    }
+    eprint!("Resolving...");
     let response = client.post(&url)?;
     eprintln!(" done");
     let result: serde_json::Value =
         serde_json::from_str(&response).map_err(|e| format!("Failed to parse response: {}", e))?;
     if let Some(created) = result.get("created").and_then(|v| v.as_str()) {
-        let key = ProjectKey::parse(created.split(" (").next().unwrap_or(created));
+        let key_str = created.split(" (").next().unwrap_or(created);
+        let key = ProjectKey::parse(key_str);
         println!("  {}", key.hyperlink());
+    }
+    if let Some(skipped) = result.get("skipped").and_then(|v| v.as_str()) {
+        let key_str = skipped.split(" already exists").next().unwrap_or(skipped);
+        let key = ProjectKey::parse(key_str);
+        println!("  Skipped: {} already exists", key.hyperlink());
     }
     if let Some(error) = result.get("error").and_then(|v| v.as_str()) {
         eprintln!("  Error: {}", error);

@@ -75,8 +75,7 @@ pub struct QueryParams {
     pub role: Option<String>,
     pub wait: Option<u64>,
     pub since: Option<String>,
-    pub issue: Option<String>,
-    pub pr: Option<String>,
+    pub github_ref: Option<String>,
     pub tasks: bool,
     pub with_editor: bool,
 }
@@ -159,43 +158,30 @@ async fn route(
                     .unwrap(),
             }
         }),
-        "/task/create-from-issue" => require_post(method, || {
-            let issue = match params.issue {
-                Some(ref i) => i.as_str(),
+        "/task/create" => require_post(method, || {
+            let ref_str = match params.github_ref {
+                Some(ref r) => r.as_str(),
                 None => {
                     return Response::builder()
                         .status(StatusCode::BAD_REQUEST)
-                        .body(Body::from("Missing 'issue' query parameter"))
+                        .body(Body::from("Missing 'ref' query parameter"))
                         .unwrap();
                 }
             };
-            match crate::task::create_issue_task(
-                issue,
-                params.home_project.as_deref(),
-                params.dry_run,
-            ) {
-                Ok(result) => Response::builder()
-                    .header("Content-Type", "application/json")
-                    .body(Body::from(serde_json::to_string_pretty(&result).unwrap()))
-                    .unwrap(),
-                Err(e) => Response::builder()
-                    .status(StatusCode::INTERNAL_SERVER_ERROR)
-                    .body(Body::from(e))
-                    .unwrap(),
-            }
-        }),
-        "/task/create-from-pr" => require_post(method, || {
-            let pr = match params.pr {
-                Some(ref p) => p.as_str(),
+            let github_ref = match crate::github::parse_github_ref(ref_str) {
+                Some(r) => r,
                 None => {
                     return Response::builder()
                         .status(StatusCode::BAD_REQUEST)
-                        .body(Body::from("Missing 'pr' query parameter"))
+                        .body(Body::from(format!(
+                            "Cannot parse GitHub ref '{}'. Expected: PR/issue URL or owner/repo#N",
+                            ref_str
+                        )))
                         .unwrap();
                 }
             };
-            match crate::task::create_pr_task(
-                pr,
+            match crate::task::create_github_ref_task(
+                &github_ref,
                 params.home_project.as_deref(),
                 params.dry_run,
             ) {
@@ -547,8 +533,7 @@ impl QueryParams {
             role: None,
             wait: None,
             since: None,
-            issue: None,
-            pr: None,
+            github_ref: None,
             tasks: false,
             with_editor: false,
         };
@@ -585,8 +570,7 @@ impl QueryParams {
                     "role" => params.role = Some(val.to_string()),
                     "wait" => params.wait = val.parse().ok(),
                     "since" => params.since = Some(val.to_string()),
-                    "issue" => params.issue = Some(val.to_string()),
-                    "pr" => params.pr = Some(val.to_string()),
+                    "ref" => params.github_ref = Some(val.to_string()),
                     "tasks" => params.tasks = val == "true" || val == "1",
                     "with-editor" => params.with_editor = val == "true" || val == "1",
                     _ => {}

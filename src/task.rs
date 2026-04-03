@@ -221,7 +221,7 @@ pub fn create_review_tasks(dry_run: bool) -> Result<ReviewTaskResult, String> {
         match create_task(home.as_str(), &branch) {
             Ok(task) => {
                 let worktree = task.working_tree();
-                if let Err(e) = crate::github::pr_fetch_and_reset(&worktree, pr.number) {
+                if let Err(e) = crate::github::pr_checkout(&worktree, owner, repo_name, pr.number) {
                     result.errors.push(format!("{}: {}", task_key, e));
                     continue;
                 }
@@ -324,7 +324,7 @@ pub fn create_pr_task(
 
     let task = create_task(&home, &branch)?;
     let worktree = task.working_tree();
-    crate::github::pr_fetch_and_reset(&worktree, number)?;
+    crate::github::pr_checkout(&worktree, &owner, &repo_name, number)?;
 
     let key = ProjectKey::task(&home, &branch);
     crate::kv::set_value_sync(&key, "task_type", "review");

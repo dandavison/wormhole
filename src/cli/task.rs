@@ -551,6 +551,23 @@ fn parse_create_target(
         return Ok((CreateTarget::JiraKey(jira_key), existing));
     }
 
+    // Bare PR number (#123 or 123): resolve against current directory's GitHub remote
+    if let Ok(number) = target
+        .strip_prefix('#')
+        .unwrap_or(target)
+        .parse::<u64>()
+    {
+        let cwd = std::env::current_dir().map_err(|e| format!("Cannot get cwd: {}", e))?;
+        let github_repo = crate::git::github_repo_from_remote(&cwd).ok_or_else(|| {
+            format!(
+                "Cannot resolve bare PR number '{}': no GitHub remote in current directory",
+                target
+            )
+        })?;
+        let pr_ref = format!("{}#{}", github_repo, number);
+        return Ok((CreateTarget::GithubPr(pr_ref), None));
+    }
+
     // Project key (repo:branch)
     if let Some((repo, branch)) = target.split_once(':') {
         let existing = if client
@@ -571,7 +588,7 @@ fn parse_create_target(
     }
 
     Err(format!(
-        "Could not parse target '{}'. Expected: repo:branch, issue URL, PR URL, owner/repo#N, JIRA URL, or JIRA key",
+        "Could not parse target '{}'. Expected: repo:branch, PR number (#N), PR URL, owner/repo#N, issue URL, JIRA URL, or JIRA key",
         target
     ))
 }

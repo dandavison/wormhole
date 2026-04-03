@@ -88,7 +88,7 @@ pub enum JiraCommand {
 pub enum TaskCommand {
     /// Create or update a task
     Create {
-        /// Target: project key (repo:branch), JIRA URL, or JIRA key (ACT-123)
+        /// Target: PR number (#123), PR URL, owner/repo#123, project key (repo:branch), JIRA URL, or JIRA key
         #[arg(add = ArgValueCompleter::new(complete_projects))]
         target: String,
         /// Home project for the worktree (required for create)

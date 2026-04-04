@@ -134,6 +134,9 @@ async fn route(
             project::navigate(project::Direction::Previous, params);
             Response::new(Body::from(""))
         }
+        "/project/close" => {
+            require_post_async(method, || async { project::close_many(req).await }).await
+        }
         "/project/refresh" => require_post(method, || {
             project::refresh_all();
             Response::new(Body::from(""))

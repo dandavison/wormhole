@@ -180,14 +180,15 @@ pub enum ProjectCommand {
         #[arg(long, value_name = "APP")]
         land_in: Option<String>,
     },
-    /// Close a project (editor and terminal windows)
+    /// Close projects (editor and terminal windows)
     Close {
-        /// Project name (defaults to current project)
+        /// Project names (defaults to current project)
         #[arg(add = ArgValueCompleter::new(complete_projects))]
-        name: Option<String>,
+        names: Vec<String>,
+        /// Close all open projects
+        #[arg(long)]
+        all: bool,
     },
-    /// Close all open projects
-    CloseAll,
     /// Remove a project from wormhole (removes worktree for tasks)
     Remove {
         /// Project name
@@ -530,17 +531,26 @@ pub fn run(command: Command) -> Result<(), String> {
                 client.get(&format!("/project/next{}", query))?;
                 Ok(())
             }
-            ProjectCommand::Close { name } => {
-                let name = name.unwrap_or_else(|| {
-                    std::env::current_dir()
-                        .map(|p| p.to_string_lossy().to_string())
-                        .unwrap_or_default()
-                });
-                client.post(&format!("/project/close/{}", name))?;
-                Ok(())
-            }
-            ProjectCommand::CloseAll => {
-                client.post("/project/close-all")?;
+            ProjectCommand::Close { names, all } => {
+                if all {
+                    client.post("/project/close-all")?;
+                } else {
+                    let names = if names.is_empty() {
+                        vec![std::env::current_dir()
+                            .map(|p| p.to_string_lossy().to_string())
+                            .unwrap_or_default()]
+                    } else {
+                        names
+                    };
+                    if names.len() == 1 {
+                        client.post(&format!("/project/close/{}", names[0]))?;
+                    } else {
+                        client.post_json(
+                            "/project/close",
+                            &serde_json::json!({ "names": names }),
+                        )?;
+                    }
+                }
                 Ok(())
             }
             ProjectCommand::Remove { name } => {

@@ -2,7 +2,7 @@
 // Handlers must do no I/O (no subprocess calls, no filesystem access).
 // All data should come from in-memory caches populated by refresh_* functions.
 
-use hyper::{Body, Response, StatusCode};
+use hyper::{Body, Request, Response, StatusCode};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -126,6 +126,13 @@ fn close_project(name: &str) {
     projects.print();
 }
 
+fn close_projects(keys: &[String]) {
+    for key in keys {
+        close_project(key);
+        thread::sleep(Duration::from_millis(200));
+    }
+}
+
 fn close_all_projects() {
     let keys: Vec<_> = {
         let projects = projects::lock();
@@ -137,10 +144,7 @@ fn close_all_projects() {
             .map(|p| p.store_key().to_string())
             .collect()
     };
-    for key in &keys {
-        close_project(key);
-        thread::sleep(Duration::from_millis(200));
-    }
+    close_projects(&keys);
 }
 
 /// Refresh all in-memory data from external sources (fs, github)
@@ -280,6 +284,34 @@ pub fn remove(name: &str) -> Response<Body> {
 pub fn close(name: &str) {
     let name = name.trim().to_string();
     thread::spawn(move || close_project(&name));
+}
+
+pub async fn close_many(req: Request<Body>) -> Response<Body> {
+    let body_bytes = match hyper::body::to_bytes(req.into_body()).await {
+        Ok(b) => b,
+        Err(e) => {
+            return Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body(Body::from(format!("Failed to read body: {}", e)))
+                .unwrap();
+        }
+    };
+    #[derive(serde::Deserialize)]
+    struct CloseManyRequest {
+        names: Vec<String>,
+    }
+    let request: CloseManyRequest = match serde_json::from_slice(&body_bytes) {
+        Ok(r) => r,
+        Err(e) => {
+            return Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body(Body::from(format!("Invalid JSON: {}", e)))
+                .unwrap();
+        }
+    };
+    let names: Vec<String> = request.names.iter().map(|n| n.trim().to_string()).collect();
+    thread::spawn(move || close_projects(&names));
+    Response::new(Body::from(""))
 }
 
 pub fn close_all() {

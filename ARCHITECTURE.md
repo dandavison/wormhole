@@ -348,9 +348,9 @@ pub fn pin_project() -> Response<Body> {
 }
 ```
 
-#### POST /project/close/{name}, /project/remove/{name}
+#### POST /project/close/{name}
 
-Close windows or remove project from store.
+Close windows. With `?remove=true`, also removes worktree/KV for tasks and deletes from store.
 
 [src/endpoints.rs (`close_project`)](https://github.com/dandavison/wormhole/blob/main/src/endpoints.rs#L140-L152)
 ```rust

@@ -122,28 +122,6 @@ pub fn open_task(repo: &str, branch: &str, land_in: Option<LandIn>) -> Result<()
     Ok(())
 }
 
-pub fn remove_task(repo: &str, branch: &str) -> Result<(), String> {
-    let task = get_task_by_branch(repo, branch)
-        .ok_or_else(|| format!("Task '{}:{}' not found", repo, branch))?;
-
-    let worktree_path = task
-        .worktree_path()
-        .ok_or_else(|| format!("'{}:{}' is not a task", repo, branch))?;
-
-    crate::serve_web::manager().stop(&task.store_key().to_string());
-    git::remove_worktree(&task.repo_path, &worktree_path)?;
-
-    // Delete KV file for this task
-    crate::kv::delete_kv_file(&task);
-
-    // Remove from unified store
-    {
-        let mut projects = projects::lock();
-        projects.remove(&task.store_key());
-    }
-
-    Ok(())
-}
 
 #[derive(serde::Serialize)]
 pub struct ReviewTaskResult {

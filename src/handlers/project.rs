@@ -93,24 +93,8 @@ pub fn debug_projects() -> Response<Body> {
         .unwrap()
 }
 
-fn remove_project(name: &str) -> Response<Body> {
-    let key = ProjectKey::parse(name);
-    let mut projects = projects::lock();
-    if let Some(p) = projects.by_key(&key) {
-        config::TERMINAL.close(&p);
-    }
-    if projects.remove(&key) {
-        projects.print();
-        Response::new(Body::from(format!("removed project: {}", name)))
-    } else {
-        Response::builder()
-            .status(StatusCode::NOT_FOUND)
-            .body(Body::from(format!("Project '{}' not found", name)))
-            .unwrap()
-    }
-}
 
-fn close_project(name: &str) {
+fn close_project(name: &str, remove: bool) {
     let key = ProjectKey::parse(name);
     let mut projects = projects::lock();
     if let Some(p) = projects
@@ -119,21 +103,32 @@ fn close_project(name: &str) {
     {
         config::TERMINAL.close(&p);
         config::editor().close(&p);
-        if p.is_task() {
+        if remove {
+            if p.is_task() {
+                crate::serve_web::manager().stop(&p.store_key().to_string());
+                if let Some(worktree_path) = p.worktree_path() {
+                    if let Err(e) = crate::git::remove_worktree(&p.repo_path, &worktree_path) {
+                        eprintln!("Failed to remove worktree: {}", e);
+                    }
+                }
+                crate::kv::delete_kv_file(&p);
+            }
+            projects.remove(&p.store_key());
+        } else if p.is_task() {
             projects.remove_from_ring(&p.store_key());
         }
     }
     projects.print();
 }
 
-fn close_projects(keys: &[String]) {
+fn close_projects(keys: &[String], remove: bool) {
     for key in keys {
-        close_project(key);
+        close_project(key, remove);
         thread::sleep(Duration::from_millis(200));
     }
 }
 
-fn close_all_projects() {
+fn close_all_projects(remove: bool) {
     let keys: Vec<_> = {
         let projects = projects::lock();
         let window_names = config::TERMINAL.window_names();
@@ -144,7 +139,7 @@ fn close_all_projects() {
             .map(|p| p.store_key().to_string())
             .collect()
     };
-    close_projects(&keys);
+    close_projects(&keys, remove);
 }
 
 /// Refresh all in-memory data from external sources (fs, github)
@@ -263,30 +258,13 @@ pub enum Direction {
     Next,
 }
 
-pub fn remove(name: &str) -> Response<Body> {
-    let name = name.trim();
-    if let Some((repo, branch)) = name.split_once(':') {
-        if let Some(task) = crate::task::get_task_by_branch(repo, branch) {
-            if task.is_task() {
-                return match crate::task::remove_task(repo, branch) {
-                    Ok(()) => Response::new(Body::from(format!("Removed task: {}", name))),
-                    Err(e) => Response::builder()
-                        .status(StatusCode::BAD_REQUEST)
-                        .body(Body::from(e))
-                        .unwrap(),
-                };
-            }
-        }
-    }
-    remove_project(name)
-}
 
-pub fn close(name: &str) {
+pub fn close(name: &str, remove: bool) {
     let name = name.trim().to_string();
-    thread::spawn(move || close_project(&name));
+    thread::spawn(move || close_project(&name, remove));
 }
 
-pub async fn close_many(req: Request<Body>) -> Response<Body> {
+pub async fn close_many(req: Request<Body>, remove: bool) -> Response<Body> {
     let body_bytes = match hyper::body::to_bytes(req.into_body()).await {
         Ok(b) => b,
         Err(e) => {
@@ -310,12 +288,12 @@ pub async fn close_many(req: Request<Body>) -> Response<Body> {
         }
     };
     let names: Vec<String> = request.names.iter().map(|n| n.trim().to_string()).collect();
-    thread::spawn(move || close_projects(&names));
+    thread::spawn(move || close_projects(&names, remove));
     Response::new(Body::from(""))
 }
 
-pub fn close_all() {
-    thread::spawn(close_all_projects);
+pub fn close_all(remove: bool) {
+    thread::spawn(move || close_all_projects(remove));
 }
 
 pub fn show(name: Option<&str>) -> Response<Body> {

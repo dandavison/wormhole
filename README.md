@@ -150,7 +150,7 @@ wormhole project list --name-only       # Output project keys only (for completi
 wormhole project previous               # Previous project
 wormhole project next                   # Next project
 wormhole project close myapp            # Close project windows
-wormhole project remove myapp           # Remove project/task
+wormhole project close myapp --remove   # Close and remove (deletes worktree/KV for tasks)
 wormhole project pin                    # Pin current (project, app) state
 wormhole project debug                  # Debug info for all projects
 wormhole project show                   # Show task info (JIRA, PR, CLAUDE.md)
@@ -184,8 +184,7 @@ wormhole completion bash                # Generate shell completions
 | GET    | `/project/create/<branch>`    | Create task with branch name      |
 | GET    | `/project/previous`           | Previous project                  |
 | GET    | `/project/next`               | Next project                      |
-| POST   | `/project/close/<name>`       | Close project windows             |
-| POST   | `/project/remove/<name>`      | Remove project/task               |
+| POST   | `/project/close/<name>`       | Close project windows (?remove=true to delete) |
 | POST   | `/project/pin`                | Pin current (project, app) state  |
 | GET    | `/project/current/poll`       | Poll for current project changes  |
 | GET    | `/project/debug`              | Debug info                        |
@@ -218,7 +217,7 @@ wormhole completion bash                # Generate shell completions
 | GET    | `/kv/<project>`               | List project KV                   |
 | GET    | `/kv`                         | List all KV                       |
 
-Query params: `land-in=terminal|editor|terminal-only|none`, `line=N`, `home-project=<project>`, `branch=<branch>`, `active=true`, `current=true`, `completed=true`, `dry-run=true`, `sync=true`, `pwd=<path>`, `run=<id>`, `offset=N`, `role=<role>`, `wait=N`
+Query params: `land-in=terminal|editor|terminal-only|none`, `line=N`, `home-project=<project>`, `branch=<branch>`, `active=true`, `current=true`, `completed=true`, `dry-run=true`, `sync=true`, `pwd=<path>`, `run=<id>`, `offset=N`, `role=<role>`, `wait=N`, `remove=true`
 
 ## Message Intents
 

@@ -462,7 +462,7 @@ pub(super) fn task_create(
     if is_move {
         let (old_repo, old_branch) = existing_task.as_ref().unwrap();
         let old_key = format!("{}:{}", old_repo, old_branch);
-        if let Err(e) = client.post(&format!("/project/remove/{}", old_key)) {
+        if let Err(e) = client.post(&format!("/project/close/{}?remove=true", old_key)) {
             eprintln!("Warning: failed to remove old worktree: {}", e);
         }
     }

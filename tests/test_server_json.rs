@@ -73,7 +73,7 @@ fn test_task_remove_deletes_kv_file() {
     );
 
     // Remove the task
-    test.http_post(&format!("/project/remove/{}", store_key))
+    test.http_post(&format!("/project/close/{}?remove=true", store_key))
         .unwrap();
 
     // Wait for removal to complete

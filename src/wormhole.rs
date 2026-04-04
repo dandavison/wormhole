@@ -78,6 +78,7 @@ pub struct QueryParams {
     pub github_ref: Option<String>,
     pub tasks: bool,
     pub with_editor: bool,
+    pub remove: bool,
 }
 
 pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
@@ -135,7 +136,11 @@ async fn route(
             Response::new(Body::from(""))
         }
         "/project/close" => {
-            require_post_async(method, || async { project::close_many(req).await }).await
+            let remove = params.remove;
+            require_post_async(method, || async move {
+                project::close_many(req, remove).await
+            })
+            .await
         }
         "/project/refresh" => require_post(method, || {
             project::refresh_all();
@@ -258,18 +263,17 @@ async fn route_with_params(
             _ => method_not_allowed(),
         };
     }
-    if let Some(name) = path.strip_prefix("/project/remove/") {
-        return require_post(method, || project::remove(name));
-    }
     if path == "/project/close-all" {
+        let remove = params.remove;
         return require_post(method, || {
-            project::close_all();
+            project::close_all(remove);
             Response::new(Body::from(""))
         });
     }
     if let Some(name) = path.strip_prefix("/project/close/") {
+        let remove = params.remove;
         return require_post(method, || {
-            project::close(name);
+            project::close(name, remove);
             Response::new(Body::from(""))
         });
     }
@@ -539,6 +543,7 @@ impl QueryParams {
             github_ref: None,
             tasks: false,
             with_editor: false,
+            remove: false,
         };
         if let Some(query) = query {
             for (key, val) in form_urlencoded::parse(query.as_bytes()) {
@@ -576,6 +581,7 @@ impl QueryParams {
                     "ref" => params.github_ref = Some(val.to_string()),
                     "tasks" => params.tasks = val == "true" || val == "1",
                     "with-editor" => params.with_editor = val == "true" || val == "1",
+                    "remove" => params.remove = val == "true" || val == "1",
                     _ => {}
                 }
             }

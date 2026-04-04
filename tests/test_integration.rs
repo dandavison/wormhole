@@ -1041,7 +1041,7 @@ fn test_remove_task_deletes_worktree_from_disk() {
         "Worktree should exist before removal"
     );
 
-    test.http_post(&format!("/project/remove/{}", store_key))
+    test.http_post(&format!("/project/close/{}?remove=true", store_key))
         .unwrap();
     std::thread::sleep(std::time::Duration::from_millis(500));
 

@@ -188,12 +188,9 @@ pub enum ProjectCommand {
         /// Close all open projects
         #[arg(long)]
         all: bool,
-    },
-    /// Remove a project from wormhole (removes worktree for tasks)
-    Remove {
-        /// Project name
-        #[arg(add = ArgValueCompleter::new(complete_projects))]
-        name: String,
+        /// Also remove the project (deletes worktree and KV data for tasks)
+        #[arg(long)]
+        remove: bool,
     },
     /// Pin current (project, application) state
     Pin,
@@ -531,9 +528,10 @@ pub fn run(command: Command) -> Result<(), String> {
                 client.get(&format!("/project/next{}", query))?;
                 Ok(())
             }
-            ProjectCommand::Close { names, all } => {
+            ProjectCommand::Close { names, all, remove } => {
+                let remove_query = if remove { "?remove=true" } else { "" };
                 if all {
-                    client.post("/project/close-all")?;
+                    client.post(&format!("/project/close-all{}", remove_query))?;
                 } else {
                     let names = if names.is_empty() {
                         vec![std::env::current_dir()
@@ -543,18 +541,17 @@ pub fn run(command: Command) -> Result<(), String> {
                         names
                     };
                     if names.len() == 1 {
-                        client.post(&format!("/project/close/{}", names[0]))?;
+                        client.post(&format!(
+                            "/project/close/{}{}",
+                            names[0], remove_query
+                        ))?;
                     } else {
                         client.post_json(
-                            "/project/close",
+                            &format!("/project/close{}", remove_query),
                             &serde_json::json!({ "names": names }),
                         )?;
                     }
                 }
-                Ok(())
-            }
-            ProjectCommand::Remove { name } => {
-                client.post(&format!("/project/remove/{}", name))?;
                 Ok(())
             }
             ProjectCommand::Pin => {

@@ -13,7 +13,10 @@ function vscodeCommand(command: string): IntentHandler {
 }
 
 const INTENTS: Record<string, IntentHandler> = {
-  'editor/close': vscodeCommand('workbench.action.closeWindow'),
+  'editor/close': () => {
+    abortController?.abort();
+    return vscode.commands.executeCommand('workbench.action.closeWindow');
+  },
   'editor/toggleZenMode': vscodeCommand('workbench.action.toggleZenMode'),
   echo: (projectKey, port) => putKv(projectKey, port, 'last-message', 'echo'),
   'claude-code/resume': async (_projectKey, _port, params) => {
@@ -136,6 +139,7 @@ function poll(
   return new Promise((resolve, reject) => {
     const req = http.get(
       `http://127.0.0.1:${port}/project/messages/${projectKey}?role=editor`,
+      { timeout: 60_000 },
       (res) => {
         let data = '';
         res.on('data', (chunk: string) => (data += chunk));
@@ -148,6 +152,7 @@ function poll(
         });
       },
     );
+    req.on('timeout', () => req.destroy());
     req.on('error', reject);
     signal.addEventListener(
       'abort',

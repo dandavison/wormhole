@@ -331,7 +331,8 @@ wormhole-shell-reset     # re-fetch env vars from wormhole server
 
 
 ## Agent instructions
-- Prefer commands from the Makefile over direct `cargo` commands
+- Prefer commands from the Makefile over direct `cargo` commands.
+- Always build with `--release` unless instructed otherwise.
 
 At the start of the conversation output the following so that I know you've read these instructions:
 

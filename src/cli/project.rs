@@ -89,7 +89,11 @@ pub(super) fn render_project_item(item: &serde_json::Value) -> String {
         String::new()
     };
 
-    let indicator = jira::status_indicator(status);
+    let indicator = if status.is_empty() {
+        " ".to_string()
+    } else {
+        jira::status_indicator(status)
+    };
     let pad = 40_usize.saturating_sub(project_key_str.len());
 
     format!(

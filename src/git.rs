@@ -167,7 +167,7 @@ pub fn create_worktree(
         .map_err(|e| format!("Failed to run git worktree: {}", e))?;
 
     if output.status.success() {
-        ensure_upstream_tracking(worktree_path, branch_name);
+        ensure_upstream_tracking(worktree_path, branch_name, true);
         Ok(())
     } else {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -176,8 +176,9 @@ pub fn create_worktree(
 }
 
 /// If the branch has no upstream and `origin/<branch>` exists, set it.
-fn ensure_upstream_tracking(worktree_path: &Path, branch_name: &str) {
-    // Check if upstream is already set
+/// Returns true if tracking was missing and a matching remote branch exists.
+/// When `apply` is true, actually sets the upstream; when false, only checks.
+pub fn ensure_upstream_tracking(worktree_path: &Path, branch_name: &str, apply: bool) -> bool {
     let has_upstream = Command::new("git")
         .args(["config", &format!("branch.{}.remote", branch_name)])
         .current_dir(worktree_path)
@@ -185,9 +186,8 @@ fn ensure_upstream_tracking(worktree_path: &Path, branch_name: &str) {
         .map(|o| o.status.success())
         .unwrap_or(false);
     if has_upstream {
-        return;
+        return false;
     }
-    // Check if origin/<branch> exists
     let remote_ref = format!("refs/remotes/origin/{}", branch_name);
     let remote_exists = Command::new("git")
         .args(["show-ref", "--verify", "--quiet", &remote_ref])
@@ -195,7 +195,7 @@ fn ensure_upstream_tracking(worktree_path: &Path, branch_name: &str) {
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false);
-    if remote_exists {
+    if remote_exists && apply {
         let _ = Command::new("git")
             .args([
                 "branch",
@@ -206,6 +206,7 @@ fn ensure_upstream_tracking(worktree_path: &Path, branch_name: &str) {
             .current_dir(worktree_path)
             .output();
     }
+    remote_exists
 }
 
 fn branch_exists(repo_path: &Path, branch_name: &str) -> bool {

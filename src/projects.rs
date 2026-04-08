@@ -452,7 +452,7 @@ pub fn refresh_cache() {
 }
 
 fn generate_cards(task_info: &[(ProjectKey, Option<String>, std::path::PathBuf)]) {
-    let commands = crate::config::card_commands();
+    let commands = crate::config::reload_card_commands();
     if commands.is_empty() {
         return;
     }
@@ -460,7 +460,7 @@ fn generate_cards(task_info: &[(ProjectKey, Option<String>, std::path::PathBuf)]
         let task_dir = path.join(".task");
         let _ = std::fs::create_dir_all(&task_dir);
         let mut sections = Vec::new();
-        for cmd in commands {
+        for cmd in &commands {
             let output = std::process::Command::new("sh")
                 .args(["-c", cmd])
                 .current_dir(path)

@@ -805,7 +805,6 @@ pub fn run(command: Command) -> Result<(), String> {
 
         Command::Refresh => {
             client.post("/project/refresh")?;
-            println!("Refreshed");
             Ok(())
         }
     }

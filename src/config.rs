@@ -210,6 +210,11 @@ pub fn card_commands() -> &'static [String] {
     &config().card_commands
 }
 
+/// Re-read card_commands from the config file (not cached).
+pub fn reload_card_commands() -> Vec<String> {
+    load_config_file().card_commands
+}
+
 pub fn is_excluded(name: &str, search_dir: &Path) -> bool {
     for sp in &config().search_paths {
         if sp.path == search_dir {

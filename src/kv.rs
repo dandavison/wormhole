@@ -123,6 +123,10 @@ pub fn delete_kv_file(project: &Project) {
     let _ = std::fs::remove_file(path);
 }
 
+pub fn save_project_kv_pub(project: &Project) {
+    save_project_kv(project);
+}
+
 fn save_project_kv(project: &Project) {
     use std::fs;
 

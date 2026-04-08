@@ -137,9 +137,12 @@ impl Project {
     }
 
     pub fn is_hidden(&self) -> bool {
-        self.kv
-            .get("status")
-            .is_some_and(|v| v == "done" || v == "hidden")
+        self.kv.get("visibility").is_some_and(|v| v == "hidden")
+            || self.kv.get("status").is_some_and(|v| v == "done")
+    }
+
+    pub fn has_jira(&self) -> bool {
+        self.kv.contains_key("jira_key")
     }
 
     pub fn store_key(&self) -> ProjectKey {

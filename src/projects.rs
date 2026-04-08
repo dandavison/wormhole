@@ -430,6 +430,18 @@ pub fn refresh_cache() {
         let mut projects = lock();
         for (key, jira, pr) in results {
             if let Some(project) = projects.0.all.get_mut(&key) {
+                if let Some(ref j) = jira {
+                    let jira_status = jira_status_to_local(&j.status);
+                    match jira_status {
+                        Some(s) => {
+                            project.kv.insert("status".to_string(), s.to_string());
+                        }
+                        None => {
+                            project.kv.remove("status");
+                        }
+                    }
+                    crate::kv::save_project_kv_pub(project);
+                }
                 project.cached.jira = jira;
                 project.cached.pr = pr;
             }
@@ -454,4 +466,14 @@ pub fn cache_needs_refresh() -> bool {
             let pr_missing = p.cached.pr.is_none();
             jira_missing || pr_missing
         })
+}
+
+/// Map a JIRA status string to the local KV `status` value.
+/// Returns `None` for active statuses (status key should be removed).
+fn jira_status_to_local(jira_status: &str) -> Option<&'static str> {
+    match jira_status.to_lowercase().as_str() {
+        "done" | "closed" | "resolved" => Some("done"),
+        "in progress" | "in development" => Some("in-progress"),
+        _ => None,
+    }
 }

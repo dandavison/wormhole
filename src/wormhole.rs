@@ -413,6 +413,20 @@ async fn handle_kv_request(method: &Method, kv_path: &str, req: Request<Body>) -
             match *method {
                 Method::GET => kv::get_value(&key, kv_key),
                 Method::PUT => {
+                    if *kv_key == "status" {
+                        let projects = crate::projects::lock();
+                        if let Some(p) = projects.by_key(&key) {
+                            if p.has_jira() {
+                                return Response::builder()
+                                    .status(StatusCode::CONFLICT)
+                                    .body(Body::from(
+                                        "Cannot set status on a JIRA task: JIRA is the source of truth",
+                                    ))
+                                    .unwrap();
+                            }
+                        }
+                        drop(projects);
+                    }
                     let (_, body) = req.into_parts();
                     kv::set_value(&key, kv_key, body).await
                 }

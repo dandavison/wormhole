@@ -212,6 +212,11 @@ fn render_task_card(
         r#" data-repo-path="{}""#,
         html_escape(&task.repo_path.display().to_string())
     );
+    let has_jira_attr = if task.has_jira() {
+        r#" data-has-jira="true""#
+    } else {
+        ""
+    };
 
     let dismiss_html = format!(
         concat!(
@@ -224,7 +229,7 @@ fn render_task_card(
     );
 
     format!(
-        r#"<div class="card{}" data-task="{}"{}{}>
+        r#"<div class="card{}" data-task="{}"{}{}{}>
 <div class="card-header">{}<span class="card-summary">{}</span>{}{}</div>
 <div class="card-meta">{}{}{}{}</div>
 {}{}
@@ -233,6 +238,7 @@ fn render_task_card(
         html_escape(&task_id),
         status_attr,
         repo_path_attr,
+        has_jira_attr,
         repo_branch,
         summary,
         status_html,

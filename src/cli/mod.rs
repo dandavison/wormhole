@@ -106,19 +106,19 @@ pub enum TaskCommand {
         #[arg(long)]
         dry_run: bool,
     },
-    /// Mark a task as done (hides from dashboard)
+    /// Mark a non-JIRA task as done (JIRA tasks get status from JIRA)
     Done {
         /// Task key (defaults to current directory)
         #[arg(add = ArgValueCompleter::new(complete_projects))]
         name: Option<String>,
     },
-    /// Hide a task from the dashboard
+    /// Hide a task from the dashboard (regardless of status)
     Hide {
         /// Task key (defaults to current directory)
         #[arg(add = ArgValueCompleter::new(complete_projects))]
         name: Option<String>,
     },
-    /// Unhide a done or hidden task
+    /// Unhide a hidden task / clear local done status
     Reopen {
         /// Task key (defaults to current directory)
         #[arg(add = ArgValueCompleter::new(complete_projects))]
@@ -734,29 +734,24 @@ pub fn run(command: Command) -> Result<(), String> {
                 task::task_create_from_review_requests(&client, dry_run)
             }
             TaskCommand::Done { name } => {
-                let name = name.unwrap_or_else(|| {
-                    std::env::current_dir()
-                        .map(|p| p.to_string_lossy().to_string())
-                        .unwrap_or_default()
-                });
+                let name = resolve_task_name(name);
+                let has_jira = client
+                    .get(&format!("/kv/{}/jira_key", name))
+                    .is_ok_and(|r| !r.is_empty());
+                if has_jira {
+                    return Err("Cannot set status on a JIRA task: JIRA is the source of truth. Use `task hide` to hide it from the dashboard.".to_string());
+                }
                 client.put(&format!("/kv/{}/status", name), "done")?;
                 Ok(())
             }
             TaskCommand::Hide { name } => {
-                let name = name.unwrap_or_else(|| {
-                    std::env::current_dir()
-                        .map(|p| p.to_string_lossy().to_string())
-                        .unwrap_or_default()
-                });
-                client.put(&format!("/kv/{}/status", name), "hidden")?;
+                let name = resolve_task_name(name);
+                client.put(&format!("/kv/{}/visibility", name), "hidden")?;
                 Ok(())
             }
             TaskCommand::Reopen { name } => {
-                let name = name.unwrap_or_else(|| {
-                    std::env::current_dir()
-                        .map(|p| p.to_string_lossy().to_string())
-                        .unwrap_or_default()
-                });
+                let name = resolve_task_name(name);
+                client.delete(&format!("/kv/{}/visibility", name))?;
                 client.delete(&format!("/kv/{}/status", name))?;
                 Ok(())
             }
@@ -820,4 +815,12 @@ pub fn run(command: Command) -> Result<(), String> {
             Ok(())
         }
     }
+}
+
+fn resolve_task_name(name: Option<String>) -> String {
+    name.unwrap_or_else(|| {
+        std::env::current_dir()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default()
+    })
 }

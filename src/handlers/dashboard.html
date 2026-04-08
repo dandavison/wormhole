@@ -516,10 +516,21 @@
       document.querySelectorAll('.dismiss-link').forEach((link) => {
         link.addEventListener('click', (e) => {
           e.stopPropagation();
+          const card = link.closest('.card');
           const task = link.dataset.task;
-          const status = link.classList.contains('dismiss-done') ? 'done' : 'hidden';
-          fetch('/kv/' + task + '/status', { method: 'PUT', body: status });
-          link.closest('.card').remove();
+          const isDone = link.classList.contains('dismiss-done');
+          if (isDone && card.dataset.hasJira) {
+            link.textContent = 'JIRA is source of truth';
+            link.style.color = '#c44';
+            setTimeout(() => { link.textContent = 'done'; link.style.color = ''; }, 2000);
+            return;
+          }
+          if (isDone) {
+            fetch('/kv/' + task + '/status', { method: 'PUT', body: 'done' });
+          } else {
+            fetch('/kv/' + task + '/visibility', { method: 'PUT', body: 'hidden' });
+          }
+          card.remove();
         });
       });
 

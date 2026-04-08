@@ -35,7 +35,7 @@ impl ConformResult {
             if let Some(ref e) = r.error {
                 lines.push(format!("  {} error: {}", r.task, e));
                 errs += 1;
-            } else {
+            } else if !r.actions.is_empty() {
                 let key = crate::project::ProjectKey::parse(&r.task);
                 lines.push(format!("  {}", key.hyperlink()));
                 for action in &r.actions {

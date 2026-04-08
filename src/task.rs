@@ -18,8 +18,13 @@ pub fn get_task_by_branch(repo: &str, branch: &str) -> Option<Project> {
 
 /// Create a task. The branch name is the task identity.
 pub fn create_task(repo: &str, branch: &str) -> Result<Project, String> {
+    let worktree_path = git::task_worktree_path(config::worktree_dir(), repo, branch);
+
     if let Some(task) = get_task_by_branch(repo, branch) {
-        return Ok(task);
+        if worktree_path.join(".git").exists() {
+            return Ok(task);
+        }
+        // Task is in memory but worktree is broken/missing; recreate it.
     }
 
     let repo_path = resolve_project_path(repo)?;
@@ -28,10 +33,7 @@ pub fn create_task(repo: &str, branch: &str) -> Result<Project, String> {
         return Err(format!("'{}' is not a git repository", repo));
     }
 
-    let worktree_path = git::task_worktree_path(config::worktree_dir(), repo, branch);
-
-    let worktree_preexisted = worktree_path.exists();
-    if !worktree_preexisted {
+    if !worktree_path.join(".git").exists() {
         git::create_worktree(&repo_path, &worktree_path, branch)?;
         setup_task_worktree(&worktree_path, repo, branch)?;
     }

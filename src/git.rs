@@ -138,6 +138,12 @@ pub fn create_worktree(
         std::fs::create_dir_all(parent)
             .map_err(|e| format!("Failed to create directory {}: {}", parent.display(), e))?;
     }
+    // Remove broken remnant (exists but not a git worktree) to avoid
+    // `git worktree add` failing with "already exists".
+    if worktree_path.exists() && !worktree_path.join(".git").exists() {
+        std::fs::remove_dir_all(worktree_path)
+            .map_err(|e| format!("Failed to remove broken worktree dir: {}", e))?;
+    }
 
     let args = if branch_exists(repo_path, branch_name) {
         if let Some(existing_path) = branch_checked_out_at(repo_path, branch_name) {
@@ -280,17 +286,23 @@ fn vacate_branch(path: &Path, branch_name: &str) -> Result<(), String> {
             path.display()
         ));
     }
-    let target = default_branch(path).unwrap_or_else(|| "HEAD".to_string());
-    let args: Vec<&str> = if target == "HEAD" {
-        vec!["switch", "--detach"]
-    } else {
-        vec!["switch", &target]
-    };
+    let target = default_branch(path);
+    if let Some(ref branch) = target {
+        let output = Command::new("git")
+            .args(["switch", branch])
+            .current_dir(path)
+            .output()
+            .map_err(|e| format!("Failed to switch branch at {}: {}", path.display(), e))?;
+        if output.status.success() {
+            return Ok(());
+        }
+    }
+    // Default branch unavailable or already checked out elsewhere; detach HEAD.
     let output = Command::new("git")
-        .args(&args)
+        .args(["switch", "--detach"])
         .current_dir(path)
         .output()
-        .map_err(|e| format!("Failed to switch branch at {}: {}", path.display(), e))?;
+        .map_err(|e| format!("Failed to detach HEAD at {}: {}", path.display(), e))?;
     if output.status.success() {
         Ok(())
     } else {
@@ -306,7 +318,7 @@ fn vacate_branch(path: &Path, branch_name: &str) -> Result<(), String> {
 
 fn is_working_tree_clean(path: &Path) -> bool {
     Command::new("git")
-        .args(["status", "--porcelain"])
+        .args(["status", "--porcelain", "-uno"])
         .current_dir(path)
         .output()
         .map(|o| o.status.success() && o.stdout.is_empty())
@@ -726,8 +738,19 @@ detached
             .output()
             .unwrap();
 
-        // Make the working tree dirty
-        fs::write(repo.join("dirty.txt"), "uncommitted").unwrap();
+        // Make the working tree dirty with a tracked file modification
+        fs::write(repo.join("tracked.txt"), "initial").unwrap();
+        Command::new("git")
+            .args(["add", "tracked.txt"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "-m", "add tracked file"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+        fs::write(repo.join("tracked.txt"), "modified").unwrap();
 
         let worktree_path = repo.join("worktrees/dirty-feature");
         let result = create_worktree(&repo, &worktree_path, "dirty-feature");

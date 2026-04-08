@@ -167,10 +167,44 @@ pub fn create_worktree(
         .map_err(|e| format!("Failed to run git worktree: {}", e))?;
 
     if output.status.success() {
+        ensure_upstream_tracking(worktree_path, branch_name);
         Ok(())
     } else {
         let stderr = String::from_utf8_lossy(&output.stderr);
         Err(format!("git worktree add failed: {}", stderr.trim()))
+    }
+}
+
+/// If the branch has no upstream and `origin/<branch>` exists, set it.
+fn ensure_upstream_tracking(worktree_path: &Path, branch_name: &str) {
+    // Check if upstream is already set
+    let has_upstream = Command::new("git")
+        .args(["config", &format!("branch.{}.remote", branch_name)])
+        .current_dir(worktree_path)
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+    if has_upstream {
+        return;
+    }
+    // Check if origin/<branch> exists
+    let remote_ref = format!("refs/remotes/origin/{}", branch_name);
+    let remote_exists = Command::new("git")
+        .args(["show-ref", "--verify", "--quiet", &remote_ref])
+        .current_dir(worktree_path)
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+    if remote_exists {
+        let _ = Command::new("git")
+            .args([
+                "branch",
+                "--set-upstream-to",
+                &format!("origin/{}", branch_name),
+                branch_name,
+            ])
+            .current_dir(worktree_path)
+            .output();
     }
 }
 

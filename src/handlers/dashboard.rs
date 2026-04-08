@@ -208,6 +208,10 @@ fn render_task_card(
 
     let task_id = task.store_key().to_string();
     let current_class = if is_current { " current" } else { "" };
+    let repo_path_attr = format!(
+        r#" data-repo-path="{}""#,
+        html_escape(&task.repo_path.display().to_string())
+    );
 
     let dismiss_html = format!(
         concat!(
@@ -220,7 +224,7 @@ fn render_task_card(
     );
 
     format!(
-        r#"<div class="card{}" data-task="{}"{}>
+        r#"<div class="card{}" data-task="{}"{}{}>
 <div class="card-header">{}<span class="card-summary">{}</span>{}{}</div>
 <div class="card-meta">{}{}{}{}</div>
 {}{}
@@ -228,6 +232,7 @@ fn render_task_card(
         current_class,
         html_escape(&task_id),
         status_attr,
+        repo_path_attr,
         repo_branch,
         summary,
         status_html,
@@ -244,11 +249,12 @@ fn render_task_card(
 fn render_project_card(project: &crate::project::Project) -> String {
     let name = html_escape(project.repo_name.as_str());
     let key = html_escape(&project.store_key().to_string());
+    let repo_path = html_escape(&project.repo_path.display().to_string());
     let terminal_icon = include_str!("icons/terminal.b64");
     let cursor_icon = include_str!("icons/cursor.b64");
     format!(
         concat!(
-            r#"<div class="card folded" data-task="{}">"#,
+            r#"<div class="card folded" data-task="{}" data-repo-path="{}">"#,
             r#"<div class="card-header"><span class="card-repo">{}</span></div>"#,
             r#"<div class="card-actions">"#,
             r#"<button class="btn btn-icon btn-terminal" title="Terminal">"#,
@@ -259,6 +265,7 @@ fn render_project_card(project: &crate::project::Project) -> String {
             r#"</div></div>"#,
         ),
         key,
+        repo_path,
         name,
         terminal_icon.trim(),
         cursor_icon.trim(),

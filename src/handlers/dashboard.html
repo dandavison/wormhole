@@ -354,6 +354,21 @@
         background: #bbb;
         border-color: #aaa;
       }
+      .dashboard-filters input[type="text"] {
+        background: transparent;
+        border: none;
+        border-bottom: 1px solid #555;
+        color: #bbb;
+        font-size: 0.7rem;
+        font-family: monospace;
+        width: 14em;
+        outline: none;
+        padding: 0 0.2em;
+      }
+      .dashboard-filters input[type="text"]:focus {
+        border-bottom-color: #999;
+        color: #ddd;
+      }
       .section-divider {
         font-size: 0.7rem;
         font-weight: 600;
@@ -406,6 +421,7 @@
       <div class="dashboard-filters">
         <label><input type="checkbox" id="filter-hide-done"> Hide done</label>
         <label><input type="checkbox" id="filter-hide-projects"> Hide non-task projects</label>
+        <label><input type="checkbox" id="filter-repo-path"> Path <input type="text" id="filter-repo-path-regex" placeholder="regex"></label>
       </div>
     </div>
     <script>
@@ -535,14 +551,29 @@
       function applyFilters() {
         const hideDone = document.getElementById('filter-hide-done').checked;
         const hideProjects = document.getElementById('filter-hide-projects').checked;
+        const pathEnabled = document.getElementById('filter-repo-path').checked;
+        const pathPattern = document.getElementById('filter-repo-path-regex').value;
+        let pathRe = null;
+        if (pathEnabled && pathPattern) {
+          try { pathRe = new RegExp(pathPattern); } catch (_) {}
+        }
         document.querySelectorAll('.card').forEach((card) => {
           const isDone = card.dataset.status === 'done';
           const isTask = card.dataset.task && card.dataset.task.includes(':');
-          const hidden = (hideDone && isDone) || (hideProjects && !isTask);
+          const repoPath = card.dataset.repoPath || '';
+          const hidden = (hideDone && isDone) || (hideProjects && !isTask) ||
+            (pathRe && !pathRe.test(repoPath));
           card.style.display = hidden ? 'none' : '';
         });
       }
-      ['filter-hide-done', 'filter-hide-projects'].forEach((id) => {
+      const repoPathInput = document.getElementById('filter-repo-path-regex');
+      const storedPattern = localStorage.getItem('filter-repo-path-regex');
+      if (storedPattern) repoPathInput.value = storedPattern;
+      repoPathInput.addEventListener('input', () => {
+        localStorage.setItem('filter-repo-path-regex', repoPathInput.value);
+        applyFilters();
+      });
+      ['filter-hide-done', 'filter-hide-projects', 'filter-repo-path'].forEach((id) => {
         const el = document.getElementById(id);
         const stored = localStorage.getItem(id);
         if (stored === 'true') el.checked = true;

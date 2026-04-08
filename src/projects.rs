@@ -465,11 +465,18 @@ fn generate_cards(task_info: &[(ProjectKey, Option<String>, std::path::PathBuf)]
                 .args(["-c", cmd])
                 .current_dir(path)
                 .output();
-            let text = match output {
-                Ok(o) => String::from_utf8_lossy(&o.stdout).to_string(),
-                Err(e) => format!("error: {}", e),
-            };
-            sections.push(format!("```\n$ {}\n{}```", cmd, text));
+            match output {
+                Ok(o) => {
+                    let stdout = String::from_utf8_lossy(&o.stdout);
+                    let stderr = String::from_utf8_lossy(&o.stderr);
+                    if !stderr.trim().is_empty() {
+                        sections.push(format!("```\n{}{}```", stdout, stderr));
+                    } else {
+                        sections.push(format!("```\n{}```", stdout));
+                    }
+                }
+                Err(e) => sections.push(format!("```\nerror: {}\n```", e)),
+            }
         }
         let content = sections.join("\n");
         let _ = std::fs::write(task_dir.join("card.md"), content);

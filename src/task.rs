@@ -408,8 +408,8 @@ pub fn conform_task_worktree(
         actions.push(action);
     }
 
-    if crate::git::ensure_upstream_tracking(worktree_path, branch, !dry_run) {
-        actions.push(format!("set upstream to origin/{}", branch));
+    if let Some(remote_branch) = crate::git::ensure_upstream_tracking(worktree_path, branch, !dry_run) {
+        actions.push(format!("set upstream to {}", remote_branch));
     }
 
     Ok(actions)

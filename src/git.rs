@@ -175,10 +175,16 @@ pub fn create_worktree(
     }
 }
 
-/// If the branch has no upstream and `origin/<branch>` exists, set it.
-/// Returns true if tracking was missing and a matching remote branch exists.
+/// If the branch has no upstream and a remote tracking branch exists, set it.
+/// Checks `origin` first, then other remotes. Returns the remote tracking
+/// branch (e.g. `origin/main`) if one was found, or `None` if tracking was
+/// already set or no matching remote branch exists.
 /// When `apply` is true, actually sets the upstream; when false, only checks.
-pub fn ensure_upstream_tracking(worktree_path: &Path, branch_name: &str, apply: bool) -> bool {
+pub fn ensure_upstream_tracking(
+    worktree_path: &Path,
+    branch_name: &str,
+    apply: bool,
+) -> Option<String> {
     let has_upstream = Command::new("git")
         .args(["config", &format!("branch.{}.remote", branch_name)])
         .current_dir(worktree_path)
@@ -186,27 +192,58 @@ pub fn ensure_upstream_tracking(worktree_path: &Path, branch_name: &str, apply: 
         .map(|o| o.status.success())
         .unwrap_or(false);
     if has_upstream {
-        return false;
+        return None;
     }
-    let remote_ref = format!("refs/remotes/origin/{}", branch_name);
-    let remote_exists = Command::new("git")
-        .args(["show-ref", "--verify", "--quiet", &remote_ref])
-        .current_dir(worktree_path)
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false);
-    if remote_exists && apply {
+    let remote_branch = find_remote_tracking_branch(worktree_path, branch_name)?;
+    if apply {
         let _ = Command::new("git")
             .args([
                 "branch",
                 "--set-upstream-to",
-                &format!("origin/{}", branch_name),
+                &remote_branch,
                 branch_name,
             ])
             .current_dir(worktree_path)
             .output();
     }
-    remote_exists
+    Some(remote_branch)
+}
+
+/// Find a remote tracking branch for `branch_name`.
+/// Prefers `origin/<branch>`, falls back to the first match from any remote.
+fn find_remote_tracking_branch(worktree_path: &Path, branch_name: &str) -> Option<String> {
+    // Try origin first
+    let origin_ref = format!("origin/{}", branch_name);
+    if remote_ref_exists(worktree_path, &origin_ref) {
+        return Some(origin_ref);
+    }
+    // Search all remotes via for-each-ref
+    let suffix = format!("/{}", branch_name);
+    let output = Command::new("git")
+        .args([
+            "for-each-ref",
+            "--format=%(refname:strip=2)",
+            "refs/remotes/",
+        ])
+        .current_dir(worktree_path)
+        .output()
+        .ok()?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    stdout.lines().find(|line| line.ends_with(&suffix)).map(String::from)
+}
+
+fn remote_ref_exists(worktree_path: &Path, remote_branch: &str) -> bool {
+    Command::new("git")
+        .args([
+            "show-ref",
+            "--verify",
+            "--quiet",
+            &format!("refs/remotes/{}", remote_branch),
+        ])
+        .current_dir(worktree_path)
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
 }
 
 fn branch_exists(repo_path: &Path, branch_name: &str) -> bool {

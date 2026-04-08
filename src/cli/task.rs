@@ -3,7 +3,64 @@ use crate::jira;
 use crate::project::ProjectKey;
 use crate::tty::TerminalHyperlink;
 
+use super::project;
 use super::util::*;
+
+pub(super) fn task_list(
+    client: &Client,
+    repo_filter: Option<&str>,
+    output: &str,
+    active: bool,
+    status: Option<&str>,
+) -> Result<(), String> {
+    let mut query_parts = vec!["tasks=true".to_string()];
+    if active {
+        query_parts.push("active=true".to_string());
+    }
+    let path = format!("/project/list?{}", query_parts.join("&"));
+    let response = client.get(&path)?;
+    if output == "json" {
+        println!("{}", response);
+        return Ok(());
+    }
+    let json: serde_json::Value =
+        serde_json::from_str(&response).map_err(|e| e.to_string())?;
+    if let Some(current) = json.get("current").and_then(|v| v.as_array()) {
+        let mut items: Vec<_> = current
+            .iter()
+            .filter(|item| {
+                if let Some(filter) = repo_filter {
+                    item.get("project_key")
+                        .and_then(|k| k.as_str())
+                        .and_then(|k| k.split_once(':'))
+                        .is_some_and(|(repo, _)| repo == filter)
+                } else {
+                    true
+                }
+            })
+            .filter(|item| {
+                if let Some(s) = status {
+                    let s_lower = s.to_lowercase();
+                    item.get("kv")
+                        .and_then(|kv| kv.get("status"))
+                        .and_then(|v| v.as_str())
+                        .is_some_and(|st| st.to_lowercase() == s_lower)
+                } else {
+                    true
+                }
+            })
+            .collect();
+        items.sort_by(|a, b| {
+            let a_key = a.get("project_key").and_then(|k| k.as_str()).unwrap_or("");
+            let b_key = b.get("project_key").and_then(|k| k.as_str()).unwrap_or("");
+            a_key.cmp(b_key)
+        });
+        for item in &items {
+            println!("{}", project::render_project_item(item));
+        }
+    }
+    Ok(())
+}
 
 pub(super) fn task_create_from_sprint(client: &Client) -> Result<(), String> {
     use std::collections::HashMap;

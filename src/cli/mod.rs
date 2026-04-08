@@ -68,6 +68,30 @@ fn complete_projects(current: &std::ffi::OsStr) -> Vec<CompletionCandidate> {
     candidates
 }
 
+fn complete_available_projects(_current: &std::ffi::OsStr) -> Vec<CompletionCandidate> {
+    let url = format!("http://127.0.0.1:{}/project/list", config::wormhole_port());
+    let response = match ureq::get(&url).call() {
+        Ok(r) => match r.into_string() {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        },
+        Err(_) => return vec![],
+    };
+    let json: serde_json::Value = match serde_json::from_str(&response) {
+        Ok(v) => v,
+        Err(_) => return vec![],
+    };
+    let mut candidates = vec![];
+    if let Some(available) = json.get("available").and_then(|v| v.as_array()) {
+        for item in available {
+            if let Some(name) = item.as_str() {
+                candidates.push(CompletionCandidate::new(name));
+            }
+        }
+    }
+    candidates
+}
+
 #[derive(Parser)]
 #[command(name = "wormhole")]
 pub struct Cli {
@@ -86,6 +110,21 @@ pub enum JiraCommand {
 
 #[derive(Subcommand)]
 pub enum TaskCommand {
+    /// List tasks (optionally filtered by project)
+    List {
+        /// Project name to filter by
+        #[arg(add = ArgValueCompleter::new(complete_available_projects))]
+        project: Option<String>,
+        /// Output format: text (default) or json
+        #[arg(short, long, default_value = "text")]
+        output: String,
+        /// List only tasks with a tmux window
+        #[arg(long)]
+        active: bool,
+        /// Filter by status (e.g. "done", "in-progress")
+        #[arg(long)]
+        status: Option<String>,
+    },
     /// Create or update a task
     Create {
         /// Target: PR number (#123), PR/issue URL, owner/repo#123, project key (repo:branch), JIRA URL, or JIRA key
@@ -724,6 +763,12 @@ pub fn run(command: Command) -> Result<(), String> {
         },
 
         Command::Task { command } => match command {
+            TaskCommand::List {
+                project,
+                output,
+                active,
+                status,
+            } => task::task_list(&client, project.as_deref(), &output, active, status.as_deref()),
             TaskCommand::Create {
                 target,
                 home_project,

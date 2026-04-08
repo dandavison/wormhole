@@ -368,7 +368,13 @@ pub fn find_orphan_worktree_dirs(repo_path: &Path, worktree_base: &Path) -> Vec<
         };
         for repo_entry in repo_dirs.flatten() {
             let path = repo_entry.path();
-            if !path.is_dir() || !path.join(".git").is_file() {
+            if !path.is_dir() {
+                continue;
+            }
+            if !path.join(".git").is_file() {
+                // Directory matches worktree naming convention but has no .git —
+                // leftover from failed worktree creation or corrupted state.
+                orphans.push(path);
                 continue;
             }
             let canonical = path.canonicalize().unwrap_or_else(|_| path.clone());

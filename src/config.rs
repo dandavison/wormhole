@@ -89,6 +89,8 @@ struct ConfigFile {
     #[serde(default)]
     search_paths: Vec<SearchPathEntry>,
     worktree_dir: Option<String>,
+    #[serde(default)]
+    card_commands: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -121,6 +123,7 @@ impl SearchPathEntry {
 struct ResolvedConfig {
     search_paths: Vec<ResolvedSearchPath>,
     worktree_dir: PathBuf,
+    card_commands: Vec<String>,
 }
 
 pub struct ResolvedSearchPath {
@@ -165,6 +168,7 @@ fn load_config() -> ResolvedConfig {
     ResolvedConfig {
         search_paths,
         worktree_dir,
+        card_commands: file.card_commands,
     }
 }
 
@@ -200,6 +204,10 @@ pub fn search_paths() -> Vec<&'static ResolvedSearchPath> {
 
 pub fn worktree_dir() -> &'static Path {
     &config().worktree_dir
+}
+
+pub fn card_commands() -> &'static [String] {
+    &config().card_commands
 }
 
 pub fn is_excluded(name: &str, search_dir: &Path) -> bool {

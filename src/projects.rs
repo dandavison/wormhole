@@ -447,7 +447,33 @@ pub fn refresh_cache() {
             }
         }
     }
+    generate_cards(&task_info);
     notify_state_change();
+}
+
+fn generate_cards(task_info: &[(ProjectKey, Option<String>, std::path::PathBuf)]) {
+    let commands = crate::config::card_commands();
+    if commands.is_empty() {
+        return;
+    }
+    task_info.par_iter().for_each(|(_, _, path)| {
+        let task_dir = path.join(".task");
+        let _ = std::fs::create_dir_all(&task_dir);
+        let mut sections = Vec::new();
+        for cmd in commands {
+            let output = std::process::Command::new("sh")
+                .args(["-c", cmd])
+                .current_dir(path)
+                .output();
+            let text = match output {
+                Ok(o) => String::from_utf8_lossy(&o.stdout).to_string(),
+                Err(e) => format!("error: {}", e),
+            };
+            sections.push(format!("```\n$ {}\n{}```", cmd, text));
+        }
+        let content = sections.join("\n");
+        let _ = std::fs::write(task_dir.join("card.md"), content);
+    });
 }
 
 pub fn cache_needs_refresh() -> bool {

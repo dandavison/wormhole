@@ -297,13 +297,13 @@ pub fn close_all(remove: bool) {
 }
 
 pub fn show(name: Option<&str>) -> Response<Body> {
-    let status = match name.filter(|s| !s.is_empty()) {
-        Some(n) => crate::status::get_status_by_name(n),
-        None => crate::status::get_current_status(),
+    let info = match name.filter(|s| !s.is_empty()) {
+        Some(n) => crate::status::get_info_by_name(n),
+        None => crate::status::get_current_info(),
     };
-    match status {
-        Some(s) => {
-            let json = serde_json::to_string_pretty(&s).unwrap_or_default();
+    match info {
+        Some(info) => {
+            let json = serde_json::to_string_pretty(&info).unwrap_or_default();
             Response::builder()
                 .header("Content-Type", "application/json")
                 .body(Body::from(json))

@@ -596,9 +596,9 @@ pub fn run(command: Command) -> Result<(), String> {
                 if output == "json" {
                     println!("{}", response);
                 } else {
-                    let status: crate::status::TaskStatus =
+                    let info: crate::status::ProjectInfo =
                         serde_json::from_str(&response).map_err(|e| e.to_string())?;
-                    println!("{}", project::render_task_status(&status));
+                    println!("{}", project::render_project_info(&info));
                 }
                 Ok(())
             }

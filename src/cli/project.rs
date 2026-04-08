@@ -106,6 +106,49 @@ pub(super) fn render_project_item(item: &serde_json::Value) -> String {
     )
 }
 
+pub(super) fn render_project_info(info: &crate::status::ProjectInfo) -> String {
+    let project_key = match &info.branch {
+        Some(branch) => ProjectKey::task(&info.name, branch),
+        None => ProjectKey::project(&info.name),
+    };
+    let name_linked = project_key.hyperlink();
+    let name_display = project_key.to_string();
+
+    let mut lines = vec![name_linked, "─".repeat(name_display.len())];
+
+    lines.push(format!("Path:       {}", info.path.display()));
+
+    if let Some(ref branch) = info.branch {
+        lines.push(format!("Branch:     {}", branch));
+    }
+
+    lines.push(format!(
+        "Active:     {}",
+        if info.active { "✓" } else { "✗" }
+    ));
+
+    if let Some(status) = info.kv.get("status") {
+        lines.push(format!("Status:     {}", status));
+    }
+    if let Some(visibility) = info.kv.get("visibility") {
+        lines.push(format!("Visibility: {}", visibility));
+    }
+
+    let skip = ["status", "visibility"];
+    let other_kv: Vec<_> = info
+        .kv
+        .iter()
+        .filter(|(k, _)| !skip.contains(&k.as_str()))
+        .collect();
+    if !other_kv.is_empty() {
+        for (k, v) in &other_kv {
+            lines.push(format!("KV {}: {}", k, v));
+        }
+    }
+
+    lines.join("\n")
+}
+
 pub(super) fn render_task_status(status: &crate::status::TaskStatus) -> String {
     let project_key = match &status.branch {
         Some(branch) => ProjectKey::task(&status.name, branch),

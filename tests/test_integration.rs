@@ -550,8 +550,8 @@ fn test_project_status() {
         .unwrap();
     assert!(status.contains("\"name\""), "JSON should have name field");
     assert!(
-        status.contains("\"claude_md_exists\": true"),
-        "JSON should show claude_md_exists true, got: {}",
+        status.contains("\"kv\""),
+        "JSON should have kv field, got: {}",
         status
     );
 }

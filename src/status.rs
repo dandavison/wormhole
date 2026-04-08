@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 use crate::github::PrStatus;
@@ -43,6 +45,41 @@ pub fn get_status(project: &Project) -> TaskStatus {
     }
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ProjectInfo {
+    pub name: String,
+    pub path: std::path::PathBuf,
+    pub branch: Option<String>,
+    pub active: bool,
+    pub kv: HashMap<String, String>,
+}
+
+pub fn get_info(project: &Project) -> ProjectInfo {
+    let window_names = crate::config::TERMINAL.window_names();
+    ProjectInfo {
+        name: project.repo_name.to_string(),
+        path: project.working_tree(),
+        branch: project.branch.as_ref().map(|b| b.to_string()),
+        active: project.is_active(&window_names),
+        kv: project.kv.clone(),
+    }
+}
+
+pub fn get_info_by_name(name: &str) -> Option<ProjectInfo> {
+    let projects = projects::lock();
+    let key = ProjectKey::parse(name);
+    let project = projects
+        .by_key(&key)
+        .or_else(|| projects.by_path(std::path::Path::new(name)))?;
+    Some(get_info(&project))
+}
+
+pub fn get_current_info() -> Option<ProjectInfo> {
+    let projects = projects::lock();
+    let project = projects.current()?;
+    Some(get_info(&project))
+}
+
 fn ensure_cache() {
     if projects::cache_needs_refresh() {
         projects::refresh_cache();
@@ -56,13 +93,6 @@ pub fn get_status_by_name(name: &str) -> Option<TaskStatus> {
     let project = projects
         .by_key(&key)
         .or_else(|| projects.by_path(std::path::Path::new(name)))?;
-    Some(get_status(&project))
-}
-
-pub fn get_current_status() -> Option<TaskStatus> {
-    ensure_cache();
-    let projects = projects::lock();
-    let project = projects.current()?;
     Some(get_status(&project))
 }
 

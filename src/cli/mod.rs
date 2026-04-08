@@ -735,12 +735,6 @@ pub fn run(command: Command) -> Result<(), String> {
             }
             TaskCommand::Done { name } => {
                 let name = resolve_task_name(name);
-                let has_jira = client
-                    .get(&format!("/kv/{}/jira_key", name))
-                    .is_ok_and(|r| !r.is_empty());
-                if has_jira {
-                    return Err("Cannot set status on a JIRA task: JIRA is the source of truth. Use `task hide` to hide it from the dashboard.".to_string());
-                }
                 client.put(&format!("/kv/{}/status", name), "done")?;
                 Ok(())
             }

@@ -142,7 +142,7 @@ impl Project {
     }
 
     pub fn has_jira(&self) -> bool {
-        self.kv.contains_key("jira_key")
+        self.cached.jira.is_some()
     }
 
     pub fn store_key(&self) -> ProjectKey {

@@ -50,20 +50,18 @@ pub(super) fn render_project_item(item: &serde_json::Value) -> String {
 
     let task_display = ProjectKey::parse(project_key_str).hyperlink();
 
-    let jira_instance = std::env::var("JIRA_INSTANCE").ok();
-    let (jira_key, status) = item
-        .get("jira")
-        .map(|j| {
-            (
-                j.get("key").and_then(|k| k.as_str()).unwrap_or(""),
-                j.get("status").and_then(|s| s.as_str()).unwrap_or(""),
-            )
-        })
-        .unwrap_or(("", ""));
+    let status = item
+        .get("kv")
+        .and_then(|kv| kv.get("status"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
 
-    if jira_key.is_empty() {
-        return format!("  {}", task_display);
-    }
+    let jira_instance = std::env::var("JIRA_INSTANCE").ok();
+    let jira_key = item
+        .get("jira")
+        .and_then(|j| j.get("key"))
+        .and_then(|k| k.as_str())
+        .unwrap_or("");
 
     let pr_display = item
         .get("pr")
@@ -80,18 +78,22 @@ pub(super) fn render_project_item(item: &serde_json::Value) -> String {
         })
         .unwrap_or_default();
 
-    let jira_display = if let Some(ref instance) = jira_instance {
-        let url = format!("https://{}.atlassian.net/browse/{}", instance, jira_key);
-        crate::format_osc8_hyperlink(&url, jira_key)
+    let jira_display = if !jira_key.is_empty() {
+        if let Some(ref instance) = jira_instance {
+            let url = format!("https://{}.atlassian.net/browse/{}", instance, jira_key);
+            format!(" {}", crate::format_osc8_hyperlink(&url, jira_key))
+        } else {
+            format!(" {}", jira_key)
+        }
     } else {
-        jira_key.to_string()
+        String::new()
     };
 
     let indicator = jira::status_indicator(status);
     let pad = 40_usize.saturating_sub(project_key_str.len());
 
     format!(
-        "{} {}{} {}{}",
+        "{} {}{}{}{}",
         indicator,
         task_display,
         " ".repeat(pad),

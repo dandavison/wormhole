@@ -104,11 +104,11 @@ pub fn status_indicator(status: &str) -> String {
         return "●".to_string();
     }
     let color = match status.to_lowercase().as_str() {
-        "done" | "closed" | "resolved" => "32",         // green
-        "in progress" | "in development" => "34",       // blue
-        "in review" | "code review" | "review" => "36", // cyan
-        "blocked" => "31",                              // red
-        _ => "90",                                      // dim
+        "done" | "closed" | "resolved" => "32",                         // green
+        "in progress" | "in development" | "in-progress" => "34",       // blue
+        "in review" | "code review" | "review" => "36",                 // cyan
+        "blocked" => "31",                                              // red
+        _ => "90",                                                      // dim
     };
     format!("\x1b[{}m●\x1b[0m", color)
 }

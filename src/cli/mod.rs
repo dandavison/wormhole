@@ -164,7 +164,7 @@ pub enum ProjectCommand {
         /// List only projects with an editor connected
         #[arg(long)]
         with_editor: bool,
-        /// Filter by JIRA status (e.g. "Done", "In Progress")
+        /// Filter by status (e.g. "done", "in-progress")
         #[arg(long)]
         status: Option<String>,
     },
@@ -493,8 +493,8 @@ pub fn run(command: Command) -> Result<(), String> {
                         if let Some(ref s) = status {
                             let s_lower = s.to_lowercase();
                             sorted.retain(|item| {
-                                item.get("jira")
-                                    .and_then(|j| j.get("status"))
+                                item.get("kv")
+                                    .and_then(|kv| kv.get("status"))
                                     .and_then(|v| v.as_str())
                                     .is_some_and(|st| st.to_lowercase() == s_lower)
                             });

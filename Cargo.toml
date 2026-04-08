@@ -25,6 +25,7 @@ rustyline = "15"
 pulldown-cmark = { version = "0.13.0", default-features = false, features = ["html"] }
 libc = "0.2.182"
 uuid = { version = "1.21.0", features = ["v4", "v5"] }
+percent-encoding = "2.3.2"
 
 [dev-dependencies]
 tempfile = "3"

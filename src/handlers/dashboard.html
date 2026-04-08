@@ -525,10 +525,11 @@
             setTimeout(() => { link.textContent = 'done'; link.style.color = ''; }, 2000);
             return;
           }
+          const encodedTask = encodeURIComponent(task);
           if (isDone) {
-            fetch('/kv/' + task + '/status', { method: 'PUT', body: 'done' });
+            fetch('/kv/' + encodedTask + '/status', { method: 'PUT', body: 'done' });
           } else {
-            fetch('/kv/' + task + '/visibility', { method: 'PUT', body: 'hidden' });
+            fetch('/kv/' + encodedTask + '/visibility', { method: 'PUT', body: 'hidden' });
           }
           card.remove();
         });

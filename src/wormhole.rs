@@ -393,7 +393,11 @@ async fn handle_kv_request(method: &Method, kv_path: &str, req: Request<Body>) -
     use crate::kv;
     use crate::project::ProjectKey;
 
-    let parts: Vec<&str> = kv_path.split('/').collect();
+    let decoded: Vec<String> = kv_path
+        .split('/')
+        .map(|s| percent_encoding::percent_decode_str(s).decode_utf8_lossy().into_owned())
+        .collect();
+    let parts: Vec<&str> = decoded.iter().map(|s| s.as_str()).collect();
 
     match parts.as_slice() {
         [""] => kv::list_all_kv_fresh(),

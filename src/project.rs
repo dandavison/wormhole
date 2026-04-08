@@ -199,9 +199,8 @@ mod tests {
 
     #[test]
     fn test_parse_percent_encoded_task_key_does_not_match() {
-        // The JS dashboard must NOT percent-encode the task key in URL paths,
-        // because the server parses keys by splitting on ':' — a literal colon.
-        // Percent-encoding the colon (%3A) causes a lookup miss.
+        // ProjectKey::parse does not decode percent-encoding; callers that receive
+        // percent-encoded input (e.g. HTTP handlers) must decode before calling parse.
         let raw = ProjectKey::parse("temporal:my-branch");
         let encoded = ProjectKey::parse("temporal%3Amy-branch");
         assert_ne!(raw, encoded, "percent-encoded colon must not match raw key");

@@ -412,8 +412,16 @@
         color: #c00;
         background: transparent;
       }
-      .card-review-badge.reviewed {
-        filter: hue-rotate(90deg) saturate(5) brightness(1.2);
+      .card-review-badge {
+        position: relative;
+      }
+      .card-review-badge.reviewed::after {
+        content: "\25CF";
+        color: #2da44e;
+        font-size: 0.55em;
+        position: absolute;
+        bottom: -0.1em;
+        right: -0.3em;
       }
     </style>
   </head>

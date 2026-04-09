@@ -377,9 +377,9 @@ pub fn conform_task_worktree(
         }
     }
 
-    let agents_path = task_dir.join("AGENTS.md");
-    if !agents_path.exists() {
-        actions.push("create .task/AGENTS.md".into());
+    let claude_md_path = task_dir.join("CLAUDE.md");
+    if !claude_md_path.exists() {
+        actions.push("create .task/CLAUDE.md".into());
         if !dry_run {
             let project_key = format!("{}:{}", repo, branch);
             let content = format!(
@@ -391,16 +391,13 @@ pub fn conform_task_worktree(
                 ),
                 project_key
             );
-            fs::write(&agents_path, &content)
-                .map_err(|e| format!("Failed to create .task/AGENTS.md: {}", e))?;
+            fs::write(&claude_md_path, &content)
+                .map_err(|e| format!("Failed to create .task/CLAUDE.md: {}", e))?;
         }
     }
 
-    let target = Path::new(".task/AGENTS.md");
+    let target = Path::new(".task/CLAUDE.md");
     if let Some(action) = check_agent_symlink(worktree_path, "CLAUDE.md", target, dry_run)? {
-        actions.push(action);
-    }
-    if let Some(action) = check_agent_symlink(worktree_path, "AGENTS.md", target, dry_run)? {
         actions.push(action);
     }
 

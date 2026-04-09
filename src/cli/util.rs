@@ -68,6 +68,30 @@ impl Client {
             .into_string()
             .map_err(|e| format!("Failed to read response: {}", e))
     }
+
+    pub(super) fn kv_get(&self, project: &str, key: &str) -> Result<String, String> {
+        self.get(&kv_path(project, Some(key)))
+    }
+
+    pub(super) fn kv_set(&self, project: &str, key: &str, value: &str) -> Result<String, String> {
+        self.put(&kv_path(project, Some(key)), value)
+    }
+
+    pub(super) fn kv_delete(&self, project: &str, key: &str) -> Result<String, String> {
+        self.delete(&kv_path(project, Some(key)))
+    }
+
+    pub(super) fn kv_list(&self, project: &str) -> Result<String, String> {
+        self.get(&kv_path(project, None))
+    }
+}
+
+fn kv_path(project: &str, key: Option<&str>) -> String {
+    let ep = encode_path_segment(project);
+    match key {
+        Some(k) => format!("/kv/{}/{}", ep, encode_path_segment(k)),
+        None => format!("/kv/{}", ep),
+    }
 }
 
 fn map_ureq_error(e: ureq::Error) -> String {
@@ -239,7 +263,7 @@ pub(super) fn to_kebab_case(s: &str) -> String {
 }
 
 /// Percent-encode a value for use as a single URL path segment.
-pub(super) fn encode_path_segment(s: &str) -> String {
+fn encode_path_segment(s: &str) -> String {
     percent_encoding::utf8_percent_encode(s, percent_encoding::NON_ALPHANUMERIC).to_string()
 }
 

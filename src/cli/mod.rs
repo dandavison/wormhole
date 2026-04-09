@@ -702,9 +702,7 @@ pub fn run(command: Command) -> Result<(), String> {
                 key,
                 output,
             } => {
-                let ep = encode_path_segment(&project);
-                let ek = encode_path_segment(&key);
-                let response = client.get(&format!("/kv/{}/{}", ep, ek));
+                let response = client.kv_get(&project, &key);
                 let kv = project::KvValue {
                     project: project.clone(),
                     key: key.clone(),
@@ -725,23 +723,18 @@ pub fn run(command: Command) -> Result<(), String> {
                 key,
                 value,
             } => {
-                let ep = encode_path_segment(&project);
-                let ek = encode_path_segment(&key);
-                client.put(&format!("/kv/{}/{}", ep, ek), &value)?;
+                client.kv_set(&project, &key, &value)?;
                 Ok(())
             }
             KvCommand::Delete { project, key } => {
-                let ep = encode_path_segment(&project);
-                let ek = encode_path_segment(&key);
-                client.delete(&format!("/kv/{}/{}", ep, ek))?;
+                client.kv_delete(&project, &key)?;
                 Ok(())
             }
             KvCommand::List { project, output } => {
-                let path = match &project {
-                    Some(p) => format!("/kv/{}", encode_path_segment(p)),
-                    None => "/kv".to_string(),
+                let response = match &project {
+                    Some(p) => client.kv_list(p)?,
+                    None => client.get("/kv")?,
                 };
-                let response = client.get(&path)?;
                 if output == "json" {
                     println!("{}", response);
                 } else {
@@ -785,19 +778,19 @@ pub fn run(command: Command) -> Result<(), String> {
                 task::task_create_from_review_requests(&client, dry_run)
             }
             TaskCommand::Done { name } => {
-                let name = encode_path_segment(&resolve_task_name(name));
-                client.put(&format!("/kv/{}/status", name), "done")?;
+                let name = resolve_task_name(name);
+                client.kv_set(&name, "status", "done")?;
                 Ok(())
             }
             TaskCommand::Hide { name } => {
-                let name = encode_path_segment(&resolve_task_name(name));
-                client.put(&format!("/kv/{}/visibility", name), "hidden")?;
+                let name = resolve_task_name(name);
+                client.kv_set(&name, "visibility", "hidden")?;
                 Ok(())
             }
             TaskCommand::Reopen { name } => {
-                let name = encode_path_segment(&resolve_task_name(name));
-                client.delete(&format!("/kv/{}/visibility", name))?;
-                client.delete(&format!("/kv/{}/status", name))?;
+                let name = resolve_task_name(name);
+                client.kv_delete(&name, "visibility")?;
+                client.kv_delete(&name, "status")?;
                 Ok(())
             }
         },

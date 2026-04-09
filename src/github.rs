@@ -302,6 +302,53 @@ pub fn get_issue(owner: &str, repo: &str, number: u64) -> Result<GithubIssue, St
     serde_json::from_slice(&output.stdout).map_err(|e| format!("Failed to parse gh output: {}", e))
 }
 
+/// Check whether the current `gh` user has submitted a review on a PR.
+pub fn has_my_review(owner: &str, repo: &str, pr_number: u64) -> bool {
+    let login = match gh_login() {
+        Some(l) => l,
+        None => return false,
+    };
+    let output = Command::new("gh")
+        .args([
+            "pr",
+            "view",
+            &pr_number.to_string(),
+            "--repo",
+            &format!("{}/{}", owner, repo),
+            "--json",
+            "reviews",
+            "--jq",
+            &format!(
+                "[.reviews[] | select(.author.login == \"{}\") | .state] | map(select(. != \"PENDING\" and . != \"DISMISSED\")) | length",
+                login
+            ),
+        ])
+        .output()
+        .ok();
+    output
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .and_then(|s| s.trim().parse::<u64>().ok())
+        .is_some_and(|n| n > 0)
+}
+
+fn gh_login() -> Option<String> {
+    use std::sync::OnceLock;
+    static LOGIN: OnceLock<Option<String>> = OnceLock::new();
+    LOGIN
+        .get_or_init(|| {
+            Command::new("gh")
+                .args(["api", "user", "--jq", ".login"])
+                .output()
+                .ok()
+                .filter(|o| o.status.success())
+                .and_then(|o| String::from_utf8(o.stdout).ok())
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+        })
+        .clone()
+}
+
 use crate::project::Project;
 
 /// Get the PR number for a project, checking cached value first

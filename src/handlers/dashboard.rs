@@ -71,8 +71,13 @@ fn render_task_card(
         })
         .unwrap_or_default();
     let is_review = task.kv.get("task_type").is_some_and(|v| v == "review");
+    let review_submitted = task.kv.get("review_submitted").is_some_and(|v| v == "true");
     let review_badge = if is_review {
-        r#" <span class="card-review-badge" title="PR Review">&#x1F50D;</span>"#
+        if review_submitted {
+            r#" <span class="card-review-badge reviewed" title="Review submitted">&#x1F50D;</span>"#
+        } else {
+            r#" <span class="card-review-badge" title="PR Review">&#x1F50D;</span>"#
+        }
     } else {
         ""
     };

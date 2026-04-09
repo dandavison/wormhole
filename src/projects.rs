@@ -409,26 +409,32 @@ pub fn refresh_cache() {
             .filter(|(_, p)| p.is_task())
             .map(|(key, p)| {
                 let jira_key = p.kv.get("jira_key").cloned();
+                let review_pr = p.kv.get("review_pr_url").and_then(|u| {
+                    github::parse_github_ref(u)
+                });
                 let path = p.working_tree();
-                (key.clone(), jira_key, path)
+                (key.clone(), jira_key, review_pr, path)
             })
             .collect()
     };
 
     let results: Vec<_> = task_info
         .par_iter()
-        .map(|(key, jira_key, path)| {
+        .map(|(key, jira_key, review_pr, path)| {
             let jira = jira_key
                 .as_ref()
                 .and_then(|k| jira::get_issue(k).ok().flatten());
             let pr = github::get_pr_status(path);
-            (key.clone(), jira, pr)
+            let review_submitted = review_pr
+                .as_ref()
+                .map(|r| github::has_my_review(&r.owner, &r.repo, r.number));
+            (key.clone(), jira, pr, review_submitted)
         })
         .collect();
 
     {
         let mut projects = lock();
-        for (key, jira, pr) in results {
+        for (key, jira, pr, review_submitted) in results {
             if let Some(project) = projects.0.all.get_mut(&key) {
                 if let Some(ref j) = jira {
                     let jira_status = jira_status_to_local(&j.status);
@@ -440,14 +446,22 @@ pub fn refresh_cache() {
                             project.kv.remove("status");
                         }
                     }
-                    crate::kv::save_project_kv_pub(project);
                 }
+                if let Some(reviewed) = review_submitted {
+                    if reviewed {
+                        project.kv.insert("review_submitted".to_string(), "true".to_string());
+                    } else {
+                        project.kv.remove("review_submitted");
+                    }
+                }
+                crate::kv::save_project_kv_pub(project);
                 project.cached.jira = jira;
                 project.cached.pr = pr;
             }
         }
     }
-    generate_cards(&task_info);
+    let card_info: Vec<_> = task_info.iter().map(|(k, j, _, p)| (k.clone(), j.clone(), p.clone())).collect();
+    generate_cards(&card_info);
     notify_state_change();
 }
 

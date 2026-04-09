@@ -217,6 +217,11 @@ fn render_task_card(
     } else {
         ""
     };
+    let task_type_attr = if is_review {
+        r#" data-task-type="review""#
+    } else {
+        ""
+    };
 
     let dismiss_html = format!(
         concat!(
@@ -229,7 +234,7 @@ fn render_task_card(
     );
 
     format!(
-        r#"<div class="card{}" data-task="{}"{}{}{}>
+        r#"<div class="card{}" data-task="{}"{}{}{}{}>
 <div class="card-header">{}<span class="card-summary">{}</span>{}{}</div>
 <div class="card-meta">{}{}{}{}</div>
 {}{}
@@ -239,6 +244,7 @@ fn render_task_card(
         status_attr,
         repo_path_attr,
         has_jira_attr,
+        task_type_attr,
         repo_branch,
         summary,
         status_html,

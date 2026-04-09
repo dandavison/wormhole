@@ -421,6 +421,7 @@
       <div class="dashboard-filters">
         <label><input type="checkbox" id="filter-hide-done"> Hide done</label>
         <label><input type="checkbox" id="filter-hide-projects"> Hide non-task projects</label>
+        <label><input type="checkbox" id="filter-review-only"> Review requests only</label>
         <label><input type="checkbox" id="filter-repo-path"> Path <input type="text" id="filter-repo-path-regex" placeholder="regex"></label>
       </div>
     </div>
@@ -563,6 +564,7 @@
       function applyFilters() {
         const hideDone = document.getElementById('filter-hide-done').checked;
         const hideProjects = document.getElementById('filter-hide-projects').checked;
+        const reviewOnly = document.getElementById('filter-review-only').checked;
         const pathEnabled = document.getElementById('filter-repo-path').checked;
         const pathPattern = document.getElementById('filter-repo-path-regex').value;
         let pathRe = null;
@@ -572,9 +574,10 @@
         document.querySelectorAll('.card').forEach((card) => {
           const isDone = card.dataset.status === 'done';
           const isTask = card.dataset.task && card.dataset.task.includes(':');
+          const isReview = card.dataset.taskType === 'review';
           const repoPath = card.dataset.repoPath || '';
           const hidden = (hideDone && isDone) || (hideProjects && !isTask) ||
-            (pathRe && !pathRe.test(repoPath));
+            (reviewOnly && !isReview) || (pathRe && !pathRe.test(repoPath));
           card.style.display = hidden ? 'none' : '';
         });
       }
@@ -585,7 +588,7 @@
         localStorage.setItem('filter-repo-path-regex', repoPathInput.value);
         applyFilters();
       });
-      ['filter-hide-done', 'filter-hide-projects', 'filter-repo-path'].forEach((id) => {
+      ['filter-hide-done', 'filter-hide-projects', 'filter-review-only', 'filter-repo-path'].forEach((id) => {
         const el = document.getElementById(id);
         const stored = localStorage.getItem(id);
         if (stored === 'true') el.checked = true;

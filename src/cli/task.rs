@@ -380,7 +380,7 @@ fn find_task_by_jira_key(
 
 /// Get existing task info by project key
 fn get_task_info(client: &Client, repo: &str, branch: &str) -> Result<Option<String>, String> {
-    let store_key = format!("{}:{}", repo, branch);
+    let store_key = encode_path_segment(&format!("{}:{}", repo, branch));
     let kv_url = format!("/kv/{}/jira_key", store_key);
     match client.get(&kv_url) {
         Ok(jira_key) => Ok(Some(jira_key)),
@@ -574,8 +574,9 @@ fn parse_create_target(
 
     // Project key (repo:branch)
     if let Some((repo, branch)) = target.split_once(':') {
+        let key = encode_path_segment(&format!("{}:{}", repo, branch));
         let existing = if client
-            .get(&format!("/kv/{}:{}/jira_key", repo, branch))
+            .get(&format!("/kv/{}/jira_key", key))
             .is_ok()
         {
             Some((repo.to_string(), branch.to_string()))
@@ -646,7 +647,7 @@ fn ensure_task(
 
     // Store JIRA key if provided
     if let Some(key) = jira_key {
-        let store_key = format!("{}:{}", home, branch);
+        let store_key = encode_path_segment(&format!("{}:{}", home, branch));
         let kv_url = format!("/kv/{}/jira_key", store_key);
         let _ = client.put(&kv_url, key);
     }

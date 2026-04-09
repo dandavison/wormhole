@@ -238,6 +238,11 @@ pub(super) fn to_kebab_case(s: &str) -> String {
     crate::util::to_kebab_case(s)
 }
 
+/// Percent-encode a value for use as a single URL path segment.
+pub(super) fn encode_path_segment(s: &str) -> String {
+    percent_encoding::utf8_percent_encode(s, percent_encoding::NON_ALPHANUMERIC).to_string()
+}
+
 /// Returns None if we should prompt, or Some(reason) if we should auto-skip.
 /// Only skips issues that have a non-draft PR (work is already submitted).
 pub(super) fn should_skip_issue(has_pr: bool, status: &str) -> Option<&'static str> {

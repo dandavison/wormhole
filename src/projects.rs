@@ -465,6 +465,9 @@ pub fn refresh_cache() {
     notify_state_change();
 }
 
+const CARD_GENERATED_BEGIN: &str = "<!-- wormhole:generated:begin -->";
+const CARD_GENERATED_END: &str = "<!-- wormhole:generated:end -->";
+
 fn generate_cards(task_info: &[(ProjectKey, Option<String>, std::path::PathBuf)]) {
     let commands = crate::config::reload_card_commands();
     if commands.is_empty() {
@@ -492,9 +495,36 @@ fn generate_cards(task_info: &[(ProjectKey, Option<String>, std::path::PathBuf)]
                 Err(e) => sections.push(format!("```\nerror: {}\n```", e)),
             }
         }
-        let content = sections.join("\n");
-        let _ = std::fs::write(task_dir.join("card.md"), content);
+        let generated = format!(
+            "{}\n{}\n{}",
+            CARD_GENERATED_BEGIN,
+            sections.join("\n"),
+            CARD_GENERATED_END,
+        );
+        let card_path = task_dir.join("card.md");
+        let existing = std::fs::read_to_string(&card_path).unwrap_or_default();
+        let new_content = splice_generated(&existing, &generated);
+        let _ = std::fs::write(card_path, new_content);
     });
+}
+
+/// Replace the generated section in `existing`, or append it if absent.
+fn splice_generated(existing: &str, generated: &str) -> String {
+    if let Some(begin) = existing.find(CARD_GENERATED_BEGIN) {
+        if let Some(end_marker) = existing[begin..].find(CARD_GENERATED_END) {
+            let end = begin + end_marker + CARD_GENERATED_END.len();
+            let mut result = String::with_capacity(existing.len());
+            result.push_str(&existing[..begin]);
+            result.push_str(generated);
+            result.push_str(&existing[end..]);
+            return result;
+        }
+    }
+    if existing.is_empty() {
+        generated.to_string()
+    } else {
+        format!("{}\n{}", existing.trim_end(), generated)
+    }
 }
 
 pub fn cache_needs_refresh() -> bool {
@@ -522,5 +552,34 @@ fn jira_status_to_local(jira_status: &str) -> Option<&'static str> {
         "done" | "closed" | "resolved" => Some("done"),
         "in progress" | "in development" => Some("in-progress"),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn splice_into_empty() {
+        let gen = format!("{}\nstuff\n{}", CARD_GENERATED_BEGIN, CARD_GENERATED_END);
+        assert_eq!(splice_generated("", &gen), gen);
+    }
+
+    #[test]
+    fn splice_preserves_user_content() {
+        let existing = format!(
+            "user notes\n{}\nold\n{}\nmore notes",
+            CARD_GENERATED_BEGIN, CARD_GENERATED_END
+        );
+        let gen = format!("{}\nnew\n{}", CARD_GENERATED_BEGIN, CARD_GENERATED_END);
+        let result = splice_generated(&existing, &gen);
+        assert_eq!(result, format!("user notes\n{}\nnew\n{}\nmore notes", CARD_GENERATED_BEGIN, CARD_GENERATED_END));
+    }
+
+    #[test]
+    fn splice_appends_when_no_markers() {
+        let gen = format!("{}\nstuff\n{}", CARD_GENERATED_BEGIN, CARD_GENERATED_END);
+        let result = splice_generated("user notes\n", &gen);
+        assert_eq!(result, format!("user notes\n{}", gen));
     }
 }

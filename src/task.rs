@@ -248,6 +248,10 @@ pub fn create_github_ref_task(
         let repo_map = build_github_repo_map();
         repo_map
             .get(&nwo)
+            .or_else(|| {
+                crate::github::get_parent_repo(&r.owner, &r.repo)
+                    .and_then(|parent_nwo| repo_map.get(&parent_nwo))
+            })
             .map(|n| n.to_string())
             .ok_or_else(|| {
                 format!(

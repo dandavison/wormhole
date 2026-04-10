@@ -387,6 +387,29 @@ fn fetch_pr_number(project_path: &Path) -> Option<u64> {
     String::from_utf8(output.stdout).ok()?.trim().parse().ok()
 }
 
+/// If `owner/repo` is a fork, return the parent's `owner/repo`.
+pub fn get_parent_repo(owner: &str, repo: &str) -> Option<String> {
+    let output = Command::new("gh")
+        .args([
+            "api",
+            &format!("repos/{}/{}", owner, repo),
+            "--jq",
+            ".parent.full_name",
+        ])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let name = String::from_utf8(output.stdout).ok()?;
+    let name = name.trim();
+    if name.is_empty() || name == "null" {
+        None
+    } else {
+        Some(name.to_string())
+    }
+}
+
 fn fetch_repo_name(project_path: &Path) -> Option<String> {
     let output = Command::new("gh")
         .args([

@@ -2,7 +2,10 @@ use regex::Regex;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Output, Stdio};
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
 
 #[derive(Clone, Debug, Deserialize, serde::Serialize)]
 pub struct PrStatus {
@@ -182,23 +185,80 @@ pub fn pr_checkout(
     repo: &str,
     pr_number: u64,
 ) -> Result<(), String> {
-    let output = Command::new("gh")
-        .args([
-            "pr",
-            "checkout",
-            &pr_number.to_string(),
-            "--force",
-            "--repo",
-            &format!("{}/{}", owner, repo),
-        ])
-        .current_dir(worktree_path)
-        .output()
-        .map_err(|e| format!("gh pr checkout failed: {}", e))?;
+    let mut cmd = Command::new("gh");
+    cmd.args([
+        "pr",
+        "checkout",
+        &pr_number.to_string(),
+        "--force",
+        "--repo",
+        &format!("{}/{}", owner, repo),
+    ])
+    .current_dir(worktree_path);
+    let output = output_with_timeout(&mut cmd, Duration::from_secs(10), "gh pr checkout")?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(format!("gh pr checkout failed: {}", stderr.trim()));
     }
     Ok(())
+}
+
+fn output_with_timeout(cmd: &mut Command, timeout: Duration, what: &str) -> Result<Output, String> {
+    use std::os::unix::process::CommandExt;
+
+    cmd.stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    unsafe {
+        cmd.pre_exec(|| {
+            if libc::setpgid(0, 0) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+
+    let child = cmd.spawn().map_err(|e| format!("{what} failed: {e}"))?;
+    let pid = child.id() as i32;
+    let (tx, rx) = mpsc::channel();
+    let handle = thread::spawn(move || {
+        let result = child.wait_with_output();
+        let _ = tx.send(result);
+    });
+
+    let result = match rx.recv_timeout(timeout) {
+        Ok(result) => result.map_err(|e| format!("{what} failed: {e}")),
+        Err(mpsc::RecvTimeoutError::Timeout) => {
+            kill_process(pid, libc::SIGTERM);
+            kill_process_group(pid, libc::SIGTERM);
+            if matches!(
+                rx.recv_timeout(Duration::from_millis(200)),
+                Err(mpsc::RecvTimeoutError::Timeout)
+            ) {
+                kill_process(pid, libc::SIGKILL);
+                kill_process_group(pid, libc::SIGKILL);
+            }
+            let _ = handle.join();
+            return Err(format!("{what} timed out after {}s", timeout.as_secs()));
+        }
+        Err(mpsc::RecvTimeoutError::Disconnected) => {
+            return Err(format!("{what} failed: process watcher disconnected"));
+        }
+    };
+    let _ = handle.join();
+    result
+}
+
+fn kill_process(pid: i32, signal: i32) {
+    unsafe {
+        libc::kill(pid, signal);
+    }
+}
+
+fn kill_process_group(pid: i32, signal: i32) {
+    unsafe {
+        libc::kill(-pid, signal);
+    }
 }
 
 #[derive(Debug, Deserialize, serde::Serialize)]
@@ -280,7 +340,6 @@ pub fn resolve_github_ref_kind(r: &GithubRef) -> Result<GithubRefKind, String> {
         r.number, r.owner, r.repo
     ))
 }
-
 
 pub fn get_issue(owner: &str, repo: &str, number: u64) -> Result<GithubIssue, String> {
     let output = Command::new("gh")
@@ -440,6 +499,7 @@ fn fetch_repo_name(project_path: &Path) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{Duration, Instant};
 
     #[test]
     fn parse_github_ref_pr_url() {
@@ -485,5 +545,26 @@ mod tests {
     fn parse_github_ref_issue_url_not_pr() {
         let r = parse_github_ref("https://github.com/temporalio/temporal/issues/42").unwrap();
         assert_eq!(r.kind, Some(GithubRefKind::Issue));
+    }
+
+    #[test]
+    fn output_with_timeout_returns_output() {
+        let mut cmd = Command::new("sh");
+        cmd.args(["-c", "printf ok"]);
+        let output = output_with_timeout(&mut cmd, Duration::from_secs(1), "test").unwrap();
+        assert_eq!(String::from_utf8(output.stdout).unwrap(), "ok");
+    }
+
+    #[test]
+    fn output_with_timeout_times_out() {
+        let start = Instant::now();
+        let mut cmd = Command::new("sh");
+        cmd.args(["-c", "sleep 30"]);
+        let err = output_with_timeout(&mut cmd, Duration::from_millis(100), "test").unwrap_err();
+        assert!(err.contains("timed out"), "unexpected error: {err}");
+        assert!(
+            start.elapsed() < Duration::from_secs(2),
+            "timed-out subprocess should be reaped promptly"
+        );
     }
 }

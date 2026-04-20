@@ -137,9 +137,10 @@ async fn route(
         }
         "/project/close" => {
             let remove = params.remove;
-            require_post_async(method, || async move {
-                project::close_many(req, remove).await
-            })
+            require_post_async(
+                method,
+                || async move { project::close_many(req, remove).await },
+            )
             .await
         }
         "/project/refresh" => require_post(method, || {
@@ -395,7 +396,11 @@ async fn handle_kv_request(method: &Method, kv_path: &str, req: Request<Body>) -
 
     let decoded: Vec<String> = kv_path
         .split('/')
-        .map(|s| percent_encoding::percent_decode_str(s).decode_utf8_lossy().into_owned())
+        .map(|s| {
+            percent_encoding::percent_decode_str(s)
+                .decode_utf8_lossy()
+                .into_owned()
+        })
         .collect();
     let parts: Vec<&str> = decoded.iter().map(|s| s.as_str()).collect();
 

@@ -93,7 +93,6 @@ pub fn debug_projects() -> Response<Body> {
         .unwrap()
 }
 
-
 fn close_project(name: &str, remove: bool) {
     let key = ProjectKey::parse(name);
     let mut projects = projects::lock();
@@ -257,7 +256,6 @@ pub enum Direction {
     Previous,
     Next,
 }
-
 
 pub fn close(name: &str, remove: bool) {
     let name = name.trim().to_string();

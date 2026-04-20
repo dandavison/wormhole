@@ -580,10 +580,7 @@ pub fn run(command: Command) -> Result<(), String> {
                         names
                     };
                     if names.len() == 1 {
-                        client.post(&format!(
-                            "/project/close/{}{}",
-                            names[0], remove_query
-                        ))?;
+                        client.post(&format!("/project/close/{}{}", names[0], remove_query))?;
                     } else {
                         client.post_json(
                             &format!("/project/close{}", remove_query),
@@ -767,7 +764,13 @@ pub fn run(command: Command) -> Result<(), String> {
                 output,
                 active,
                 status,
-            } => task::task_list(&client, project.as_deref(), &output, active, status.as_deref()),
+            } => task::task_list(
+                &client,
+                project.as_deref(),
+                &output,
+                active,
+                status.as_deref(),
+            ),
             TaskCommand::Create {
                 target,
                 home_project,

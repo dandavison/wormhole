@@ -203,12 +203,7 @@ pub fn ensure_upstream_tracking(
     let remote_branch = find_remote_tracking_branch(worktree_path, branch_name)?;
     if apply {
         let _ = Command::new("git")
-            .args([
-                "branch",
-                "--set-upstream-to",
-                &remote_branch,
-                branch_name,
-            ])
+            .args(["branch", "--set-upstream-to", &remote_branch, branch_name])
             .current_dir(worktree_path)
             .output();
     }
@@ -235,7 +230,10 @@ fn find_remote_tracking_branch(worktree_path: &Path, branch_name: &str) -> Optio
         .output()
         .ok()?;
     let stdout = String::from_utf8_lossy(&output.stdout);
-    stdout.lines().find(|line| line.ends_with(&suffix)).map(String::from)
+    stdout
+        .lines()
+        .find(|line| line.ends_with(&suffix))
+        .map(String::from)
 }
 
 fn remote_ref_exists(worktree_path: &Path, remote_branch: &str) -> bool {

@@ -118,7 +118,6 @@ pub fn open_task(repo: &str, branch: &str, land_in: Option<LandIn>) -> Result<()
     Ok(())
 }
 
-
 #[derive(serde::Serialize)]
 pub struct ReviewTaskResult {
     pub created: Vec<String>,
@@ -262,14 +261,8 @@ pub fn create_github_ref_task(
     };
 
     let branch = match kind {
-        GithubRefKind::Pr => {
-            crate::github::get_pr_branch(&r.owner, &r.repo, r.number).ok_or_else(|| {
-                format!(
-                    "Failed to get branch for PR #{} in {}",
-                    r.number, nwo
-                )
-            })?
-        }
+        GithubRefKind::Pr => crate::github::get_pr_branch(&r.owner, &r.repo, r.number)
+            .ok_or_else(|| format!("Failed to get branch for PR #{} in {}", r.number, nwo))?,
         GithubRefKind::Issue => {
             let issue = crate::github::get_issue(&r.owner, &r.repo, r.number)?;
             let slug = crate::util::to_kebab_case(&issue.title);
@@ -405,7 +398,9 @@ pub fn conform_task_worktree(
         actions.push(action);
     }
 
-    if let Some(remote_branch) = crate::git::ensure_upstream_tracking(worktree_path, branch, !dry_run) {
+    if let Some(remote_branch) =
+        crate::git::ensure_upstream_tracking(worktree_path, branch, !dry_run)
+    {
         actions.push(format!("set upstream to {}", remote_branch));
     }
 

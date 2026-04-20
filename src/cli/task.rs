@@ -23,8 +23,7 @@ pub(super) fn task_list(
         println!("{}", response);
         return Ok(());
     }
-    let json: serde_json::Value =
-        serde_json::from_str(&response).map_err(|e| e.to_string())?;
+    let json: serde_json::Value = serde_json::from_str(&response).map_err(|e| e.to_string())?;
     if let Some(current) = json.get("current").and_then(|v| v.as_array()) {
         let mut items: Vec<_> = current
             .iter()
@@ -338,7 +337,6 @@ pub(super) fn task_create_from_review_requests(
     Ok(())
 }
 
-
 /// Represents a parsed task target for the create command
 enum CreateTarget {
     /// A project key like "repo:branch"
@@ -555,11 +553,7 @@ fn parse_create_target(
     }
 
     // Bare number (#123 or 123): resolve against current directory's GitHub remote
-    if let Ok(number) = target
-        .strip_prefix('#')
-        .unwrap_or(target)
-        .parse::<u64>()
-    {
+    if let Ok(number) = target.strip_prefix('#').unwrap_or(target).parse::<u64>() {
         let cwd = std::env::current_dir().map_err(|e| format!("Cannot get cwd: {}", e))?;
         let github_repo = crate::git::github_repo_from_remote(&cwd).ok_or_else(|| {
             format!(
@@ -574,10 +568,7 @@ fn parse_create_target(
     // Project key (repo:branch)
     if let Some((repo, branch)) = target.split_once(':') {
         let store_key = format!("{}:{}", repo, branch);
-        let existing = if client
-            .kv_get(&store_key, "jira_key")
-            .is_ok()
-        {
+        let existing = if client.kv_get(&store_key, "jira_key").is_ok() {
             Some((repo.to_string(), branch.to_string()))
         } else {
             None

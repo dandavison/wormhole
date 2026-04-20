@@ -330,10 +330,7 @@ fn discover_claude_code_transcripts(projects: &[(String, PathBuf)]) -> Vec<Trans
 }
 
 /// Discover sessions by scanning JSONL files in a CC project directory.
-fn discover_cc_from_jsonl_files(
-    dir: &Path,
-    canonical: &[(String, String)],
-) -> Vec<TranscriptFile> {
+fn discover_cc_from_jsonl_files(dir: &Path, canonical: &[(String, String)]) -> Vec<TranscriptFile> {
     let mut result = Vec::new();
     let entries = match std::fs::read_dir(dir) {
         Ok(e) => e,
@@ -403,10 +400,7 @@ fn read_cc_jsonl_metadata(path: &Path) -> Option<CcJsonlMetadata> {
             "user" | "assistant" => {
                 message_count += 1;
                 if cwd.is_none() {
-                    cwd = record
-                        .get("cwd")
-                        .and_then(|v| v.as_str())
-                        .map(String::from);
+                    cwd = record.get("cwd").and_then(|v| v.as_str()).map(String::from);
                 }
                 if record.get("isSidechain").and_then(|v| v.as_bool()) == Some(true) {
                     is_sidechain = true;
@@ -1305,5 +1299,4 @@ mod tests {
         let result = discover_cc_from_jsonl_files(cc_dir.path(), &canonical);
         assert_eq!(result.len(), 0);
     }
-
 }

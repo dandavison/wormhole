@@ -10,27 +10,38 @@ import XCTest
 
 final class WormholeTests: XCTestCase {
 
-    override func setUpWithError() throws {
-        // Put setup code here. This method is called before the invocation of each test method in the class.
+    @MainActor
+    func testAvailableModeIncludesTasks() {
+        let model = ProjectsModel(fetchOnStart: false)
+        model.allProjects = [
+            ProjectInfo(project_key: "temporal:feature-branch"),
+            ProjectInfo(project_key: "wormhole"),
+        ]
+        model.mode = .available
+
+        model.updateProjectsList()
+
+        XCTAssertEqual(
+            model.projects.map(\.value),
+            ["temporal:feature-branch", "wormhole"]
+        )
     }
 
-    override func tearDownWithError() throws {
-        // Put teardown code here. This method is called after the invocation of each test method in the class.
-    }
+    func testAllSelectableProjectsCombinesWorkspacesAndTasks() {
+        let response = ProjectsResponse(
+            current: [
+                ProjectInfo(project_key: "temporal:feature-branch"),
+                ProjectInfo(project_key: "wormhole"),
+            ],
+            available: [
+                "temporal",
+                "wormhole",
+            ]
+        )
 
-    func testExample() throws {
-        // This is an example of a functional test case.
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
-        // Any test you write for XCTest can be annotated as throws and async.
-        // Mark your test throws to produce an unexpected failure when your test encounters an uncaught error.
-        // Mark your test async to allow awaiting for asynchronous code to complete. Check the results with assertions afterwards.
+        XCTAssertEqual(
+            response.allSelectableProjects().map(\.project_key),
+            ["temporal", "temporal:feature-branch", "wormhole"]
+        )
     }
-
-    func testPerformanceExample() throws {
-        // This is an example of a performance test case.
-        self.measure {
-            // Put the code you want to measure the time of here.
-        }
-    }
-
 }

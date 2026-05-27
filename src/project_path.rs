@@ -135,31 +135,53 @@ impl ProjectPath {
     }
 
     pub fn from_github_url(path: &str, line: Option<usize>, projects: &Projects) -> Option<Self> {
-        let re = Regex::new(r"/([^/]+)/([^/]+)/blob/([^/]+)/([^?]*)").unwrap();
-        if let Some(captures) = re.captures(path) {
-            ps!("Handling as github URL");
-            let path = PathBuf::from(captures.get(4).unwrap().as_str());
-            let repo = captures.get(2).unwrap().as_str();
-
-            ps!(
-                "path: {} line: {:?} repo: {}",
-                path.to_string_lossy(),
-                line,
-                repo
-            );
-            if let Some(project) = projects.by_key(&ProjectKey::project(repo)) {
-                Some(ProjectPath {
-                    project,
-                    relative_path: Some((path, line)),
-                })
-            } else {
-                warn(&format!("No such repo: {}", repo));
-                None
-            }
-        } else {
+        let re = Regex::new(r"/([^/]+)/([^/]+)/blob/([^?]+)").unwrap();
+        let Some(captures) = re.captures(path) else {
             warn(&format!("Not a github URL: {}", path));
-            None
-        }
+            return None;
+        };
+        ps!("Handling as github URL");
+        let repo = captures.get(2).unwrap().as_str();
+        let rest = captures.get(3).unwrap().as_str();
+
+        // The branch ref may contain `/`, so we can't split rest on `/` blindly.
+        // Find the worktree (task) for `repo` whose branch is the longest prefix
+        // of `rest`. Falls back to the non-task project if none matches, splitting
+        // at the first `/` (assumes a single-segment ref like `main`).
+        let task_match = projects
+            .all()
+            .into_iter()
+            .filter(|p| p.repo_name.as_str() == repo)
+            .filter_map(|p| {
+                let branch = p.branch.as_ref()?.as_str();
+                let suffix = rest
+                    .strip_prefix(branch)
+                    .and_then(|s| s.strip_prefix('/'))?;
+                Some((p.clone(), suffix.to_string()))
+            })
+            .max_by_key(|(p, _)| p.branch.as_ref().map(|b| b.as_str().len()).unwrap_or(0));
+
+        let (project, file_path) = if let Some((project, suffix)) = task_match {
+            (project, suffix)
+        } else if let Some(project) = projects.by_key(&ProjectKey::project(repo)) {
+            let suffix = rest.split_once('/').map(|(_, s)| s).unwrap_or("");
+            (project, suffix.to_string())
+        } else {
+            warn(&format!("No such repo: {}", repo));
+            return None;
+        };
+
+        ps!(
+            "path: {} line: {:?} repo: {} branch: {:?}",
+            file_path,
+            line,
+            repo,
+            project.branch
+        );
+        Some(ProjectPath {
+            project,
+            relative_path: Some((PathBuf::from(file_path), line)),
+        })
     }
 
     pub fn absolute_path(&self) -> PathBuf {

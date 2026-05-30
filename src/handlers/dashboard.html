@@ -298,7 +298,7 @@
         display: none;
       }
       .card.maximized .btn-terminal,
-      .card.maximized .btn-cursor,
+      .card.maximized .btn-editor,
       .card.maximized .btn-vscode {
         display: none;
       }
@@ -486,7 +486,7 @@
         });
       });
 
-      document.querySelectorAll('.btn-cursor').forEach((btn) => {
+      document.querySelectorAll('.btn-editor').forEach((btn) => {
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
           const task = btn.closest('.card').dataset.task;

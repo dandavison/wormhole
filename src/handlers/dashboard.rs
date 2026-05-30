@@ -268,7 +268,6 @@ fn render_project_card(project: &crate::project::Project) -> String {
     let key = html_escape(&project.store_key().to_string());
     let repo_path = html_escape(&project.repo_path.display().to_string());
     let terminal_icon = include_str!("icons/terminal.b64");
-    let cursor_icon = include_str!("icons/cursor.b64");
     format!(
         concat!(
             r#"<div class="card folded" data-task="{}" data-repo-path="{}">"#,
@@ -276,8 +275,7 @@ fn render_project_card(project: &crate::project::Project) -> String {
             r#"<div class="card-actions">"#,
             r#"<button class="btn btn-icon btn-terminal" title="Terminal">"#,
             r#"<img src="data:image/png;base64,{}" alt="Terminal"></button>"#,
-            r#"<button class="btn btn-icon btn-cursor" title="Cursor">"#,
-            r#"<img src="data:image/png;base64,{}" alt="Cursor"></button>"#,
+            "{}",
             r#"<button class="btn btn-close" title="Close project">&times;</button>"#,
             r#"</div></div>"#,
         ),
@@ -285,26 +283,43 @@ fn render_project_card(project: &crate::project::Project) -> String {
         repo_path,
         name,
         terminal_icon.trim(),
-        cursor_icon.trim(),
+        editor_button(),
+    )
+}
+
+// The desktop-editor button; its icon and label track WORMHOLE_EDITOR. The
+// embedded-VSCode button (serve-web) is separate and always VSCode.
+fn editor_button() -> String {
+    use crate::editor::Editor;
+    let (icon, label) = match crate::config::editor() {
+        Editor::VSCode | Editor::VSCodeInsiders => (include_str!("icons/vscode.b64"), "VSCode"),
+        _ => (include_str!("icons/cursor.b64"), "Cursor"),
+    };
+    format!(
+        concat!(
+            r#"<button class="btn btn-icon btn-editor" title="{}">"#,
+            r#"<img src="data:image/png;base64,{}" alt="{}"></button>"#,
+        ),
+        label,
+        icon.trim(),
+        label,
     )
 }
 
 fn render_iframe(task: &crate::project::Project) -> String {
     let path = task.working_tree();
     let terminal_icon = include_str!("icons/terminal.b64");
-    let cursor_icon = include_str!("icons/cursor.b64");
     let claude_btn = claude_md_button(&path);
 
-    // Terminal and Cursor buttons are always available — they don't depend on serve-web.
+    // Terminal and desktop-editor buttons are always available — they don't depend on serve-web.
     let mut actions = format!(
         concat!(
             r#"<button class="btn btn-icon btn-terminal" title="Terminal">"#,
             r#"<img src="data:image/png;base64,{}" alt="Terminal"></button>"#,
-            r#"<button class="btn btn-icon btn-cursor" title="Cursor">"#,
-            r#"<img src="data:image/png;base64,{}" alt="Cursor"></button>"#,
+            "{}",
         ),
         terminal_icon.trim(),
-        cursor_icon.trim(),
+        editor_button(),
     );
 
     // VSCode button + iframe only appear when serve-web starts successfully.

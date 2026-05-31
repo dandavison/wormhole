@@ -91,9 +91,9 @@ impl ProjectPath {
                 config::TERMINAL.focus();
             }
             Some(LandIn::Editor) => {
+                open_terminal();
                 open_editor();
                 config::editor().focus();
-                open_terminal();
             }
             _ => {
                 let terminal_thread = thread::spawn(open_terminal);

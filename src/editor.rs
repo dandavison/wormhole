@@ -112,11 +112,23 @@ impl Editor {
         );
     }
 
+    // The name accepted by hs.application.launchOrFocus, which matches the
+    // launchable bundle name rather than the running process name. They differ
+    // for VSCode, whose bundle is "Visual Studio Code.app" but reports its name
+    // (used by hs.application.find and window titles) as "Code".
+    fn launch_name(&self) -> &'static str {
+        match self {
+            VSCode => "Visual Studio Code",
+            VSCodeInsiders => "Visual Studio Code - Insiders",
+            _ => self.application_name(),
+        }
+    }
+
     pub fn focus(&self) {
         if self.is_none() {
             return;
         }
-        hammerspoon::launch_or_focus(self.application_name())
+        hammerspoon::launch_or_focus(self.launch_name())
     }
 }
 

@@ -527,6 +527,7 @@ fn materialize(
         let rendered = render_conversation(&t.project_key, &date, &session_uuid, &messages);
         let _ = std::fs::create_dir_all(&out_dir);
         if std::fs::write(&out_file, &rendered).is_ok() {
+            copy_mtime(&t.path, &out_file);
             synced += 1;
         }
     }
@@ -637,6 +638,16 @@ fn epoch_days_to_ymd(days: u64) -> (u64, u64, u64) {
     let m = if mp < 10 { mp + 3 } else { mp - 9 };
     let y = if m <= 2 { y + 1 } else { y };
     (y as u64, m, d)
+}
+
+/// Stamp `dest` with `source`'s mtime so synced files carry last-activity time,
+/// not sync time. This also makes `source_newer` an exact in-sync check.
+fn copy_mtime(source: &Path, dest: &Path) {
+    if let Ok(mtime) = std::fs::metadata(source).and_then(|m| m.modified()) {
+        if let Ok(f) = std::fs::File::open(dest) {
+            let _ = f.set_modified(mtime);
+        }
+    }
 }
 
 fn source_newer(source: &Path, dest: &Path) -> bool {
@@ -1194,7 +1205,10 @@ mod tests {
         assert_eq!(result.synced, 1);
 
         let date = file_date(&src);
-        let out_file = out_dir.path().join("wormhole").join(format!("{}-00000000.md", date));
+        let out_file = out_dir
+            .path()
+            .join("wormhole")
+            .join(format!("{}-00000000.md", date));
         let out_mtime = std::fs::metadata(&out_file).unwrap().modified().unwrap();
         assert_eq!(out_mtime, source_mtime);
     }

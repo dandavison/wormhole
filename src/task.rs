@@ -441,21 +441,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn setup_task_worktree_preserves_existing_agents_md() {
+    fn setup_task_worktree_preserves_existing_claude_md() {
         let dir = tempfile::tempdir().unwrap();
         let worktree = dir.path();
 
-        // First call seeds .task/AGENTS.md
+        // First call seeds .task/CLAUDE.md
         setup_task_worktree(worktree, "repo", "branch").unwrap();
-        let seeded = fs::read_to_string(worktree.join(".task/AGENTS.md")).unwrap();
+        let seeded = fs::read_to_string(worktree.join(".task/CLAUDE.md")).unwrap();
         assert!(seeded.contains("repo:branch"));
 
         // Write custom content
-        fs::write(worktree.join(".task/AGENTS.md"), "# Custom\n").unwrap();
+        fs::write(worktree.join(".task/CLAUDE.md"), "# Custom\n").unwrap();
 
         // Second call should not overwrite
         setup_task_worktree(worktree, "repo", "branch").unwrap();
-        let preserved = fs::read_to_string(worktree.join(".task/AGENTS.md")).unwrap();
+        let preserved = fs::read_to_string(worktree.join(".task/CLAUDE.md")).unwrap();
         assert_eq!(preserved, "# Custom\n");
     }
 
@@ -467,7 +467,6 @@ mod tests {
         let actions = conform_task_worktree(worktree, "repo", "branch", false).unwrap();
         assert!(actions.iter().any(|a| a.contains(".task/")));
         assert!(actions.iter().any(|a| a.contains("CLAUDE.md")));
-        assert!(actions.iter().any(|a| a.contains("AGENTS.md")));
     }
 
     #[test]

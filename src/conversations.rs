@@ -449,10 +449,20 @@ pub fn sync(
     migrate_colon_dirs(&output_dir);
     let mut transcripts = discover_cursor_transcripts(projects);
     transcripts.extend(discover_claude_code_transcripts(projects));
+    materialize(&transcripts, projects, &output_dir, project_filter, since)
+}
 
+/// Write clean text files for the given transcripts into `output_dir`.
+fn materialize(
+    transcripts: &[TranscriptFile],
+    projects: &[(String, PathBuf)],
+    output_dir: &Path,
+    project_filter: Option<&[&str]>,
+    since: Option<SystemTime>,
+) -> SyncResult {
     let mut synced = 0;
     let mut skipped = 0;
-    for t in &transcripts {
+    for t in transcripts {
         if let Some(filters) = project_filter {
             if !filters.iter().any(|f| *f == t.project_key) {
                 continue;
@@ -1150,6 +1160,43 @@ mod tests {
 
         // Clean up
         let _ = std::fs::remove_dir_all(&cc_dir);
+    }
+
+    #[test]
+    fn test_materialize_preserves_source_mtime() {
+        use std::time::Duration;
+
+        let src_dir = tempfile::tempdir().unwrap();
+        let out_dir = tempfile::tempdir().unwrap();
+        let src = src_dir.path().join("sess-abc.jsonl");
+        std::fs::write(
+            &src,
+            r#"{"type":"user","message":{"content":"Hello"},"uuid":"u1","sessionId":"abc"}
+{"type":"assistant","message":{"content":[{"type":"text","text":"Hi there"}]},"uuid":"a1","sessionId":"abc"}
+"#,
+        )
+        .unwrap();
+
+        let source_mtime = SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+        std::fs::File::open(&src)
+            .unwrap()
+            .set_modified(source_mtime)
+            .unwrap();
+
+        let transcripts = vec![TranscriptFile {
+            project_key: "wormhole".to_string(),
+            transcript_id: "00000000-0000-0000-0000-000000000abc".to_string(),
+            path: src.clone(),
+            source: TranscriptSource::ClaudeCode,
+        }];
+
+        let result = materialize(&transcripts, &[], out_dir.path(), None, None);
+        assert_eq!(result.synced, 1);
+
+        let date = file_date(&src);
+        let out_file = out_dir.path().join("wormhole").join(format!("{}-00000000.md", date));
+        let out_mtime = std::fs::metadata(&out_file).unwrap().modified().unwrap();
+        assert_eq!(out_mtime, source_mtime);
     }
 
     #[test]

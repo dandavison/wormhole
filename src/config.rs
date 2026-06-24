@@ -4,7 +4,7 @@ use glob::Pattern;
 use serde::Deserialize;
 use std::fmt;
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use std::sync::{OnceLock, RwLock};
 
 /// A project name that has been canonicalized with respect to search-path precedence.
 /// Can only be constructed within this module, ensuring that all project names
@@ -56,10 +56,14 @@ impl CanonicalName {
 
 pub const TERMINAL: Terminal = Terminal::Alacritty { tmux: true };
 
-static EDITOR: OnceLock<Editor> = OnceLock::new();
+static EDITOR: OnceLock<RwLock<Editor>> = OnceLock::new();
 
-pub fn editor() -> &'static Editor {
-    EDITOR.get_or_init(|| match std::env::var("WORMHOLE_EDITOR").ok().as_deref() {
+fn editor_cell() -> &'static RwLock<Editor> {
+    EDITOR.get_or_init(|| RwLock::new(editor_from_env()))
+}
+
+fn editor_from_env() -> Editor {
+    match std::env::var("WORMHOLE_EDITOR").ok().as_deref() {
         Some("none") => Editor::None,
         Some("cursor") | None => Editor::Cursor,
         Some("code") => Editor::VSCode,
@@ -68,7 +72,17 @@ pub fn editor() -> &'static Editor {
         Some("idea") => Editor::IntelliJ,
         Some("pycharm") => Editor::PyCharm,
         _ => Editor::Cursor,
-    })
+    }
+}
+
+/// The active editor. Global and switchable at runtime via [`set_editor`];
+/// seeded from `WORMHOLE_EDITOR` on first access.
+pub fn editor() -> Editor {
+    editor_cell().read().unwrap().clone()
+}
+
+pub fn set_editor(editor: Editor) {
+    *editor_cell().write().unwrap() = editor;
 }
 
 static PORT: OnceLock<u16> = OnceLock::new();

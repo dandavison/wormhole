@@ -356,7 +356,16 @@ mod tests {
 
     #[test]
     fn test_name_from_name_round_trip() {
-        for e in [None, Cursor, Emacs, VSCode, VSCodeInsiders, IntelliJ, PyCharm, PyCharmCE] {
+        for e in [
+            None,
+            Cursor,
+            Emacs,
+            VSCode,
+            VSCodeInsiders,
+            IntelliJ,
+            PyCharm,
+            PyCharmCE,
+        ] {
             assert_eq!(Editor::from_name(e.name()), Some(e));
         }
         assert_eq!(Editor::from_name("nonsense"), Option::None);

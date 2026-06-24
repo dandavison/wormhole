@@ -365,6 +365,13 @@ pub enum Command {
 
     /// Refresh in-memory data from external sources
     Refresh,
+
+    /// Show or switch the active editor (global, in-memory)
+    Editor {
+        /// Editor to switch to (cursor, code, code-insiders, emacs, idea,
+        /// pycharm, pycharm-ce, none). Omit to show the current editor.
+        name: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -852,6 +859,15 @@ pub fn run(command: Command) -> Result<(), String> {
 
         Command::Refresh => {
             client.post("/project/refresh")?;
+            Ok(())
+        }
+
+        Command::Editor { name } => {
+            let response = match name {
+                Some(name) => client.post(&format!("/editor/set/{}", name))?,
+                None => client.get("/editor")?,
+            };
+            println!("{}", response.trim());
             Ok(())
         }
     }

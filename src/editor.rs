@@ -58,6 +58,34 @@ impl Editor {
         matches!(self, None)
     }
 
+    /// The canonical CLI/`WORMHOLE_EDITOR` token for this editor.
+    pub fn name(&self) -> &'static str {
+        match self {
+            None => "none",
+            Cursor => "cursor",
+            Emacs => "emacs",
+            VSCode => "code",
+            VSCodeInsiders => "code-insiders",
+            IntelliJ => "idea",
+            PyCharm => "pycharm",
+            PyCharmCE => "pycharm-ce",
+        }
+    }
+
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "none" => Some(None),
+            "cursor" => Some(Cursor),
+            "emacs" => Some(Emacs),
+            "code" => Some(VSCode),
+            "code-insiders" => Some(VSCodeInsiders),
+            "idea" => Some(IntelliJ),
+            "pycharm" => Some(PyCharm),
+            "pycharm-ce" => Some(PyCharmCE),
+            _ => Option::None,
+        }
+    }
+
     pub fn cli_executable_name(&self) -> &'static str {
         match self {
             None => "",
@@ -300,7 +328,7 @@ pub fn open_path(path: &ProjectPath) -> Result<(), String> {
     let root = path.project.root();
     let root_abspath = root.absolute_path();
 
-    if *editor == Emacs {
+    if editor == Emacs {
         execute_command("emacsclient", ["-n", "."], &root_abspath)?;
         return Ok(());
     }
@@ -325,6 +353,14 @@ pub fn open_path(path: &ProjectPath) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_name_from_name_round_trip() {
+        for e in [None, Cursor, Emacs, VSCode, VSCodeInsiders, IntelliJ, PyCharm, PyCharmCE] {
+            assert_eq!(Editor::from_name(e.name()), Some(e));
+        }
+        assert_eq!(Editor::from_name("nonsense"), Option::None);
+    }
 
     #[test]
     fn test_uri_with_slash_in_branch() {

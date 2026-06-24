@@ -184,9 +184,9 @@ impl Project {
         }
     }
 
-    pub fn editor(&self) -> &'static Editor {
+    pub fn editor(&self) -> Editor {
         if self.repo_name.as_str() == "mathematics" {
-            &Editor::Emacs
+            Editor::Emacs
         } else {
             config::editor()
         }

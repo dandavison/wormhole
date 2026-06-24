@@ -207,6 +207,7 @@ async fn route(
         "/doctor/conform" => require_post(method, || doctor::conform(params.dry_run)),
         "/doctor/persisted-data" => doctor::persisted_data(),
         "/doctor/editor-windows" => doctor::list_editor_windows(),
+        "/editor" => Response::new(Body::from(crate::config::editor().name())),
         "/jira/sprint/list" => jira::sprint_list(),
         "/jira/sprint/show" => jira::sprint_show(),
         "/project/show" => project::show(None),
@@ -299,6 +300,9 @@ async fn route_with_params(
             handle_conversation_resume(&format!("/{}", file_path))
         });
     }
+    if let Some(name) = path.strip_prefix("/editor/set/") {
+        return require_post(method, || set_editor(name));
+    }
     if let Some(asset_path) = path.strip_prefix("/asset/") {
         return handlers::serve_asset(asset_path);
     }
@@ -357,6 +361,19 @@ fn method_not_allowed() -> Response<Body> {
         .status(StatusCode::METHOD_NOT_ALLOWED)
         .body(Body::from("Method not allowed"))
         .unwrap()
+}
+
+fn set_editor(name: &str) -> Response<Body> {
+    match crate::editor::Editor::from_name(name) {
+        Some(editor) => {
+            crate::config::set_editor(editor.clone());
+            Response::new(Body::from(editor.name()))
+        }
+        Option::None => Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body(Body::from(format!("Unknown editor: {name}")))
+            .unwrap(),
+    }
 }
 
 fn require_post<F>(method: &Method, handler: F) -> Response<Body>

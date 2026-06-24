@@ -143,6 +143,9 @@ fn close_all_projects(remove: bool) {
 
 /// Refresh all in-memory data from external sources (fs, github)
 pub fn refresh_all() {
+    // Re-read the active editor from wormhole.toml
+    crate::config::reload_editor();
+
     // Refresh tasks from filesystem
     projects::refresh_tasks();
 

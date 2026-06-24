@@ -367,6 +367,7 @@ fn set_editor(name: &str) -> Response<Body> {
     match crate::editor::Editor::from_name(name) {
         Some(editor) => {
             crate::config::set_editor(editor.clone());
+            crate::config::persist_editor(&editor);
             Response::new(Body::from(editor.name()))
         }
         Option::None => Response::builder()

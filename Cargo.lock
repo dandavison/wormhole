@@ -1989,6 +1989,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "toml",
+ "toml_edit",
  "ureq",
  "url",
  "uuid",

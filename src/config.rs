@@ -59,7 +59,19 @@ pub const TERMINAL: Terminal = Terminal::Alacritty { tmux: true };
 static EDITOR: OnceLock<RwLock<Editor>> = OnceLock::new();
 
 fn editor_cell() -> &'static RwLock<Editor> {
-    EDITOR.get_or_init(|| RwLock::new(editor_from_env()))
+    EDITOR.get_or_init(|| RwLock::new(initial_editor()))
+}
+
+/// The `wormhole.toml` `editor` field is the source of truth; `WORMHOLE_EDITOR`
+/// is a fallback for when it is absent.
+fn initial_editor() -> Editor {
+    editor_from_config_file().unwrap_or_else(editor_from_env)
+}
+
+fn editor_from_config_file() -> Option<Editor> {
+    load_config_file()
+        .editor
+        .and_then(|name| Editor::from_name(&name))
 }
 
 fn editor_from_env() -> Editor {
@@ -76,13 +88,21 @@ fn editor_from_env() -> Editor {
 }
 
 /// The active editor. Global and switchable at runtime via [`set_editor`];
-/// seeded from `WORMHOLE_EDITOR` on first access.
+/// seeded from `wormhole.toml` on first access.
 pub fn editor() -> Editor {
     editor_cell().read().unwrap().clone()
 }
 
 pub fn set_editor(editor: Editor) {
     *editor_cell().write().unwrap() = editor;
+}
+
+/// Re-read the `editor` field from `wormhole.toml`, applying it as the active
+/// editor. Invoked by `wormhole refresh`.
+pub fn reload_editor() {
+    if let Some(editor) = editor_from_config_file() {
+        set_editor(editor);
+    }
 }
 
 static PORT: OnceLock<u16> = OnceLock::new();
@@ -105,6 +125,7 @@ struct ConfigFile {
     worktree_dir: Option<String>,
     #[serde(default)]
     card_commands: Vec<String>,
+    editor: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -184,15 +205,39 @@ fn load_config() -> ResolvedConfig {
     }
 }
 
+fn config_file_path() -> Option<PathBuf> {
+    dirs::home_dir().map(|home| home.join(".wormhole/wormhole.toml"))
+}
+
 fn load_config_file() -> ConfigFile {
-    let Some(home) = dirs::home_dir() else {
+    let Some(path) = config_file_path() else {
         return ConfigFile::default();
     };
-    let path = home.join(".wormhole/wormhole.toml");
     let Ok(contents) = std::fs::read_to_string(&path) else {
         return ConfigFile::default();
     };
     toml::from_str(&contents).unwrap_or_default()
+}
+
+/// Write the `editor` field back to `wormhole.toml`, preserving the rest of the
+/// file (other keys, comments, formatting). Keeps the file — the source of
+/// truth — in sync when the editor is switched via `wormhole editor <name>`.
+pub fn persist_editor(editor: &Editor) {
+    let Some(path) = config_file_path() else {
+        return;
+    };
+    let contents = std::fs::read_to_string(&path).unwrap_or_default();
+    let mut doc = match contents.parse::<toml_edit::DocumentMut>() {
+        Ok(doc) => doc,
+        Err(e) => {
+            crate::util::error(&format!("Failed to parse {}: {e}", path.display()));
+            return;
+        }
+    };
+    doc["editor"] = toml_edit::value(editor.name());
+    if let Err(e) = std::fs::write(&path, doc.to_string()) {
+        crate::util::error(&format!("Failed to write {}: {e}", path.display()));
+    }
 }
 
 fn default_worktree_dir() -> PathBuf {
@@ -518,5 +563,16 @@ worktree_dir = "~/worktrees"
         let config: ConfigFile = toml::from_str("").unwrap();
         assert!(config.search_paths.is_empty());
         assert!(config.worktree_dir.is_none());
+        assert!(config.editor.is_none());
+    }
+
+    #[test]
+    fn test_config_file_editor() {
+        let config: ConfigFile = toml::from_str(r#"editor = "code""#).unwrap();
+        assert_eq!(config.editor.as_deref(), Some("code"));
+        assert_eq!(
+            config.editor.and_then(|n| Editor::from_name(&n)),
+            Some(Editor::VSCode)
+        );
     }
 }

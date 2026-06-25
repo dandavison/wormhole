@@ -245,6 +245,7 @@ wormhole project message myapp -m editor/close
 wormhole project message myapp -m editor/toggleZenMode
 wormhole project message myapp -m editor/close -t '*'  # broadcast to all roles
 wormhole project message --all -m gopls/stop           # stop gopls in all open Go projects
+wormhole project message --all -m gopls/stop -x repo:branch  # ...except an excluded project
 ```
 
 ## Configuration

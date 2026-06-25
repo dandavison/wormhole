@@ -265,6 +265,9 @@ pub enum ProjectCommand {
         /// Send to all open projects instead of a single one
         #[arg(long)]
         all: bool,
+        /// Project to exclude from --all (repeatable)
+        #[arg(short = 'x', long = "exclude", add = ArgValueCompleter::new(complete_projects))]
+        exclude: Vec<String>,
     },
     /// Run a command in each project directory
     ForEach {
@@ -660,6 +663,7 @@ pub fn run(command: Command) -> Result<(), String> {
                 method,
                 target,
                 all,
+                exclude,
             } => {
                 let body = serde_json::json!({
                     "target": target,
@@ -670,6 +674,9 @@ pub fn run(command: Command) -> Result<(), String> {
                 });
                 let names = if all {
                     project::active_project_keys(&client)?
+                        .into_iter()
+                        .filter(|n| !exclude.contains(n))
+                        .collect()
                 } else {
                     vec![name.unwrap_or_else(|| {
                         std::env::current_dir()

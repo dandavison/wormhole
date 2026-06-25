@@ -262,6 +262,9 @@ pub enum ProjectCommand {
         /// Target role (default: editor)
         #[arg(short, long, default_value = "editor")]
         target: String,
+        /// Send to all open projects instead of a single one
+        #[arg(long)]
+        all: bool,
     },
     /// Run a command in each project directory
     ForEach {
@@ -656,12 +659,8 @@ pub fn run(command: Command) -> Result<(), String> {
                 name,
                 method,
                 target,
+                all,
             } => {
-                let name = name.unwrap_or_else(|| {
-                    std::env::current_dir()
-                        .map(|p| p.to_string_lossy().to_string())
-                        .unwrap_or_default()
-                });
                 let body = serde_json::json!({
                     "target": target,
                     "message": {
@@ -669,7 +668,18 @@ pub fn run(command: Command) -> Result<(), String> {
                         "method": method,
                     }
                 });
-                client.post_json(&format!("/project/messages/{}", name), &body)?;
+                let names = if all {
+                    project::active_project_keys(&client)?
+                } else {
+                    vec![name.unwrap_or_else(|| {
+                        std::env::current_dir()
+                            .map(|p| p.to_string_lossy().to_string())
+                            .unwrap_or_default()
+                    })]
+                };
+                for name in names {
+                    client.post_json(&format!("/project/messages/{}", name), &body)?;
+                }
                 Ok(())
             }
         },

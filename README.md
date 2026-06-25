@@ -158,6 +158,7 @@ wormhole project show                   # Show task info (JIRA, PR, CLAUDE.md)
 wormhole project show myrepo:ACT-1234   # Show info for specific project/task
 wormhole project message myapp -m editor/close           # Send intent to project
 wormhole project message myapp -m editor/toggleZenMode   # Toggle zen mode
+wormhole project message --all -m gopls/stop             # Send intent to all open projects
 wormhole project for-each <command>     # Run command in each project dir
 wormhole kv get myapp land-in           # Get KV
 wormhole kv set myapp land-in editor    # Set KV
@@ -230,14 +231,20 @@ internally; intents can also be sent manually via `wormhole project message`.
 |-------------------------|--------------------------------------|--------------------------|
 | `editor/close`          | `workbench.action.closeWindow`       | Close the editor window  |
 | `editor/toggleZenMode`  | `workbench.action.toggleZenMode`     | Toggle zen mode          |
+| `gopls/stop`            | `go.languageserver.restart`          | Stop gopls (frees memory; sets `go.useLanguageServer=false`) |
+| `gopls/start`           | `go.languageserver.restart`          | Restart gopls (sets `go.useLanguageServer=true`) |
 | `echo`                  | _(writes KV `last-message=echo`)_    | Test connectivity        |
 | `claude-code/resume`    | `claude-vscode.editor.open`          | Resume CC session        |
 | `claude-code/start`     | `claude-vscode.terminal.open`        | Start CC with prompt     |
+
+`gopls/stop` and `gopls/start` no-op in non-Go projects (where the Go extension
+is inactive), so they are safe to broadcast to all open projects with `--all`.
 
 ```bash
 wormhole project message myapp -m editor/close
 wormhole project message myapp -m editor/toggleZenMode
 wormhole project message myapp -m editor/close -t '*'  # broadcast to all roles
+wormhole project message --all -m gopls/stop           # stop gopls in all open Go projects
 ```
 
 ## Configuration

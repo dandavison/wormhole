@@ -18,6 +18,8 @@ const INTENTS: Record<string, IntentHandler> = {
     return vscode.commands.executeCommand('workbench.action.closeWindow');
   },
   'editor/toggleZenMode': vscodeCommand('workbench.action.toggleZenMode'),
+  'gopls/stop': () => setGoplsEnabled(false),
+  'gopls/start': () => setGoplsEnabled(true),
   echo: (projectKey, port) => putKv(projectKey, port, 'last-message', 'echo'),
   'claude-code/resume': async (_projectKey, _port, params) => {
     const sessionId = params?.sessionId as string | undefined;
@@ -55,6 +57,30 @@ const INTENTS: Record<string, IntentHandler> = {
     );
   },
 };
+
+// The Go extension exposes only `go.languageserver.restart`, which stops the
+// running gopls and starts a new one only if `go.useLanguageServer` is true.
+// So we toggle that setting (persisted in workspace config) and restart.
+// No-ops in non-Go projects, where the Go extension is inactive.
+async function setGoplsEnabled(enabled: boolean) {
+  const go = vscode.extensions.getExtension('golang.go');
+  if (!go) {
+    log.info('gopls intent ignored: Go extension not installed');
+    return;
+  }
+  if (!go.isActive) {
+    if (!enabled) {
+      log.info('gopls intent ignored: Go extension inactive (gopls not running)');
+      return;
+    }
+    await go.activate();
+  }
+  await vscode.workspace
+    .getConfiguration('go')
+    .update('useLanguageServer', enabled, vscode.ConfigurationTarget.Workspace);
+  await vscode.commands.executeCommand('go.languageserver.restart');
+  log.info(`gopls ${enabled ? 'started' : 'stopped'}`);
+}
 
 let abortController: AbortController | null = null;
 let statusItem: vscode.StatusBarItem | null = null;

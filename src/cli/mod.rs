@@ -230,6 +230,9 @@ pub enum ProjectCommand {
         /// Also remove the project (deletes worktree and KV data for tasks)
         #[arg(long)]
         remove: bool,
+        /// Prompt before closing each project (RET = close, n = skip)
+        #[arg(short, long)]
+        interactive: bool,
     },
     /// Pin current (project, application) state
     Pin,
@@ -574,28 +577,32 @@ pub fn run(command: Command) -> Result<(), String> {
                 client.get(&format!("/project/next{}", query))?;
                 Ok(())
             }
-            ProjectCommand::Close { names, all, remove } => {
+            ProjectCommand::Close {
+                names,
+                all,
+                remove,
+                interactive,
+            } => {
                 let remove_query = if remove { "?remove=true" } else { "" };
-                if all {
+                if all && !interactive {
                     client.post(&format!("/project/close-all{}", remove_query))?;
-                } else {
-                    let names = if names.is_empty() {
-                        vec![std::env::current_dir()
-                            .map(|p| p.to_string_lossy().to_string())
-                            .unwrap_or_default()]
-                    } else {
-                        names
-                    };
-                    if names.len() == 1 {
-                        client.post(&format!("/project/close/{}{}", names[0], remove_query))?;
-                    } else {
-                        client.post_json(
-                            &format!("/project/close{}", remove_query),
-                            &serde_json::json!({ "names": names }),
-                        )?;
-                    }
+                    return Ok(());
                 }
-                Ok(())
+                let candidates = if all {
+                    project::active_project_keys(&client)?
+                } else if names.is_empty() {
+                    vec![std::env::current_dir()
+                        .map(|p| p.to_string_lossy().to_string())
+                        .unwrap_or_default()]
+                } else {
+                    names
+                };
+                let targets = if interactive {
+                    project::prompt_close_targets(candidates, remove)?
+                } else {
+                    candidates
+                };
+                project::submit_close(&client, &targets, remove_query)
             }
             ProjectCommand::Pin => {
                 client.post("/project/pin")?;

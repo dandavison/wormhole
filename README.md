@@ -151,6 +151,7 @@ wormhole project previous               # Previous project
 wormhole project next                   # Next project
 wormhole project close myapp            # Close project windows
 wormhole project close myapp --remove   # Close and remove (deletes worktree/KV for tasks)
+wormhole project close --all -i         # Prompt before closing each (RET = close, n = skip)
 wormhole project pin                    # Pin current (project, app) state
 wormhole project debug                  # Debug info for all projects
 wormhole project show                   # Show task info (JIRA, PR, CLAUDE.md)

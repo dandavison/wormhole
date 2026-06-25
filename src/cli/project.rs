@@ -227,6 +227,79 @@ pub(super) fn render_issue_status(issue: &crate::jira::IssueStatus) -> String {
     )
 }
 
+pub(super) fn active_project_keys(client: &super::util::Client) -> Result<Vec<String>, String> {
+    let response = client.get("/project/list?active=true")?;
+    let json: serde_json::Value = serde_json::from_str(&response).map_err(|e| e.to_string())?;
+    let projects = json["current"].as_array().ok_or("No projects found")?;
+    Ok(projects
+        .iter()
+        .filter_map(|p| p["project_key"].as_str().map(String::from))
+        .collect())
+}
+
+pub(super) fn submit_close(
+    client: &super::util::Client,
+    names: &[String],
+    remove_query: &str,
+) -> Result<(), String> {
+    match names {
+        [] => Ok(()),
+        [name] => {
+            client.post(&format!("/project/close/{}{}", name, remove_query))?;
+            Ok(())
+        }
+        _ => {
+            client.post_json(
+                &format!("/project/close{}", remove_query),
+                &serde_json::json!({ "names": names }),
+            )?;
+            Ok(())
+        }
+    }
+}
+
+pub(super) fn prompt_close_targets(
+    candidates: Vec<String>,
+    remove: bool,
+) -> Result<Vec<String>, String> {
+    let verb = if remove { "Close and remove" } else { "Close" };
+    let mut accepted = Vec::new();
+    for name in candidates {
+        if prompt_yes_no(&format!("{verb} {name}?"))? {
+            accepted.push(name);
+        }
+    }
+    Ok(accepted)
+}
+
+fn prompt_yes_no(question: &str) -> Result<bool, String> {
+    use std::io::Write;
+    loop {
+        print!("{question} [Y/n] ");
+        std::io::stdout().flush().map_err(|e| e.to_string())?;
+        let mut line = String::new();
+        if std::io::stdin()
+            .read_line(&mut line)
+            .map_err(|e| e.to_string())?
+            == 0
+        {
+            return Ok(false); // EOF
+        }
+        if let Some(answer) = parse_answer(&line) {
+            return Ok(answer);
+        }
+    }
+}
+
+/// RET (empty) accepts; `n` skips. `None` re-prompts on unrecognized input.
+fn parse_answer(line: &str) -> Option<bool> {
+    match line.trim().to_ascii_lowercase().as_str() {
+        "" | "y" | "yes" => Some(true),
+        "n" | "no" => Some(false),
+        _ => None,
+    }
+}
+
 use std::sync::atomic::{AtomicBool, Ordering};
 
 static INTERRUPTED: AtomicBool = AtomicBool::new(false);
@@ -391,6 +464,17 @@ mod tests {
     use super::*;
 
     // Tests run in a non-TTY context, so render_project_item returns plain keys.
+
+    #[test]
+    fn test_parse_answer() {
+        assert_eq!(parse_answer(""), Some(true));
+        assert_eq!(parse_answer("\n"), Some(true));
+        assert_eq!(parse_answer("y"), Some(true));
+        assert_eq!(parse_answer("YES"), Some(true));
+        assert_eq!(parse_answer("n"), Some(false));
+        assert_eq!(parse_answer("No\n"), Some(false));
+        assert_eq!(parse_answer("maybe"), Option::None);
+    }
 
     #[test]
     fn test_render_project_item_bare_project() {

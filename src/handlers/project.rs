@@ -255,6 +255,18 @@ pub fn navigate(direction: Direction, params: &QueryParams) {
     }
 }
 
+/// Focus (or open) the current project's editor — the grid's upper-row cell for
+/// the current column. Bound to ctrl+cmd+up in the Hammerspoon switcher.
+pub fn focus_current_editor() -> Response<Body> {
+    let project_path = projects::lock().current().map(|p| p.as_project_path());
+    if let Some(pp) = project_path {
+        thread::spawn(move || {
+            pp.open_with_options(Mutation::None, Some(crate::wormhole::LandIn::Editor))
+        });
+    }
+    Response::new(Body::from(""))
+}
+
 pub enum Direction {
     Previous,
     Next,

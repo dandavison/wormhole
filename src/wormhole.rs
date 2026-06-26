@@ -307,6 +307,12 @@ async fn route_with_params(
     if let Some(asset_path) = path.strip_prefix("/asset/") {
         return handlers::serve_asset(asset_path);
     }
+    if let Some(kv_key) = path.strip_prefix("/kv-all/") {
+        if *method == Method::DELETE {
+            return crate::kv::delete_value_all(kv_key);
+        }
+        return method_not_allowed();
+    }
     if let Some(kv_path) = path.strip_prefix("/kv/") {
         return handle_kv_request(method, kv_path, req).await;
     }

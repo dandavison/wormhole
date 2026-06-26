@@ -267,6 +267,17 @@ pub struct EditorWindow {
     pub project: Option<String>,
     pub visible: bool,
     pub screen: String,
+    /// The window's project has a live editor consumer (extension is polling).
+    /// A window with a known project but `connected: false` is stranded: open,
+    /// but its wormhole extension stopped polling, so `project close` can't
+    /// reach it.
+    pub connected: bool,
+}
+
+impl EditorWindow {
+    fn is_stranded(&self) -> bool {
+        self.project.is_some() && !self.connected
+    }
 }
 
 impl EditorWindowsReport {
@@ -274,9 +285,16 @@ impl EditorWindowsReport {
         use crate::project::ProjectKey;
         self.windows
             .iter()
-            .map(|w| match &w.project {
-                Some(key) => ProjectKey::parse(key).hyperlink(),
-                None => w.title.clone(),
+            .map(|w| {
+                let label = match &w.project {
+                    Some(key) => ProjectKey::parse(key).hyperlink(),
+                    None => w.title.clone(),
+                };
+                if w.is_stranded() {
+                    format!("{label}  ⚠ stranded (extension not polling)")
+                } else {
+                    label
+                }
             })
             .collect::<Vec<_>>()
             .join("\n")
@@ -325,6 +343,7 @@ pub fn list_editor_windows() -> Response<Body> {
         end
     "#
     );
+    let connected_projects = crate::messages::lock().projects_with_role("editor");
     let output = crate::hammerspoon::execute(&lua);
     let windows: Vec<EditorWindow> = String::from_utf8_lossy(&output)
         .lines()
@@ -337,11 +356,15 @@ pub fn list_editor_windows() -> Response<Body> {
             let project = parse_workspace_name(&title)
                 .and_then(|ws| encoded_to_key.get(ws))
                 .cloned();
+            let connected = project
+                .as_ref()
+                .is_some_and(|p| connected_projects.contains(p));
             Some(EditorWindow {
                 title,
                 project,
                 visible,
                 screen,
+                connected,
             })
         })
         .collect();
@@ -399,6 +422,30 @@ mod tests {
             parse_workspace_name("● mcp-resource-1771262755954.txt"),
             None
         );
+    }
+
+    #[test]
+    fn test_render_marks_stranded_windows() {
+        let win = |project: Option<&str>, connected: bool| EditorWindow {
+            title: "f.go — x (Workspace)".into(),
+            project: project.map(String::from),
+            visible: true,
+            screen: String::new(),
+            connected,
+        };
+        let report = EditorWindowsReport {
+            editor: "Cursor".into(),
+            windows: vec![
+                win(Some("temporal:fredtzeng/saa-start-delay-pause"), false),
+                win(Some("wormhole"), true),
+                win(None, false),
+            ],
+        };
+        let rendered = report.render_terminal();
+        let lines: Vec<&str> = rendered.lines().collect();
+        assert!(lines[0].contains("⚠ stranded"));
+        assert!(!lines[1].contains("stranded"));
+        assert!(!lines[2].contains("stranded"));
     }
 }
 

@@ -99,11 +99,6 @@ pub fn open_task(repo: &str, branch: &str, land_in: Option<LandIn>) -> Result<()
         Some(LandIn::Background) => {
             open_terminal();
         }
-        Some(LandIn::Terminal) => {
-            open_terminal();
-            open_editor();
-            config::TERMINAL.focus();
-        }
         Some(LandIn::Editor) => {
             open_editor();
             config::editor().focus();

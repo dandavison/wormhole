@@ -207,6 +207,9 @@ async fn route(
         "/doctor/conform" => require_post(method, || doctor::conform(params.dry_run)),
         "/doctor/persisted-data" => doctor::persisted_data(),
         "/doctor/editor-windows" => doctor::list_editor_windows(),
+        "/doctor/close-editor-windows" => {
+            require_post_async(method, || async { doctor::close_editor_windows(req).await }).await
+        }
         "/editor" => Response::new(Body::from(crate::config::editor().name())),
         "/jira/sprint/list" => jira::sprint_list(),
         "/jira/sprint/show" => jira::sprint_show(),

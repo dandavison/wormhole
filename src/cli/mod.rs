@@ -410,6 +410,21 @@ pub enum DoctorCommand {
         #[arg(short, long, default_value = "text")]
         output: String,
     },
+    /// Close editor windows by project key (works without focusing them)
+    CloseEditorWindows {
+        /// Project keys to close (e.g. repo:branch)
+        #[arg(add = ArgValueCompleter::new(complete_projects))]
+        keys: Vec<String>,
+        /// Close all stranded windows (open, but extension not polling)
+        #[arg(long)]
+        stranded: bool,
+        /// Show what would be closed without closing
+        #[arg(long)]
+        dry_run: bool,
+        /// Output format: text (default) or json
+        #[arg(short, long, default_value = "text")]
+        output: String,
+    },
     /// Conform task worktrees to desired state (.task/AGENTS.md, symlinks, etc.)
     Conform {
         /// Show what would be done without making changes
@@ -850,6 +865,12 @@ pub fn run(command: Command) -> Result<(), String> {
             DoctorCommand::ListEditorWindows { output } => {
                 doctor::doctor_list_editor_windows(&client, &output)
             }
+            DoctorCommand::CloseEditorWindows {
+                keys,
+                stranded,
+                dry_run,
+                output,
+            } => doctor::doctor_close_editor_windows(&client, keys, stranded, dry_run, &output),
             DoctorCommand::Conform { dry_run, output } => {
                 doctor::doctor_conform(&client, dry_run, &output)
             }

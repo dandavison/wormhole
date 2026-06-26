@@ -173,6 +173,9 @@ wormhole refresh                        # Refresh in-memory data from disk/APIs
 wormhole kill                           # Kill tmux session and clean up
 wormhole doctor persisted-data          # Report on worktrees and KV files
 wormhole doctor conform                 # Conform task worktrees
+wormhole doctor list-editor-windows     # List editor windows (flags stranded ones)
+wormhole doctor close-editor-windows myrepo:branch  # Close a window by key (no need to focus it)
+wormhole doctor close-editor-windows --stranded     # Close all stranded windows
 wormhole completion bash                # Generate shell completions
 ```
 
@@ -211,6 +214,8 @@ wormhole completion bash                # Generate shell completions
 | GET    | `/asset/<path>`               | Serve static assets               |
 | GET    | `/doctor/persisted-data`      | Report on worktrees and KV files  |
 | POST   | `/doctor/conform`             | Conform task worktrees            |
+| GET    | `/doctor/editor-windows`      | List editor windows (with stranded status) |
+| POST   | `/doctor/close-editor-windows`| Close editor windows by key or `--stranded` |
 | GET    | `/jira/sprint/list`           | List JIRA sprint issues           |
 | GET    | `/jira/sprint/show`           | Detailed sprint status            |
 | GET    | `/kv/<project>/<key>`         | Get value                         |

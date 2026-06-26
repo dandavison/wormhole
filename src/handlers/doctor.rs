@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fs;
 
-use hyper::{Body, Response, StatusCode};
+use hyper::{Body, Request, Response, StatusCode};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -302,13 +302,25 @@ impl EditorWindowsReport {
 }
 
 pub fn list_editor_windows() -> Response<Body> {
-    let editor = config::editor();
-    let app_name = editor.application_name();
-    if app_name.is_empty() {
+    let Some((app_name, windows)) = enumerate_editor_windows() else {
         return json_response(&EditorWindowsReport {
             editor: "none".to_string(),
             windows: vec![],
         });
+    };
+    json_response(&EditorWindowsReport {
+        editor: app_name,
+        windows,
+    })
+}
+
+/// Enumerate the editor's open windows (via Hammerspoon), mapping each to its
+/// wormhole project and whether that project has a live editor consumer.
+/// Returns None when no editor is configured.
+fn enumerate_editor_windows() -> Option<(String, Vec<EditorWindow>)> {
+    let app_name = config::editor().application_name();
+    if app_name.is_empty() {
+        return None;
     }
 
     // Build lookup from encoded workspace name → project key.
@@ -368,10 +380,191 @@ pub fn list_editor_windows() -> Response<Body> {
             })
         })
         .collect();
-    json_response(&EditorWindowsReport {
-        editor: app_name.to_string(),
-        windows,
+    Some((app_name.to_string(), windows))
+}
+
+#[derive(Serialize, Deserialize, Default)]
+pub struct CloseWindowsResult {
+    pub closed: Vec<String>,
+    /// Targeted, but the window didn't close (e.g. an unsaved-changes prompt).
+    pub blocked: Vec<String>,
+    /// Targeted key with no matching open window.
+    pub not_found: Vec<String>,
+    pub dry_run: bool,
+}
+
+impl CloseWindowsResult {
+    pub fn render_terminal(&self) -> String {
+        use crate::project::ProjectKey;
+        let link = |k: &String| ProjectKey::parse(k).hyperlink();
+        let verb = if self.dry_run {
+            "would close"
+        } else {
+            "closed"
+        };
+        let mut lines: Vec<String> = Vec::new();
+        for k in &self.closed {
+            lines.push(format!("{verb} {}", link(k)));
+        }
+        for k in &self.blocked {
+            lines.push(format!("⚠ {} did not close (unsaved changes?)", link(k)));
+        }
+        for k in &self.not_found {
+            lines.push(format!("{}: no open window", link(k)));
+        }
+        if lines.is_empty() {
+            lines.push("no matching windows".to_string());
+        }
+        lines.join("\n")
+    }
+}
+
+#[derive(Deserialize, Default)]
+struct CloseWindowsRequest {
+    #[serde(default)]
+    keys: Vec<String>,
+    #[serde(default)]
+    stranded: bool,
+    #[serde(default)]
+    dry_run: bool,
+}
+
+pub async fn close_editor_windows(req: Request<Body>) -> Response<Body> {
+    let body = hyper::body::to_bytes(req.into_body())
+        .await
+        .map(|b| b.to_vec())
+        .unwrap_or_default();
+    let r: CloseWindowsRequest = serde_json::from_slice(&body).unwrap_or_default();
+    close_windows_impl(r.keys, r.stranded, r.dry_run)
+}
+
+fn close_windows_impl(keys: Vec<String>, stranded: bool, dry_run: bool) -> Response<Body> {
+    let Some((app_name, windows)) = enumerate_editor_windows() else {
+        return json_response(&CloseWindowsResult {
+            dry_run,
+            ..Default::default()
+        });
+    };
+
+    let (to_close, not_found) = resolve_close_targets(&windows, keys, stranded);
+
+    if dry_run || to_close.is_empty() {
+        return json_response(&CloseWindowsResult {
+            closed: to_close,
+            not_found,
+            dry_run,
+            ..Default::default()
+        });
+    }
+
+    let encoded: Vec<(String, String)> = to_close
+        .iter()
+        .map(|k| (k.replace('/', "--"), k.clone()))
+        .collect();
+    let output = crate::hammerspoon::execute(&close_windows_lua(&app_name, &encoded));
+    let stdout = String::from_utf8_lossy(&output).into_owned();
+    let did_close: std::collections::HashSet<&str> = stdout
+        .lines()
+        .filter_map(|l| l.split_once('\t'))
+        .filter(|(_, status)| status.trim() == "closed")
+        .map(|(enc, _)| enc)
+        .collect();
+
+    let mut closed = Vec::new();
+    let mut blocked = Vec::new();
+    for (enc, key) in encoded {
+        if did_close.contains(enc.as_str()) {
+            closed.push(key);
+        } else {
+            blocked.push(key);
+        }
+    }
+    json_response(&CloseWindowsResult {
+        closed,
+        blocked,
+        not_found,
+        dry_run: false,
     })
+}
+
+/// Partition requested keys (or the stranded set) into those with an open
+/// window and those without.
+fn resolve_close_targets(
+    windows: &[EditorWindow],
+    keys: Vec<String>,
+    stranded: bool,
+) -> (Vec<String>, Vec<String>) {
+    let open_keys: std::collections::HashSet<&str> = windows
+        .iter()
+        .filter_map(|w| w.project.as_deref())
+        .collect();
+    if stranded {
+        let to_close = windows
+            .iter()
+            .filter(|w| w.is_stranded())
+            .filter_map(|w| w.project.clone())
+            .collect();
+        return (to_close, Vec::new());
+    }
+    keys.into_iter()
+        .partition(|k| open_keys.contains(k.as_str()))
+}
+
+/// Cursor/VSCode use a custom title bar, so Hammerspoon's `window:close()`
+/// (which presses the AX close button) doesn't work. Drive File ▸ Close Window
+/// from the menu bar instead, after focusing each target window.
+fn close_windows_lua(app_name: &str, encoded: &[(String, String)]) -> String {
+    let targets_lua = encoded
+        .iter()
+        .map(|(enc, _)| format!("[{}]=true", lua_string(enc)))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        r#"
+local app = hs.application.find("{app_name}")
+if not app then return end
+app:activate(true)
+hs.timer.usleep(300000)
+local axapp = hs.axuielement.applicationElement(app)
+local targets = {{ {targets_lua} }}
+local function closeItem()
+  local mb = axapp:attributeValue("AXMenuBar")
+  for _, top in ipairs(mb:attributeValue("AXChildren")) do
+    if top:attributeValue("AXTitle") == "File" then
+      local sub = top:attributeValue("AXChildren")[1]
+      for _, mi in ipairs(sub:attributeValue("AXChildren")) do
+        if (mi:attributeValue("AXTitle") or ""):find("Close Window") then return mi end
+      end
+    end
+  end
+end
+local function wsname(title)
+  local rest = title:match("^(.*) %(Workspace%)$")
+  if not rest then return nil end
+  return rest:match(".* — (.+)$") or rest
+end
+local function find(enc)
+  for _, w in ipairs(app:allWindows()) do
+    if wsname(w:title() or "") == enc then return w end
+  end
+end
+for enc, _ in pairs(targets) do
+  local w = find(enc)
+  if w then
+    w:raise(); w:focus()
+    hs.timer.usleep(500000)
+    local item = closeItem()
+    if item then item:performAction("AXPress") end
+    hs.timer.usleep(800000)
+    print(enc .. "\t" .. (find(enc) == nil and "closed" or "blocked"))
+  end
+end
+"#
+    )
+}
+
+fn lua_string(s: &str) -> String {
+    format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
 /// Extract workspace name from a VSCode/Cursor window title.
@@ -422,6 +615,33 @@ mod tests {
             parse_workspace_name("● mcp-resource-1771262755954.txt"),
             None
         );
+    }
+
+    #[test]
+    fn test_resolve_close_targets() {
+        let win = |project: Option<&str>, connected: bool| EditorWindow {
+            title: String::new(),
+            project: project.map(String::from),
+            visible: true,
+            screen: String::new(),
+            connected,
+        };
+        let windows = vec![
+            win(Some("a"), true),
+            win(Some("b"), false), // stranded
+            win(None, false),
+        ];
+
+        // explicit keys: present vs absent
+        let (close, missing) =
+            resolve_close_targets(&windows, vec!["a".into(), "ghost".into()], false);
+        assert_eq!(close, vec!["a"]);
+        assert_eq!(missing, vec!["ghost"]);
+
+        // stranded: only b, nothing reported missing
+        let (close, missing) = resolve_close_targets(&windows, vec![], true);
+        assert_eq!(close, vec!["b"]);
+        assert!(missing.is_empty());
     }
 
     #[test]

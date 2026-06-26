@@ -85,11 +85,6 @@ impl ProjectPath {
         };
 
         match &land_in {
-            Some(LandIn::Terminal) => {
-                open_terminal();
-                open_editor();
-                config::TERMINAL.focus();
-            }
             Some(LandIn::Editor) => {
                 open_terminal();
                 open_editor();

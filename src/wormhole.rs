@@ -30,10 +30,9 @@ impl Application {
 /// - `Editor` / `Terminal`: open both editor and terminal, focus the named app
 /// - `TerminalOnly`: open terminal only, focus terminal
 /// - `Background`: open terminal only, no focus change
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum LandIn {
     Editor,
-    Terminal,
     TerminalOnly,
     Background,
 }
@@ -42,16 +41,15 @@ impl From<Application> for LandIn {
     fn from(app: Application) -> Self {
         match app {
             Application::Editor => LandIn::Editor,
-            Application::Terminal => LandIn::Terminal,
+            Application::Terminal => LandIn::TerminalOnly,
         }
     }
 }
 
 pub fn parse_land_in(s: Option<&String>) -> Option<LandIn> {
     s.and_then(|v| match v.as_str() {
-        "terminal" => Some(LandIn::Terminal),
+        "terminal" | "terminal-only" => Some(LandIn::TerminalOnly),
         "editor" => Some(LandIn::Editor),
-        "terminal-only" => Some(LandIn::TerminalOnly),
         "none" => Some(LandIn::Background),
         _ => None,
     })
@@ -594,9 +592,8 @@ impl QueryParams {
                 match key.to_lowercase().as_str() {
                     "land-in" => {
                         params.land_in = match val.to_lowercase().as_str() {
-                            "terminal" => Some(LandIn::Terminal),
+                            "terminal" | "terminal-only" => Some(LandIn::TerminalOnly),
                             "editor" => Some(LandIn::Editor),
-                            "terminal-only" => Some(LandIn::TerminalOnly),
                             "none" => Some(LandIn::Background),
                             _ => None,
                         }
@@ -662,6 +659,18 @@ fn cors_response(response: Response<Body>) -> Response<Body> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_parse_land_in() {
+        // Grid model: a terminal pin is tmux-only; the editor row is opt-in
+        // (only LandIn::Editor creates it).
+        let p = |s: &str| parse_land_in(Some(&s.to_string()));
+        assert_eq!(p("terminal"), Some(LandIn::TerminalOnly));
+        assert_eq!(p("terminal-only"), Some(LandIn::TerminalOnly));
+        assert_eq!(p("editor"), Some(LandIn::Editor));
+        assert_eq!(p("none"), Some(LandIn::Background));
+        assert_eq!(p("bogus"), None);
+    }
 
     #[test]
     fn test_query_params_empty_current_is_none() {

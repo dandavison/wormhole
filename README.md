@@ -80,6 +80,20 @@ Wormhole is a tool for working on software projects.
 
 
 
+## The grid
+
+By default, wormhole doesn't even think about Cursor/VSCode. The Hammerspoon switcher slides left and
+right effortlessly between tmux windows, and a new wormhole project create is a very fast tmux spawn.
+
+I think of wormhole as a two-dimensional grid. The x axis is projects. The y axis has two rows: the
+lower row is tmux, and the upper is the editor. The upper row is nullable (the lower is
+non-nullable), and entirely absent by default. But any column can opt to create a non-null upper-row
+cell, and can also pin the column to that cell — in which case the usual left-to-right fast slide
+across tmux windows by the Hammerspoon switcher will be disrupted by visiting an editor.
+
+
+
+
 ## Design Principles
 
 **Remote-capable architecture**: All workspace operations (tmux sessions, git/worktree management,

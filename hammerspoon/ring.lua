@@ -118,6 +118,11 @@ function M.editor()
     hs.http.asyncGet(M.host .. "/project/current/editor", nil, function() end)
 end
 
+-- Grid: down moves to the current column's terminal (lower) cell.
+function M.terminal()
+    hs.http.asyncGet(M.host .. "/project/current/terminal", nil, function() end)
+end
+
 function M.bind()
     tap = hs.eventtap.new({ hs.eventtap.event.types.flagsChanged }, function(event)
         local flags = event:getFlags()

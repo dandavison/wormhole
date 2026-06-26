@@ -208,6 +208,7 @@ wormhole completion bash                # Generate shell completions
 | POST   | `/project/pin`                | Pin current (project, app) state  |
 | GET    | `/project/current/poll`       | Poll for current project changes  |
 | GET    | `/project/current/editor`     | Focus/open the current project's editor |
+| GET    | `/project/current/terminal`   | Focus the current project's terminal |
 | GET    | `/project/debug`              | Debug info                        |
 | GET    | `/project/show[/<name>]`      | Task info (JIRA, PR, CLAUDE.md)   |
 | POST   | `/project/describe`           | Describe URL (JIRA/GitHub lookup) |
@@ -319,6 +320,7 @@ local wormhole = require("wormhole")
 hs.hotkey.bind({ "cmd", "control" }, "left", wormhole.previous)
 hs.hotkey.bind({ "cmd", "control" }, "right", wormhole.next)
 hs.hotkey.bind({ "cmd", "control" }, "up", wormhole.editor)  -- focus current project's editor
+hs.hotkey.bind({ "cmd", "control" }, "down", wormhole.terminal)  -- focus current project's terminal
 hs.hotkey.bind({ "cmd", "control" }, ".", wormhole.pin)
 hs.hotkey.bind({}, "f13", wormhole.select)
 ```

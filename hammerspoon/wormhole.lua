@@ -93,6 +93,7 @@ end
 M.previous = ring.previous
 M.next = ring.next
 M.editor = ring.editor
+M.terminal = ring.terminal
 
 function M.pin()
     hs.http.asyncPost(M.host .. "/project/pin", "", nil, function() end)
@@ -267,6 +268,7 @@ function M.bindKeys(keymap)
     hs.hotkey.bind({ "cmd", "control" }, "left", M.previous)
     hs.hotkey.bind({ "cmd", "control" }, "right", M.next)
     hs.hotkey.bind({ "cmd", "control" }, "up", M.editor)
+    hs.hotkey.bind({ "cmd", "control" }, "down", M.terminal)
     hs.hotkey.bind({ "cmd", "control" }, ".", M.pin)
     hs.hotkey.bind({ "cmd", "alt" }, "k", M.createHotkeyOverlay(keymap))
     M.bindProjectHotkeys(keymap)

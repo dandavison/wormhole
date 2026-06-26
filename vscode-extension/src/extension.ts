@@ -13,10 +13,12 @@ function vscodeCommand(command: string): IntentHandler {
 }
 
 const INTENTS: Record<string, IntentHandler> = {
-  'editor/close': () => {
-    abortController?.abort();
-    return vscode.commands.executeCommand('workbench.action.closeWindow');
-  },
+  // Don't abort the poll loop here. workbench.action.closeWindow may not close
+  // (e.g. a Save prompt is cancelled), and aborting first would strand the
+  // extension: still open but no longer polling, so future editor/close intents
+  // would have no recipient. On a genuine close the editor calls deactivate(),
+  // which aborts; if the close is declined, polling correctly continues.
+  'editor/close': () => vscode.commands.executeCommand('workbench.action.closeWindow'),
   'editor/toggleZenMode': vscodeCommand('workbench.action.toggleZenMode'),
   'gopls/stop': () => setGoplsEnabled(false),
   'gopls/start': () => setGoplsEnabled(true),

@@ -59,6 +59,31 @@ pub fn set_value_sync(key: &ProjectKey, kv_key: &str, value: &str) {
     }
 }
 
+/// Delete `kv_key` from every project that has it. Returns the cleared project
+/// keys as JSON. Used to reset transient UI state (e.g. `land-in` pins) across
+/// all projects in one shot.
+pub fn delete_value_all(kv_key: &str) -> Response<Body> {
+    let mut projects = projects::lock();
+    let mut cleared: Vec<String> = Vec::new();
+    for key in projects.keys() {
+        if let Some(project) = projects.get_mut(&key) {
+            if project.kv.remove(kv_key).is_some() {
+                save_project_kv(project);
+                cleared.push(key.to_string());
+            }
+        }
+    }
+    drop(projects);
+    if !cleared.is_empty() {
+        crate::projects::notify_state_change();
+    }
+    let body = serde_json::json!({ "key": kv_key, "cleared": cleared });
+    Response::builder()
+        .header("Content-Type", "application/json")
+        .body(Body::from(body.to_string()))
+        .unwrap()
+}
+
 pub fn delete_value(key: &ProjectKey, kv_key: &str) -> Response<Body> {
     let mut projects = projects::lock();
 

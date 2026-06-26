@@ -457,12 +457,15 @@ pub enum KvCommand {
         /// Value to set
         value: String,
     },
-    /// Delete a key
+    /// Delete a key (use --all to delete it from every project)
     Delete {
-        /// Project name
-        project: String,
+        /// Project name (omit when using --all)
+        project: Option<String>,
         /// Key name
-        key: String,
+        key: Option<String>,
+        /// Delete the key from every project (e.g. clear `land-in` pins)
+        #[arg(long)]
+        all: bool,
     },
     /// List all KV pairs for a project
     List {
@@ -769,8 +772,21 @@ pub fn run(command: Command) -> Result<(), String> {
                 client.kv_set(&project, &key, &value)?;
                 Ok(())
             }
-            KvCommand::Delete { project, key } => {
-                client.kv_delete(&project, &key)?;
+            KvCommand::Delete { project, key, all } => {
+                if all {
+                    let kv_key = key.or(project).ok_or(
+                        "Specify the key to delete, e.g. `wormhole kv delete --all land-in`",
+                    )?;
+                    let response = client.delete(&format!("/kv-all/{}", kv_key))?;
+                    let v: serde_json::Value =
+                        serde_json::from_str(&response).map_err(|e| e.to_string())?;
+                    let n = v["cleared"].as_array().map_or(0, |a| a.len());
+                    println!("Cleared '{}' from {} project(s)", kv_key, n);
+                } else {
+                    let project = project.ok_or("Specify a project, or use --all")?;
+                    let key = key.ok_or("Specify a key")?;
+                    client.kv_delete(&project, &key)?;
+                }
                 Ok(())
             }
             KvCommand::List { project, output } => {

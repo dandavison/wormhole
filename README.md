@@ -177,6 +177,7 @@ wormhole project for-each <command>     # Run command in each project dir
 wormhole kv get myapp land-in           # Get KV
 wormhole kv set myapp land-in editor    # Set KV
 wormhole kv delete myapp land-in        # Delete KV
+wormhole kv delete --all land-in        # Delete a key from every project (e.g. clear pins)
 wormhole kv list myapp                  # List all KV for project
 wormhole task create <target>           # Create or update a task
 wormhole task create-from-sprint        # Create tasks for all sprint issues
@@ -235,6 +236,7 @@ wormhole completion bash                # Generate shell completions
 | GET    | `/kv/<project>/<key>`         | Get value                         |
 | PUT    | `/kv/<project>/<key>`         | Set value (body)                  |
 | DELETE | `/kv/<project>/<key>`         | Delete key                        |
+| DELETE | `/kv-all/<key>`               | Delete key from all projects      |
 | GET    | `/kv/<project>`               | List project KV                   |
 | GET    | `/kv`                         | List all KV                       |
 

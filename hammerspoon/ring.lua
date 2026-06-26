@@ -113,6 +113,11 @@ function M.next()
     end)
 end
 
+-- Grid: up moves to the current column's editor (upper) cell.
+function M.editor()
+    hs.http.asyncGet(M.host .. "/project/current/editor", nil, function() end)
+end
+
 function M.bind()
     tap = hs.eventtap.new({ hs.eventtap.event.types.flagsChanged }, function(event)
         local flags = event:getFlags()

@@ -115,6 +115,7 @@ async fn route(
             let wait = parse_prefer_wait(&req);
             project::poll_current(params.current.as_deref(), wait).await
         }
+        "/project/current/editor" => project::focus_current_editor(),
         "/project/debug" => project::debug_projects(),
         "/project/describe" => {
             require_post_async(method, || async { describe::describe(req).await }).await

@@ -87,7 +87,10 @@ pub fn open_task(repo: &str, branch: &str, land_in: Option<LandIn>) -> Result<()
         }
     };
 
-    let land_in = land_in.or_else(|| crate::wormhole::parse_land_in(project.kv.get("land-in")));
+    // Editor is the opt-in upper row of the grid; default to a pure tmux spawn.
+    let land_in = land_in
+        .or_else(|| crate::wormhole::parse_land_in(project.kv.get("land-in")))
+        .or(Some(LandIn::TerminalOnly));
     match land_in {
         Some(LandIn::TerminalOnly) => {
             open_terminal();

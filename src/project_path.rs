@@ -29,6 +29,22 @@ impl ProjectPath {
         };
         let project = self.project.clone();
         let is_already_open = project.is_open();
+        // navigate() pre-rotates the ring then calls us with Mutation::None;
+        // only inherit focus from the current app for explicit opens.
+        let is_explicit_switch = !matches!(mutation, Mutation::None);
+        // The editor is the nullable upper row of the grid: absent unless a pin
+        // (or explicit --land-in) opts into it. With nothing specified, default
+        // to terminal-only — a pure tmux spawn, no editor, no workspace file.
+        let land_in = land_in
+            .or_else(|| crate::wormhole::parse_land_in(self.project.kv.get("land-in")))
+            .or_else(|| {
+                if is_already_open && is_explicit_switch {
+                    current_app.map(LandIn::from)
+                } else {
+                    None
+                }
+            })
+            .or(Some(LandIn::TerminalOnly));
         let skip_editor = matches!(
             land_in,
             Some(LandIn::TerminalOnly) | Some(LandIn::Background)
@@ -36,22 +52,6 @@ impl ProjectPath {
         if !is_already_open && !skip_editor {
             editor::open_workspace(&project);
         }
-        let land_in = if skip_editor {
-            land_in
-        } else {
-            // navigate() pre-rotates the ring then calls us with Mutation::None;
-            // only inherit focus from the current app for explicit opens.
-            let is_explicit_switch = !matches!(mutation, Mutation::None);
-            land_in
-                .or_else(|| crate::wormhole::parse_land_in(self.project.kv.get("land-in")))
-                .or_else(|| {
-                    if is_already_open && is_explicit_switch {
-                        current_app.map(LandIn::from)
-                    } else {
-                        None
-                    }
-                })
-        };
         projects.apply(mutation, &self.project.store_key());
         if util::debug() {
             projects.print();

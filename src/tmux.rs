@@ -88,6 +88,61 @@ pub fn close(project: &Project) {
     }
 }
 
+/// Open (or focus) a tmux pane running `claude -r <session_id>` in the project's
+/// window. A pane already running this session is reused; otherwise a new pane
+/// is split off, tagged with the session id, and `claude -r` is launched in it.
+pub fn resume_claude_session(project: &Project, session_id: &str) {
+    let _ = open(project);
+    let window = match get_window(&project.store_key().to_string()) {
+        Some(w) => w,
+        None => return,
+    };
+    if let Some(pane_id) = find_session_pane(&window.id, session_id) {
+        tmux(["select-window", "-t", &window.id]);
+        tmux(["select-pane", "-t", &pane_id]);
+        return;
+    }
+    let dir = project.working_tree().to_string_lossy().to_string();
+    let pane_id = tmux_vec(vec![
+        "split-window".to_string(),
+        "-t".to_string(),
+        window.id.clone(),
+        "-c".to_string(),
+        dir,
+        "-P".to_string(),
+        "-F".to_string(),
+        "#{pane_id}".to_string(),
+    ]);
+    let pane_id = pane_id.trim();
+    if pane_id.is_empty() {
+        return;
+    }
+    tmux([
+        "set-option",
+        "-p",
+        "-t",
+        pane_id,
+        SESSION_PANE_OPTION,
+        session_id,
+    ]);
+    let cmd = format!("claude -r {session_id}");
+    tmux(["send-keys", "-t", pane_id, cmd.as_str(), "Enter"]);
+    tmux(["select-window", "-t", &window.id]);
+    tmux(["select-pane", "-t", pane_id]);
+}
+
+const SESSION_PANE_OPTION: &str = "@wormhole_claude_session";
+
+fn find_session_pane(window_id: &str, session_id: &str) -> Option<String> {
+    let fmt = format!("#{{pane_id}} #{{{SESSION_PANE_OPTION}}}");
+    tmux(["list-panes", "-t", window_id, "-F", fmt.as_str()])
+        .lines()
+        .find_map(|line| {
+            let (pane, sess) = line.split_once(' ')?;
+            (sess == session_id).then(|| pane.to_string())
+        })
+}
+
 fn get_window(name: &str) -> Option<Window> {
     list_windows().into_iter().find(|w| w.name == name)
 }

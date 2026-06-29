@@ -515,33 +515,21 @@ fn handle_conversation_resume(synced_file_path: &str) -> Response<Body> {
         }
     }
 
-    // Switch to the project and send resume intent
+    // Focus the project's terminal, then open/reuse a tmux pane running
+    // `claude -r <session>`.
     let pk = project_key_str.clone();
     let sid = session_id_str.clone();
     thread::spawn(move || {
-        let project_path = {
+        let project = {
             let store = projects::lock();
-            let key = crate::project::ProjectKey::parse(&pk);
-            store.by_key(&key).map(|p| p.as_project_path())
+            store.by_key(&crate::project::ProjectKey::parse(&pk))
         };
-        if let Some(pp) = project_path {
-            pp.open(Mutation::Insert, Some(LandIn::Editor));
+        if let Some(project) = project {
+            project
+                .as_project_path()
+                .open(Mutation::Insert, Some(LandIn::TerminalOnly));
+            crate::tmux::resume_claude_session(&project, &sid);
         }
-
-        thread::sleep(std::time::Duration::from_millis(500));
-        let mut msg_store = crate::messages::lock();
-        let notification = crate::messages::Notification {
-            jsonrpc: "2.0".to_string(),
-            method: "claude-code/resume".to_string(),
-            params: Some(serde_json::json!({
-                "sessionId": sid,
-            })),
-        };
-        msg_store.publish(
-            &pk,
-            &crate::messages::Target::Role("editor".to_string()),
-            notification,
-        );
     });
 
     Response::builder()

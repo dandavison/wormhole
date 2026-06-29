@@ -77,6 +77,7 @@ pub struct QueryParams {
     pub tasks: bool,
     pub with_editor: bool,
     pub remove: bool,
+    pub prune: bool,
 }
 
 pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
@@ -233,7 +234,13 @@ async fn route(
                 .since
                 .as_deref()
                 .and_then(crate::conversations::parse_since);
-            let result = crate::conversations::sync(&projects, filter.as_deref(), since);
+            let result = crate::conversations::sync(
+                &projects,
+                filter.as_deref(),
+                since,
+                params.prune,
+                params.dry_run,
+            );
             Response::builder()
                 .header("Content-Type", "application/json")
                 .body(Body::from(serde_json::to_string(&result).unwrap()))
@@ -594,6 +601,7 @@ impl QueryParams {
             tasks: false,
             with_editor: false,
             remove: false,
+            prune: false,
         };
         if let Some(query) = query {
             for (key, val) in form_urlencoded::parse(query.as_bytes()) {
@@ -631,6 +639,7 @@ impl QueryParams {
                     "tasks" => params.tasks = val == "true" || val == "1",
                     "with-editor" => params.with_editor = val == "true" || val == "1",
                     "remove" => params.remove = val == "true" || val == "1",
+                    "prune" => params.prune = val == "true" || val == "1",
                     _ => {}
                 }
             }

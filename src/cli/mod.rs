@@ -393,6 +393,12 @@ pub enum ConversationsCommand {
         /// Only include conversations newer than this duration (e.g. 2w, 3d, 1m)
         #[arg(short, long)]
         since: Option<String>,
+        /// Delete synced files no current transcript maps to (orphans)
+        #[arg(long)]
+        prune: bool,
+        /// With --prune, report what would be pruned without deleting
+        #[arg(long)]
+        dry_run: bool,
     },
 }
 
@@ -893,13 +899,24 @@ pub fn run(command: Command) -> Result<(), String> {
         },
 
         Command::Conversations { command } => match command {
-            ConversationsCommand::Sync { project, since } => {
+            ConversationsCommand::Sync {
+                project,
+                since,
+                prune,
+                dry_run,
+            } => {
                 let mut params = Vec::new();
                 if !project.is_empty() {
                     params.push(format!("project={}", project.join(",")));
                 }
                 if let Some(ref s) = since {
                     params.push(format!("since={}", s));
+                }
+                if prune {
+                    params.push("prune=true".to_string());
+                }
+                if dry_run {
+                    params.push("dry-run=true".to_string());
                 }
                 let query = if params.is_empty() {
                     String::new()
@@ -913,6 +930,13 @@ pub fn run(command: Command) -> Result<(), String> {
                     "Synced {} conversations ({} unchanged)",
                     result.synced, result.skipped
                 );
+                if prune {
+                    let verb = if dry_run { "Would prune" } else { "Pruned" };
+                    eprintln!("{} {} orphaned files", verb, result.pruned);
+                    for f in &result.pruned_files {
+                        eprintln!("  {}", f);
+                    }
+                }
                 println!("{}", result.output_dir);
                 Ok(())
             }

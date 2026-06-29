@@ -21,6 +21,10 @@ pub struct SyncResult {
     pub output_dir: String,
     pub synced: usize,
     pub skipped: usize,
+    #[serde(default)]
+    pub pruned: usize,
+    #[serde(default)]
+    pub pruned_files: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -444,12 +448,112 @@ pub fn sync(
     projects: &[(String, PathBuf)],
     project_filter: Option<&[&str]>,
     since: Option<SystemTime>,
+    prune: bool,
+    dry_run: bool,
 ) -> SyncResult {
     let output_dir = conversations_dir();
     migrate_colon_dirs(&output_dir);
     let mut transcripts = discover_cursor_transcripts(projects);
     transcripts.extend(discover_claude_code_transcripts(projects));
-    materialize(&transcripts, projects, &output_dir, project_filter, since)
+    let mut result = materialize(&transcripts, projects, &output_dir, project_filter, since);
+    if prune {
+        let (count, files) = prune_orphans(&transcripts, &output_dir, project_filter, dry_run);
+        result.pruned = count;
+        result.pruned_files = files;
+    }
+    result
+}
+
+/// The session UUID a transcript maps to (CC: the id itself; Cursor: derived).
+fn session_uuid_of(t: &TranscriptFile) -> String {
+    match t.source {
+        TranscriptSource::ClaudeCode => t.transcript_id.clone(),
+        TranscriptSource::Cursor => {
+            Uuid::new_v5(&WORMHOLE_UUID_NAMESPACE, t.transcript_id.as_bytes()).to_string()
+        }
+    }
+}
+
+/// The output file a transcript maps to, without parsing its contents.
+/// Mirrors the path `materialize` writes, so it doubles as the liveness key for pruning.
+fn live_output_path(t: &TranscriptFile, output_dir: &Path) -> PathBuf {
+    let session_uuid = session_uuid_of(t);
+    let dir_name = project_key_to_dir_name(&t.project_key);
+    let date = file_date(&t.path);
+    let short_id = &session_uuid[..8.min(session_uuid.len())];
+    output_dir
+        .join(&dir_name)
+        .join(format!("{}-{}.md", date, short_id))
+}
+
+/// Remove *redundant* synced `.md` files: copies of a conversation that a current
+/// transcript still maps to, but living at a stale path (wrong project, or an
+/// earlier date for a session that has since grown). A file is pruned only when
+/// its session UUID matches a live transcript and the file is not itself the
+/// canonical output path — so the conversation always survives at its correct
+/// location. Synced files whose source transcript no longer exists (the synced
+/// copy is the only surviving record) are never touched. When `project_filter`
+/// is set, only those projects' directories are scanned. Returns (count, paths).
+fn prune_orphans(
+    transcripts: &[TranscriptFile],
+    output_dir: &Path,
+    project_filter: Option<&[&str]>,
+    dry_run: bool,
+) -> (usize, Vec<String>) {
+    let live_paths: std::collections::HashSet<PathBuf> = transcripts
+        .iter()
+        .map(|t| live_output_path(t, output_dir))
+        .collect();
+    let live_uuids: std::collections::HashSet<String> =
+        transcripts.iter().map(session_uuid_of).collect();
+    let scope: Option<Vec<String>> =
+        project_filter.map(|fs| fs.iter().map(|f| project_key_to_dir_name(f)).collect());
+
+    let mut pruned = Vec::new();
+    let mut stack = vec![output_dir.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let entries = match std::fs::read_dir(&dir) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            if path.extension().and_then(|e| e.to_str()) != Some("md") {
+                continue;
+            }
+            if live_paths.contains(&path) {
+                continue;
+            }
+            if let Some(ref dirs) = scope {
+                let rel = match path.strip_prefix(output_dir) {
+                    Ok(r) => r.to_string_lossy().to_string(),
+                    Err(_) => continue,
+                };
+                let in_scope = dirs
+                    .iter()
+                    .any(|d| rel == *d || rel.starts_with(&format!("{}/", d)));
+                if !in_scope {
+                    continue;
+                }
+            }
+            let uuid = match parse_conversation_header(&path) {
+                Some((_, uuid)) => uuid,
+                None => continue,
+            };
+            if live_uuids.contains(&uuid) {
+                if !dry_run {
+                    let _ = std::fs::remove_file(&path);
+                }
+                pruned.push(path.to_string_lossy().to_string());
+            }
+        }
+    }
+    pruned.sort();
+    (pruned.len(), pruned)
 }
 
 /// Write clean text files for the given transcripts into `output_dir`.
@@ -543,6 +647,8 @@ fn materialize(
         output_dir: dir,
         synced,
         skipped,
+        pruned: 0,
+        pruned_files: Vec::new(),
     }
 }
 
@@ -1203,6 +1309,7 @@ mod tests {
 
         let result = materialize(&transcripts, &[], out_dir.path(), None, None);
         assert_eq!(result.synced, 1);
+        assert_eq!(result.pruned, 0);
 
         let date = file_date(&src);
         let out_file = out_dir
@@ -1211,6 +1318,66 @@ mod tests {
             .join(format!("{}-00000000.md", date));
         let out_mtime = std::fs::metadata(&out_file).unwrap().modified().unwrap();
         assert_eq!(out_mtime, source_mtime);
+    }
+
+    #[test]
+    fn test_prune_removes_dupes_but_keeps_sourceless_copies() {
+        let out_dir = tempfile::tempdir().unwrap();
+        let src_dir = tempfile::tempdir().unwrap();
+        let src = src_dir.path().join("sess.jsonl");
+        std::fs::write(&src, "{}").unwrap();
+        let date = file_date(&src);
+
+        let live_uuid = "00000000-0000-0000-0000-0000000000ab";
+        let live = TranscriptFile {
+            project_key: "myproject".to_string(),
+            transcript_id: live_uuid.to_string(),
+            path: src.clone(),
+            source: TranscriptSource::ClaudeCode,
+        };
+        let msgs = vec![Message {
+            role: Role::User,
+            text: "hi".to_string(),
+        }];
+
+        // Canonical (live) copy — must survive.
+        let live_file = live_output_path(&live, out_dir.path());
+        std::fs::create_dir_all(live_file.parent().unwrap()).unwrap();
+        std::fs::write(
+            &live_file,
+            render_conversation("myproject", &date, live_uuid, &msgs),
+        )
+        .unwrap();
+
+        // Redundant copy of the live session under a stale project — must be pruned.
+        let dup_dir = out_dir.path().join("otherproject");
+        std::fs::create_dir_all(&dup_dir).unwrap();
+        let dup_file = dup_dir.join(format!("{}-00000000.md", date));
+        std::fs::write(
+            &dup_file,
+            render_conversation("otherproject", &date, live_uuid, &msgs),
+        )
+        .unwrap();
+
+        // Sourceless conversation (no live transcript maps to it) — must be kept.
+        let sourceless_uuid = "11111111-1111-1111-1111-111111111111";
+        let sourceless_file = dup_dir.join(format!("{}-11111111.md", date));
+        std::fs::write(
+            &sourceless_file,
+            render_conversation("otherproject", &date, sourceless_uuid, &msgs),
+        )
+        .unwrap();
+
+        let (count, files) = prune_orphans(std::slice::from_ref(&live), out_dir.path(), None, true);
+        assert_eq!(count, 1);
+        assert_eq!(files, vec![dup_file.to_string_lossy().to_string()]);
+        assert!(dup_file.exists(), "dry-run must not delete");
+
+        let (count, _) = prune_orphans(&[live], out_dir.path(), None, false);
+        assert_eq!(count, 1);
+        assert!(live_file.exists(), "canonical copy survives");
+        assert!(!dup_file.exists(), "redundant copy pruned");
+        assert!(sourceless_file.exists(), "sourceless copy preserved");
     }
 
     #[test]

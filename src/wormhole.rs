@@ -562,18 +562,16 @@ fn project_dirs_for_sync() -> Vec<(String, std::path::PathBuf)> {
     for p in store.all() {
         let key = p.store_key().to_string();
         // Workspace file path (for Cursor matching)
-        let store_key_str = p.store_key().to_string();
-        let filename = format!("{}.code-workspace", store_key_str.replace('/', "--"));
+        let filename = format!("{}.code-workspace", key.replace('/', "--"));
         let gitdir = crate::git::git_common_dir(&p.repo_path);
         let ws_path = gitdir.join("wormhole/workspaces").join(filename);
         result.push((key.clone(), ws_path));
-        // Repo path (matches both Cursor and CC)
-        result.push((key.clone(), p.repo_path.clone()));
-        // Working tree (for CC matching - may differ from repo_path for tasks)
-        let wt = p.working_tree();
-        if wt != p.repo_path {
-            result.push((key, wt));
-        }
+        // A session belongs to the project whose working tree contains its cwd.
+        // For the base project the working tree *is* the repo path; for a task
+        // it is the worktree. The shared repo path is intentionally not matched
+        // for tasks, so a session run in the main checkout maps to the base
+        // project, never to one of its tasks.
+        result.push((key, p.working_tree()));
     }
     result
 }

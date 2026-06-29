@@ -425,6 +425,7 @@ fn read_cc_jsonl_metadata(path: &Path) -> Option<CcJsonlMetadata> {
 }
 
 /// Match a project path against known wormhole projects (longest prefix wins).
+/// `canonical` must be sorted longest-first by the caller.
 fn match_project_path(project_path: &str, canonical: &[(String, String)]) -> Option<String> {
     let canon_pp = std::fs::canonicalize(project_path)
         .unwrap_or_else(|_| PathBuf::from(project_path))
@@ -432,8 +433,17 @@ fn match_project_path(project_path: &str, canonical: &[(String, String)]) -> Opt
         .to_string();
     canonical
         .iter()
-        .find(|(prefix, _)| canon_pp.starts_with(prefix.as_str()))
+        .find(|(prefix, _)| path_within(prefix, &canon_pp))
         .map(|(_, key)| key.clone())
+}
+
+/// Whether `path` is `prefix` or lies inside it, respecting path boundaries
+/// (so `/a/foo` does not match `/a/foobar`).
+fn path_within(prefix: &str, path: &str) -> bool {
+    path == prefix
+        || path
+            .strip_prefix(prefix)
+            .is_some_and(|rest| rest.starts_with('/'))
 }
 
 fn claude_code_projects_dir() -> PathBuf {
@@ -1470,6 +1480,49 @@ mod tests {
         );
         assert!(!meta.is_sidechain);
         assert_eq!(meta.message_count, 2);
+    }
+
+    #[test]
+    fn test_match_project_path_main_repo_maps_to_base_not_task() {
+        // Built as discover_claude_code_transcripts does: working trees only,
+        // sorted longest-first. The base project owns the main repo path; the
+        // task owns its worktree.
+        let canonical = vec![
+            (
+                "/Users/d/worktrees/repo/taskA/repo".to_string(),
+                "repo:taskA".to_string(),
+            ),
+            ("/Users/d/src/repo".to_string(), "repo".to_string()),
+        ];
+        // A session run in the main checkout maps to the base project, never a task.
+        assert_eq!(
+            match_project_path("/Users/d/src/repo", &canonical),
+            Some("repo".to_string())
+        );
+        assert_eq!(
+            match_project_path("/Users/d/src/repo/some/sub/dir", &canonical),
+            Some("repo".to_string())
+        );
+        // A session run in a task worktree maps to that task.
+        assert_eq!(
+            match_project_path("/Users/d/worktrees/repo/taskA/repo", &canonical),
+            Some("repo:taskA".to_string())
+        );
+    }
+
+    #[test]
+    fn test_match_project_path_requires_path_boundary() {
+        let canonical = vec![("/a/foo".to_string(), "foo".to_string())];
+        assert_eq!(
+            match_project_path("/a/foo", &canonical),
+            Some("foo".to_string())
+        );
+        assert_eq!(
+            match_project_path("/a/foo/bar", &canonical),
+            Some("foo".to_string())
+        );
+        // A sibling sharing only a string prefix must not match.
+        assert_eq!(match_project_path("/a/foobar", &canonical), None);
     }
 
     #[test]

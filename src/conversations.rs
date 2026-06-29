@@ -484,16 +484,81 @@ fn session_uuid_of(t: &TranscriptFile) -> String {
     }
 }
 
-/// The output file a transcript maps to, without parsing its contents.
-/// Mirrors the path `materialize` writes, so it doubles as the liveness key for pruning.
+/// Parse a transcript into clean messages, dispatching on its source.
+fn parse_transcript(t: &TranscriptFile) -> Option<Vec<Message>> {
+    match t.source {
+        TranscriptSource::Cursor => {
+            if t.path.extension().is_some_and(|e| e == "jsonl") {
+                parse_cursor_jsonl(&t.path).ok()
+            } else {
+                parse_cursor_txt(&t.path).ok()
+            }
+        }
+        TranscriptSource::ClaudeCode => parse_claude_code_jsonl(&t.path).ok(),
+    }
+}
+
+/// The first user message — the name `claude -r` shows for a session.
+fn first_user_text(messages: &[Message]) -> Option<&str> {
+    messages
+        .iter()
+        .find(|m| m.role == Role::User)
+        .map(|m| m.text.as_str())
+}
+
+/// A filesystem-safe, readable slug derived from a session's name, so the name
+/// is visible directly in search results and the session picker. Empty when no
+/// usable text (caller then falls back to the bare id).
+fn slugify(text: &str) -> String {
+    const MAX: usize = 60;
+    let mut slug = String::new();
+    let mut prev_dash = false;
+    let mut count = 0;
+    for c in text.chars() {
+        if count >= MAX {
+            break;
+        }
+        if c.is_alphanumeric() {
+            for lc in c.to_lowercase() {
+                slug.push(lc);
+                count += 1;
+            }
+            prev_dash = false;
+        } else if !prev_dash && !slug.is_empty() {
+            slug.push('-');
+            count += 1;
+            prev_dash = true;
+        }
+    }
+    slug.trim_end_matches('-').to_string()
+}
+
+/// The output file name for a session: `<date>-<slug>-<shortid>.md`, or
+/// `<date>-<shortid>.md` when there is no usable name. The id stays last so it
+/// remains parseable and unique.
+fn out_filename(date: &str, slug: &str, short_id: &str) -> String {
+    if slug.is_empty() {
+        format!("{}-{}.md", date, short_id)
+    } else {
+        format!("{}-{}-{}.md", date, slug, short_id)
+    }
+}
+
+/// The output file a transcript maps to. Mirrors the path `materialize` writes,
+/// so it doubles as the liveness key for pruning.
 fn live_output_path(t: &TranscriptFile, output_dir: &Path) -> PathBuf {
     let session_uuid = session_uuid_of(t);
     let dir_name = project_key_to_dir_name(&t.project_key);
     let date = file_date(&t.path);
     let short_id = &session_uuid[..8.min(session_uuid.len())];
+    let slug = parse_transcript(t)
+        .as_deref()
+        .and_then(first_user_text)
+        .map(slugify)
+        .unwrap_or_default();
     output_dir
         .join(&dir_name)
-        .join(format!("{}-{}.md", date, short_id))
+        .join(out_filename(&date, &slug, short_id))
 }
 
 /// Remove *redundant* synced `.md` files: copies of a conversation that a current
@@ -591,17 +656,7 @@ fn materialize(
             }
         }
 
-        let messages = match t.source {
-            TranscriptSource::Cursor => {
-                if t.path.extension().is_some_and(|e| e == "jsonl") {
-                    parse_cursor_jsonl(&t.path).ok()
-                } else {
-                    parse_cursor_txt(&t.path).ok()
-                }
-            }
-            TranscriptSource::ClaudeCode => parse_claude_code_jsonl(&t.path).ok(),
-        };
-        let messages = match messages {
+        let messages = match parse_transcript(t) {
             Some(m) if !m.is_empty() => m,
             _ => continue,
         };
@@ -630,8 +685,9 @@ fn materialize(
         let dir_name = project_key_to_dir_name(&t.project_key);
         let date = file_date(&t.path);
         let short_id = &session_uuid[..8.min(session_uuid.len())];
+        let slug = first_user_text(&messages).map(slugify).unwrap_or_default();
         let out_dir = output_dir.join(&dir_name);
-        let out_file = out_dir.join(format!("{}-{}.md", date, short_id));
+        let out_file = out_dir.join(out_filename(&date, &slug, short_id));
 
         if out_file.exists() && !source_newer(&t.path, &out_file) {
             skipped += 1;
@@ -1325,7 +1381,7 @@ mod tests {
         let out_file = out_dir
             .path()
             .join("wormhole")
-            .join(format!("{}-00000000.md", date));
+            .join(format!("{}-hello-00000000.md", date));
         let out_mtime = std::fs::metadata(&out_file).unwrap().modified().unwrap();
         assert_eq!(out_mtime, source_mtime);
     }
@@ -1480,6 +1536,37 @@ mod tests {
         );
         assert!(!meta.is_sidechain);
         assert_eq!(meta.message_count, 2);
+    }
+
+    #[test]
+    fn test_slugify() {
+        assert_eq!(
+            slugify("Fix the SneOperation bug"),
+            "fix-the-sneoperation-bug"
+        );
+        assert_eq!(slugify("  why does X appear?!  "), "why-does-x-appear");
+        assert_eq!(
+            slugify("<user_query>hi</user_query>"),
+            "user-query-hi-user-query"
+        );
+        assert_eq!(slugify(""), "");
+        assert_eq!(slugify("!!!"), "");
+        // Truncated to <= 60 chars on a boundary, no trailing dash.
+        let long = slugify(&"word ".repeat(40));
+        assert!(long.len() <= 60, "{} chars", long.len());
+        assert!(!long.ends_with('-'));
+    }
+
+    #[test]
+    fn test_out_filename() {
+        assert_eq!(
+            out_filename("2026-06-29", "my-session", "0b2189c2"),
+            "2026-06-29-my-session-0b2189c2.md"
+        );
+        assert_eq!(
+            out_filename("2026-06-29", "", "0b2189c2"),
+            "2026-06-29-0b2189c2.md"
+        );
     }
 
     #[test]

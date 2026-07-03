@@ -126,6 +126,14 @@ struct ConfigFile {
     #[serde(default)]
     card_commands: Vec<String>,
     editor: Option<String>,
+    #[serde(default)]
+    editors: Vec<EditorOverrideEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+struct EditorOverrideEntry {
+    glob: String,
+    editor: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -158,6 +166,12 @@ impl SearchPathEntry {
 struct ResolvedConfig {
     search_paths: Vec<ResolvedSearchPath>,
     worktree_dir: PathBuf,
+    editor_overrides: Vec<EditorOverride>,
+}
+
+struct EditorOverride {
+    pattern: Pattern,
+    editor: Editor,
 }
 
 pub struct ResolvedSearchPath {
@@ -199,10 +213,42 @@ fn load_config() -> ResolvedConfig {
         .or_else(|| file.worktree_dir.as_deref().map(expand_tilde))
         .unwrap_or_else(default_worktree_dir);
 
+    let editor_overrides = file
+        .editors
+        .iter()
+        .filter_map(
+            |entry| match (Pattern::new(&entry.glob), Editor::from_name(&entry.editor)) {
+                (Ok(pattern), Some(editor)) => Some(EditorOverride { pattern, editor }),
+                (Err(e), _) => {
+                    crate::util::error(&format!("Invalid editor glob {:?}: {e}", entry.glob));
+                    None
+                }
+                (_, None) => {
+                    crate::util::error(&format!(
+                        "Unknown editor {:?} in editors config",
+                        entry.editor
+                    ));
+                    None
+                }
+            },
+        )
+        .collect();
+
     ResolvedConfig {
         search_paths,
         worktree_dir,
+        editor_overrides,
     }
+}
+
+/// The editor mapped to `project_name` by the first matching `editors` glob in
+/// `wormhole.toml`, if any. Falls back to the global [`editor`] when none match.
+pub fn editor_for(project_name: &str) -> Option<Editor> {
+    config()
+        .editor_overrides
+        .iter()
+        .find(|o| o.pattern.matches(project_name))
+        .map(|o| o.editor.clone())
 }
 
 fn config_file_path() -> Option<PathBuf> {
@@ -564,6 +610,42 @@ worktree_dir = "~/worktrees"
         assert!(config.search_paths.is_empty());
         assert!(config.worktree_dir.is_none());
         assert!(config.editor.is_none());
+    }
+
+    #[test]
+    fn test_config_file_editors() {
+        let toml_str = r#"
+editor = "cursor"
+editors = [
+    { glob = "mathematics", editor = "emacs" },
+    { glob = "*-docs", editor = "code" },
+]
+"#;
+        let config: ConfigFile = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.editors.len(), 2);
+        assert_eq!(config.editors[0].glob, "mathematics");
+        assert_eq!(config.editors[0].editor, "emacs");
+        assert_eq!(config.editors[1].glob, "*-docs");
+
+        let overrides: Vec<EditorOverride> = config
+            .editors
+            .iter()
+            .filter_map(|e| {
+                Some(EditorOverride {
+                    pattern: Pattern::new(&e.glob).ok()?,
+                    editor: Editor::from_name(&e.editor)?,
+                })
+            })
+            .collect();
+        let matched = |name: &str| {
+            overrides
+                .iter()
+                .find(|o| o.pattern.matches(name))
+                .map(|o| o.editor.clone())
+        };
+        assert_eq!(matched("mathematics"), Some(Editor::Emacs));
+        assert_eq!(matched("wormhole-docs"), Some(Editor::VSCode));
+        assert_eq!(matched("wormhole"), None);
     }
 
     #[test]

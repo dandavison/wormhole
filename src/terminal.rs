@@ -77,16 +77,14 @@ pub fn shell_env_vars(project: &Project) -> ShellEnvVars {
         .clone()
         .or_else(|| git::github_repo_from_remote(&project.repo_path))
         .unwrap_or_default();
-    let github_pr_url = if !github_repo.is_empty() {
-        project
-            .cached
-            .github_pr
-            .or_else(|| crate::github::get_open_pr_number(project))
-            .map(|pr| format!("https://github.com/{}/pull/{}", github_repo, pr))
-            .unwrap_or_default()
-    } else {
-        String::new()
-    };
+    // Cached-only: the shell/prompt path (hit on every new tmux pane) must never
+    // do network I/O. cached.pr is populated by `wormhole refresh`.
+    let github_pr_url = project
+        .cached
+        .pr
+        .as_ref()
+        .map(|pr| pr.url.clone())
+        .unwrap_or_default();
     ShellEnvVars {
         project_name: project.repo_name.to_string(),
         project_dir: project.working_tree().to_string_lossy().to_string(),

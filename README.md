@@ -285,6 +285,16 @@ search_paths = [
 
 # Where task worktrees are created (default: ~/worktrees)
 worktree_dir = "~/worktrees"
+
+# Default editor (overridable at runtime; see WORMHOLE_EDITOR for valid names).
+editor = "cursor"
+
+# Per-project editor overrides: first glob to match the project (repo) name wins,
+# else the `editor` default is used. Valid editor names are as for WORMHOLE_EDITOR.
+editors = [
+    { glob = "mathematics", editor = "emacs" },
+    { glob = "*-docs", editor = "code" },
+]
 ```
 
 `~` is expanded to `$HOME` at load time.

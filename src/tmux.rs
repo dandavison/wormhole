@@ -64,7 +64,7 @@ pub fn open(project: &Project) -> Result<(), String> {
         tmux_vec(vec![
             "new-window".to_string(),
             "-n".to_string(),
-            window_name,
+            window_name.clone(),
             "-c".to_string(),
             project.working_tree().to_string_lossy().to_string(),
             "-e".to_string(),
@@ -78,14 +78,43 @@ pub fn open(project: &Project) -> Result<(), String> {
             "-e".to_string(),
             format!("WORMHOLE_GITHUB_PR_URL={}", vars.github_pr_url),
         ]);
+        // Tag the project window with the generic @project key so auxiliary
+        // windows (e.g. tide's browsers) can be associated and reaped together.
+        tmux([
+            "set-option",
+            "-w",
+            "-t",
+            &window_name,
+            "@project",
+            &window_name,
+        ]);
     }
     Ok(())
 }
 
 pub fn close(project: &Project) {
-    if let Some(window) = get_window(&project.store_key().to_string()) {
-        tmux(["kill-window", "-t", &window.id]);
+    let store_key = project.store_key().to_string();
+    let main = get_window(&store_key).map(|w| w.id);
+    // Reap auxiliary windows tagged with this project (e.g. tide's browsers),
+    // excluding the main window so its name-based kill below is unchanged.
+    for id in windows_with_project(&store_key) {
+        if Some(&id) != main.as_ref() {
+            tmux(["kill-window", "-t", &id]);
+        }
     }
+    if let Some(id) = main {
+        tmux(["kill-window", "-t", &id]);
+    }
+}
+
+fn windows_with_project(store_key: &str) -> Vec<String> {
+    tmux(["list-windows", "-a", "-F", "#{window_id}\t#{@project}"])
+        .lines()
+        .filter_map(|line| {
+            let (id, project) = line.split_once('\t')?;
+            (project == store_key).then(|| id.to_string())
+        })
+        .collect()
 }
 
 /// Open (or focus) a tmux pane running `claude -r <session_id>` in the project's

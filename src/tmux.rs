@@ -94,27 +94,35 @@ pub fn open(project: &Project) -> Result<(), String> {
 
 pub fn close(project: &Project) {
     let store_key = project.store_key().to_string();
-    let main = get_window(&store_key).map(|w| w.id);
-    // Reap auxiliary windows tagged with this project (e.g. tide's browsers),
-    // excluding the main window so its name-based kill below is unchanged.
-    for id in windows_with_project(&store_key) {
-        if Some(&id) != main.as_ref() {
-            tmux(["kill-window", "-t", &id]);
-        }
-    }
-    if let Some(id) = main {
+    // The main project window (matched by name) plus any auxiliary windows
+    // tagged with this project (e.g. tide's browsers). Both are collected as
+    // stable window ids and deduped, so each window is killed exactly once
+    // even when the main window is itself @project-tagged.
+    for id in project_window_ids(&store_key) {
         tmux(["kill-window", "-t", &id]);
     }
 }
 
-fn windows_with_project(store_key: &str) -> Vec<String> {
-    tmux(["list-windows", "-a", "-F", "#{window_id}\t#{@project}"])
-        .lines()
-        .filter_map(|line| {
-            let (id, project) = line.split_once('\t')?;
-            (project == store_key).then(|| id.to_string())
-        })
-        .collect()
+fn project_window_ids(store_key: &str) -> Vec<String> {
+    let mut ids: Vec<String> = Vec::new();
+    let listing = tmux([
+        "list-windows",
+        "-a",
+        "-F",
+        "#{window_id}\t#{window_name}\t#{@project}",
+    ]);
+    for line in listing.lines() {
+        let fields: Vec<&str> = line.split('\t').collect();
+        if fields.len() < 2 {
+            continue;
+        }
+        let (id, name) = (fields[0], fields[1]);
+        let project = fields.get(2).copied().unwrap_or("");
+        if (name == store_key || project == store_key) && !ids.iter().any(|x| x == id) {
+            ids.push(id.to_string());
+        }
+    }
+    ids
 }
 
 /// Open (or focus) a tmux pane running `claude -r <session_id>` in the project's

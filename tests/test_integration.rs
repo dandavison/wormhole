@@ -225,6 +225,34 @@ fn test_project_list_sorted() {
 }
 
 #[test]
+fn test_task_window_tagged_with_project() {
+    // Regression: the main task window must be tagged with the @project window
+    // option so auxiliary windows can be reaped on close. The store_key contains
+    // a ':' (repo:branch), which must not be passed as a tmux `-t` target (it
+    // would be parsed as session:window and fail with "no such window").
+    let test = harness::WormholeTest::new(8966);
+
+    let home_proj = format!("{}tag-home", TEST_PREFIX);
+    let home_dir = format!("/tmp/{}", home_proj);
+    let task_id = format!("{}spk/saa-operator", TEST_PREFIX);
+
+    init_git_repo(&home_dir);
+
+    test.create_project(&home_dir, &home_proj);
+    test.create_task(&task_id, &home_proj);
+
+    let store_key = test.task_store_key(&task_id, &home_proj);
+
+    assert_eq!(
+        test.tmux_window_option(&store_key, "@project").as_deref(),
+        Some(store_key.as_str()),
+        "Task window '{}' should be tagged with @project={}",
+        store_key,
+        store_key
+    );
+}
+
+#[test]
 fn test_close_task_removes_from_list() {
     let test = harness::WormholeTest::new(8943);
 

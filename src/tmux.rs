@@ -61,12 +61,15 @@ pub fn open(project: &Project) -> Result<(), String> {
         tmux(["select-window", "-t", &window.id]);
     } else {
         let vars = shell_env_vars(project);
-        tmux_vec(vec![
+        let window_id = tmux_vec(vec![
             "new-window".to_string(),
             "-n".to_string(),
             window_name.clone(),
             "-c".to_string(),
             project.working_tree().to_string_lossy().to_string(),
+            "-P".to_string(),
+            "-F".to_string(),
+            "#{window_id}".to_string(),
             "-e".to_string(),
             format!("WORMHOLE_PROJECT_NAME={}", vars.project_name),
             "-e".to_string(),
@@ -80,11 +83,13 @@ pub fn open(project: &Project) -> Result<(), String> {
         ]);
         // Tag the project window with the generic @project key so auxiliary
         // windows (e.g. tide's browsers) can be associated and reaped together.
+        // Target by window id, not name: a task's store_key contains a ':',
+        // which tmux would otherwise parse as a session:window target.
         tmux([
             "set-option",
             "-w",
             "-t",
-            &window_name,
+            window_id.trim(),
             "@project",
             &window_name,
         ]);

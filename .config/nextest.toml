@@ -1,0 +1,9 @@
+# Integration tests (tests/) each spin up a full wormhole server + tmux session,
+# so they must run one at a time; concurrent runs thrash the machine and time
+# out on startup. Unit tests are unaffected and keep full parallelism.
+[test-groups.integration]
+max-threads = 1
+
+[[profile.default.overrides]]
+filter = 'kind(test)'
+test-group = 'integration'

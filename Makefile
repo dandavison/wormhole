@@ -4,16 +4,19 @@ build:
 gui:
 	$(MAKE) -C gui clean dist
 
+# All tests, minus the ones that steal OS focus: WORMHOLE_EDITOR=none skips the
+# editor-focus assertions so the integration tests exercise only tmux. Unit
+# tests run in parallel; integration tests are serialized via the `integration`
+# test-group in .config/nextest.toml.
 test:
-	cargo nextest run --bin wormhole --fail-fast
+	cargo build
+	WORMHOLE_TEST=1 WORMHOLE_EDITOR=none cargo nextest run --fail-fast
 
-# Serial (-j1): each test spins up a full wormhole server + tmux session, so
-# running them concurrently thrashes the machine and they time out on startup.
+# The focus-stealing run: drives a real editor (Cursor) and asserts window
+# focus, so it grabs your screen. Opt in explicitly.
 integration-test:
-	cargo nextest run --test '*' -j1 --fail-fast --no-capture
-
-integration-test-headless:
-	WORMHOLE_TEST=1 WORMHOLE_EDITOR=none cargo nextest run --test '*' -j1 --fail-fast --no-capture
+	cargo build
+	WORMHOLE_TEST=1 cargo nextest run --test '*' --fail-fast --no-capture
 
 extension-test:
 	cd chrome-extension && npm install && npm test
@@ -27,4 +30,4 @@ vscode-extension-test:
 reload: build
 	./target/release/wormhole server start
 
-.PHONY: gui test serve serve-tmux build reload integration-test integration-test-headless extension-test vscode-extension vscode-extension-test
+.PHONY: gui test serve serve-tmux build reload integration-test extension-test vscode-extension vscode-extension-test

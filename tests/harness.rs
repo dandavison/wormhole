@@ -533,6 +533,27 @@ impl WormholeTest {
         self.list_tmux_windows().iter().any(|w| w == name)
     }
 
+    /// Read a window option (e.g. `@project`) for the window with the given
+    /// name. Matches by name in a listing to avoid `:` in the name being parsed
+    /// as a `session:window` target.
+    pub fn tmux_window_option(&self, name: &str, option: &str) -> Option<String> {
+        let output = Command::new("tmux")
+            .args([
+                "-L",
+                &self.tmux.socket,
+                "list-windows",
+                "-F",
+                &format!("#{{window_name}}\t#{{{}}}", option),
+            ])
+            .output()
+            .unwrap();
+        let list = String::from_utf8_lossy(&output.stdout);
+        list.lines().find_map(|line| {
+            let (window_name, value) = line.split_once('\t')?;
+            (window_name == name && !value.is_empty()).then(|| value.to_string())
+        })
+    }
+
     /// List all tmux window names
     pub fn list_tmux_windows(&self) -> Vec<String> {
         let output = Command::new("tmux")

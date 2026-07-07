@@ -211,16 +211,16 @@ fn test_project_list_sorted() {
         })
         .collect();
 
-    // Projects without branch first (alphabetically), then tasks (by name, then branch)
+    // Lexicographic by store_key: each project immediately precedes its tasks.
     let expected: Vec<String> = vec![
         proj_a.clone(),
-        proj_b.clone(),
         task_a1_key.clone(),
+        proj_b.clone(),
         task_b1_key.clone(),
     ];
     assert_eq!(
         identifiers, expected,
-        "Expected sorted order: projects first alphabetically, then tasks by (name, branch)"
+        "Expected order: lexicographic by store_key (project then its tasks)"
     );
 }
 
@@ -382,14 +382,8 @@ fn test_task_switching() {
 
     let task_1_key = test.task_store_key(&task_1, &home_proj);
     let task_2_key = test.task_store_key(&task_2, &home_proj);
-    let task_1_dir = format!(
-        "{}/.git/wormhole/worktrees/{}/{}",
-        home_dir, task_1, home_proj
-    );
-    let task_2_dir = format!(
-        "{}/.git/wormhole/worktrees/{}/{}",
-        home_dir, task_2, home_proj
-    );
+    let task_1_dir = test.task_worktree_path(&home_proj, &task_1);
+    let task_2_dir = test.task_worktree_path(&home_proj, &task_2);
 
     // Table-driven: (switch_key, window_title, expected_cwd)
     let cases = [
@@ -452,11 +446,7 @@ fn test_task_in_submodule() {
     // Create a task in the submodule
     test.create_task(&task_id, &submodule_name);
 
-    // Worktree should be in parent's .git/modules/<submodule>/wormhole/worktrees/
-    let task_dir = format!(
-        "{}/.git/modules/{}/wormhole/worktrees/{}/{}",
-        parent_dir, submodule_dirname, task_id, submodule_name
-    );
+    let task_dir = test.task_worktree_path(&submodule_name, &task_id);
 
     // Switch between submodule project and task
     test.cli(&format!("wormhole open {}", submodule_name))
@@ -998,10 +988,7 @@ fn test_switch_creates_task_from_colon_syntax() {
     std::thread::sleep(std::time::Duration::from_millis(500));
 
     // Verify the worktree was created
-    let worktree_path = format!(
-        "{}/.git/wormhole/worktrees/{}/{}",
-        home_dir, task_branch, home_proj
-    );
+    let worktree_path = test.task_worktree_path(&home_proj, &task_branch);
     assert!(
         std::path::Path::new(&worktree_path).exists(),
         "Worktree should be created at {}",
@@ -1032,10 +1019,7 @@ fn test_remove_task_deletes_worktree_from_disk() {
     test.create_task(&task_branch, &home_proj);
 
     let store_key = test.task_store_key(&task_branch, &home_proj);
-    let worktree_path = format!(
-        "{}/.git/wormhole/worktrees/{}/{}",
-        home_dir, task_branch, home_proj
-    );
+    let worktree_path = test.task_worktree_path(&home_proj, &task_branch);
     assert!(
         std::path::Path::new(&worktree_path).exists(),
         "Worktree should exist before removal"
@@ -1093,10 +1077,7 @@ fn test_dashboard_renders_card_md() {
     test.create_task(&task_branch, &home_proj);
 
     // Write card.md into the task's .task directory
-    let worktree_path = format!(
-        "{}/.git/wormhole/worktrees/{}/{}",
-        home_dir, task_branch, home_proj
-    );
+    let worktree_path = test.task_worktree_path(&home_proj, &task_branch);
     let card_md = format!("{}/.task/card.md", worktree_path);
     std::fs::write(&card_md, "[my link](https://example.com)\n").unwrap();
 
@@ -1118,9 +1099,9 @@ fn test_dashboard_renders_card_md() {
 
 #[test]
 fn test_task_worktree_agent_instructions() {
-    // Verify that task creation populates .task/AGENTS.md and symlinks
-    // CLAUDE.md and AGENTS.md to it. Also verify that a pre-existing
-    // tracked CLAUDE.md is replaced via assume-unchanged.
+    // Verify that task creation populates .task/CLAUDE.md and symlinks
+    // CLAUDE.md to it. Also verify that a pre-existing tracked CLAUDE.md is
+    // replaced via assume-unchanged.
     let test = harness::WormholeTest::new(8961);
 
     let home_proj = format!("{}agent-inst", TEST_PREFIX);
@@ -1145,42 +1126,32 @@ fn test_task_worktree_agent_instructions() {
     test.create_project(&home_dir, &home_proj);
     test.create_task(&task_branch, &home_proj);
 
-    let worktree_path = format!(
-        "{}/.git/wormhole/worktrees/{}/{}",
-        home_dir, task_branch, home_proj
-    );
+    let worktree_path = test.task_worktree_path(&home_proj, &task_branch);
     let store_key = test.task_store_key(&task_branch, &home_proj);
 
-    // .task/AGENTS.md should exist with project key
-    let agents_md = std::fs::read_to_string(format!("{}/.task/AGENTS.md", worktree_path)).unwrap();
+    // .task/CLAUDE.md should exist with project key
+    let task_claude_md =
+        std::fs::read_to_string(format!("{}/.task/CLAUDE.md", worktree_path)).unwrap();
     assert!(
-        agents_md.contains(&store_key),
-        ".task/AGENTS.md should contain project key '{}', got: {}",
+        task_claude_md.contains(&store_key),
+        ".task/CLAUDE.md should contain project key '{}', got: {}",
         store_key,
-        agents_md
+        task_claude_md
     );
 
-    // CLAUDE.md should be a symlink to .task/AGENTS.md
+    // CLAUDE.md should be a symlink to .task/CLAUDE.md
     let claude_link = std::fs::read_link(format!("{}/CLAUDE.md", worktree_path)).unwrap();
     assert_eq!(
         claude_link,
-        std::path::Path::new(".task/AGENTS.md"),
-        "CLAUDE.md should be a symlink to .task/AGENTS.md"
-    );
-
-    // AGENTS.md should be a symlink to .task/AGENTS.md
-    let agents_link = std::fs::read_link(format!("{}/AGENTS.md", worktree_path)).unwrap();
-    assert_eq!(
-        agents_link,
-        std::path::Path::new(".task/AGENTS.md"),
-        "AGENTS.md should be a symlink to .task/AGENTS.md"
+        std::path::Path::new(".task/CLAUDE.md"),
+        "CLAUDE.md should be a symlink to .task/CLAUDE.md"
     );
 
     // Reading through the symlink should give the same content
     let claude_content = std::fs::read_to_string(format!("{}/CLAUDE.md", worktree_path)).unwrap();
     assert_eq!(
-        claude_content, agents_md,
-        "CLAUDE.md symlink should resolve to .task/AGENTS.md content"
+        claude_content, task_claude_md,
+        "CLAUDE.md symlink should resolve to .task/CLAUDE.md content"
     );
 }
 

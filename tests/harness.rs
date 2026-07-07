@@ -55,6 +55,7 @@ pub enum Focus<'a> {
 pub struct WormholeTest {
     port: u16,
     tmux: TmuxSession,
+    worktree_dir: String,
 }
 
 impl WormholeTest {
@@ -79,8 +80,23 @@ impl WormholeTest {
         let uid = String::from_utf8_lossy(&uid.stdout).trim().to_string();
         let socket_path = format!("/private/tmp/tmux-{}/{}", uid, socket_name);
 
-        let mut env_vars: Vec<(&str, &str)> =
-            vec![("WORMHOLE_TMUX", &socket_path), ("WORMHOLE_OFFLINE", "1")];
+        // Isolate task worktrees to a per-test directory so tests neither
+        // pollute nor depend on the real (~/worktrees) location. Canonicalize
+        // it (/tmp -> /private/tmp on macOS) so it matches the paths reported by
+        // `git worktree list`, on which task discovery's prefix check relies.
+        let worktree_dir = format!("/tmp/wh-test-worktrees-{}", port);
+        let _ = std::fs::remove_dir_all(&worktree_dir);
+        std::fs::create_dir_all(&worktree_dir).unwrap();
+        let worktree_dir = std::fs::canonicalize(&worktree_dir)
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+
+        let mut env_vars: Vec<(&str, &str)> = vec![
+            ("WORMHOLE_TMUX", &socket_path),
+            ("WORMHOLE_OFFLINE", "1"),
+            ("WORMHOLE_WORKTREE_DIR", &worktree_dir),
+        ];
         let wormhole_editor = std::env::var("WORMHOLE_EDITOR").ok();
         if let Some(ref editor) = wormhole_editor {
             env_vars.push(("WORMHOLE_EDITOR", editor));
@@ -95,7 +111,11 @@ impl WormholeTest {
 
         wait_for_ready(port, Duration::from_secs(5));
 
-        WormholeTest { port, tmux }
+        WormholeTest {
+            port,
+            tmux,
+            worktree_dir,
+        }
     }
 
     pub fn http_get(&self, path: &str) -> Result<String, String> {
@@ -406,18 +426,27 @@ impl WormholeTest {
         std::thread::sleep(std::time::Duration::from_millis(500));
     }
 
+    /// The worktree path the server uses for a task, mirroring
+    /// `git::task_worktree_path`: `<worktree_dir>/<repo>/<encoded_branch>/<repo>`.
+    pub fn task_worktree_path(&self, repo_name: &str, branch: &str) -> String {
+        let encoded_branch = branch.replace('/', "--");
+        format!(
+            "{}/{}/{}/{}",
+            self.worktree_dir, repo_name, encoded_branch, repo_name
+        )
+    }
+
     /// Create a worktree directly with git (bypassing wormhole), so no terminal
-    /// window is created. Returns the worktree path.
+    /// window is created. It is placed where the server discovers tasks (under
+    /// the configured worktree dir), so `wormhole refresh` picks it up. Returns
+    /// the worktree path.
     pub fn create_worktree_directly(
         &self,
         home_dir: &str,
         repo_name: &str,
         branch: &str,
     ) -> String {
-        let worktrees_dir = format!("{}/.git/wormhole/worktrees", home_dir);
-        std::fs::create_dir_all(&worktrees_dir).unwrap();
-        let encoded_branch = branch.replace('/', "--");
-        let worktree_path = format!("{}/{}/{}", worktrees_dir, encoded_branch, repo_name);
+        let worktree_path = self.task_worktree_path(repo_name, branch);
         let output = Command::new("git")
             .args(["worktree", "add", "-b", branch, &worktree_path])
             .current_dir(home_dir)
@@ -582,6 +611,7 @@ impl Drop for WormholeTest {
             let _ = self.wait_until(|| !self.window_exists(TEST_PREFIX), 10);
         }
         self.tmux.stop();
+        let _ = std::fs::remove_dir_all(&self.worktree_dir);
         let _ = std::fs::remove_file("/tmp/wormhole.env");
         if !editor_is_none() {
             self.focus_terminal_graceful();

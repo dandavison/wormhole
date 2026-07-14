@@ -397,7 +397,17 @@ pub fn tasks() -> HashMap<ProjectKey, Project> {
         .collect()
 }
 
+/// Refresh cached JIRA/PR status for every known task (parallel via rayon).
 pub fn refresh_cache() {
+    refresh_cache_for(None);
+}
+
+/// Refresh cached JIRA/PR status for a specific set of tasks (parallel via rayon).
+pub fn refresh_cache_for_keys(keys: &[ProjectKey]) {
+    refresh_cache_for(Some(keys));
+}
+
+fn refresh_cache_for(keys: Option<&[ProjectKey]>) {
     use crate::{github, jira};
 
     let task_info: Vec<_> = {
@@ -406,7 +416,7 @@ pub fn refresh_cache() {
             .0
             .all
             .iter()
-            .filter(|(_, p)| p.is_task())
+            .filter(|(k, p)| p.is_task() && keys.is_none_or(|ks| ks.contains(k)))
             .map(|(key, p)| {
                 let jira_key = p.kv.get("jira_key").cloned();
                 let review_pr =

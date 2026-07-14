@@ -144,6 +144,7 @@ pub fn create_review_tasks(dry_run: bool) -> Result<ReviewTaskResult, String> {
         skipped: Vec::new(),
         errors: Vec::new(),
     };
+    let mut touched_keys = Vec::new();
 
     for pr in &prs {
         let (owner, repo_name) = match pr.repository.name_with_owner.split_once('/') {
@@ -200,6 +201,7 @@ pub fn create_review_tasks(dry_run: bool) -> Result<ReviewTaskResult, String> {
                 crate::kv::set_value_sync(&key, "task_type", "review");
                 crate::kv::set_value_sync(&key, "review_pr_url", &pr.url);
                 crate::kv::set_value_sync(&key, "review_pr_title", &pr.title);
+                touched_keys.push(key);
                 if already_exists {
                     result.skipped.push(format!("{} (updated)", task_key));
                 } else {
@@ -212,8 +214,8 @@ pub fn create_review_tasks(dry_run: bool) -> Result<ReviewTaskResult, String> {
         }
     }
 
-    if !dry_run && (!result.created.is_empty() || !result.skipped.is_empty()) {
-        projects::refresh_cache();
+    if !dry_run && !touched_keys.is_empty() {
+        projects::refresh_cache_for_keys(&touched_keys);
     }
 
     Ok(result)
@@ -318,7 +320,7 @@ pub fn create_github_ref_task(
             crate::kv::set_value_sync(&key, "github_issue_number", &r.number.to_string());
         }
     }
-    projects::refresh_cache();
+    projects::refresh_cache_for_keys(&[key]);
 
     let label = if existing { "updated" } else { "created" };
     Ok(GithubTaskResult {

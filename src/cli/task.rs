@@ -521,8 +521,8 @@ pub(super) fn task_create(
         }
     }
 
-    // Refresh cache
-    let _ = client.post("/project/refresh");
+    // Refresh cache for the task just created/updated (not every other task)
+    let _ = client.post(&format!("/project/refresh-cache/{}", task_key));
 
     if same_location {
         println!("Updated {}", task_key.hyperlink());
@@ -620,7 +620,6 @@ fn task_create_from_github_ref(
     if let Some(error) = result.get("error").and_then(|v| v.as_str()) {
         eprintln!("  Error: {}", error);
     }
-    let _ = client.post("/project/refresh");
     Ok(())
 }
 

@@ -7,7 +7,7 @@ wormhole-shell-reset() {
 
 # Auto-detect wormhole project for new panes (the -e vars from new-window
 # don't propagate to split panes)
-if [[ -z $WORMHOLE_PROJECT_NAME ]]; then
+if [[ -z ${WORMHOLE_PROJECT_NAME:-} ]]; then
     wormhole-shell-reset
 fi
 
@@ -23,15 +23,15 @@ function osc8_link {
 
 function prompt_dir_display {
     local name
-    if [[ -n $WORMHOLE_PROJECT_DIR ]] && [[ $PWD == $WORMHOLE_PROJECT_DIR/* ]]; then
-        name="${WORMHOLE_PROJECT_NAME}/$(realpath --relative-to="$WORMHOLE_PROJECT_DIR" "$PWD")"
-    elif [[ -n $WORMHOLE_PROJECT_DIR ]] && [[ $PWD == $WORMHOLE_PROJECT_DIR ]]; then
-        name="${WORMHOLE_PROJECT_NAME}"
+    if [[ -n ${WORMHOLE_PROJECT_DIR:-} ]] && [[ $PWD == $WORMHOLE_PROJECT_DIR/* ]]; then
+        name="${WORMHOLE_PROJECT_NAME:-}/$(realpath --relative-to="$WORMHOLE_PROJECT_DIR" "$PWD")"
+    elif [[ -n ${WORMHOLE_PROJECT_DIR:-} ]] && [[ $PWD == $WORMHOLE_PROJECT_DIR ]]; then
+        name="${WORMHOLE_PROJECT_NAME:-}"
     else
         print -rn -- "${PWD/#$HOME/~}"
         return
     fi
-    if [[ -n $WORMHOLE_JIRA_URL ]]; then
+    if [[ -n ${WORMHOLE_JIRA_URL:-} ]]; then
         osc8_link "$WORMHOLE_JIRA_URL" "$name"
     else
         print -rn -- "$name"
@@ -42,9 +42,9 @@ function prompt_git_branch {
     local branch=$(__git_ps1 "%s")
     [[ -z $branch ]] && return
     local url
-    if [[ -n $WORMHOLE_GITHUB_PR_URL ]]; then
+    if [[ -n ${WORMHOLE_GITHUB_PR_URL:-} ]]; then
         url="$WORMHOLE_GITHUB_PR_URL"
-    elif [[ -n $WORMHOLE_GITHUB_REPO ]]; then
+    elif [[ -n ${WORMHOLE_GITHUB_REPO:-} ]]; then
         url="https://github.com/${WORMHOLE_GITHUB_REPO}/compare/${branch}?expand=1"
     fi
     if [[ -n $url ]]; then

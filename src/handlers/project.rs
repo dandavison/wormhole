@@ -337,6 +337,13 @@ pub fn show(name: Option<&str>) -> Response<Body> {
     }
 }
 
+/// Refresh cached JIRA/PR status for a single task, without touching every other task's cache.
+pub fn refresh_task_cache(name: &str) -> Response<Body> {
+    let key = ProjectKey::parse(name.trim());
+    projects::refresh_cache_for_keys(&[key]);
+    Response::new(Body::from("OK"))
+}
+
 pub fn refresh_project(name: &str) -> Response<Body> {
     let key = ProjectKey::parse(name.trim());
     let mut projects = projects::lock();

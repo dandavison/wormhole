@@ -295,6 +295,9 @@ async fn route_with_params(
     if let Some(name) = path.strip_prefix("/project/refresh/") {
         return require_post(method, || project::refresh_project(name));
     }
+    if let Some(name) = path.strip_prefix("/project/refresh-cache/") {
+        return require_post(method, || project::refresh_task_cache(name));
+    }
     if let Some(branch) = path.strip_prefix("/project/create/") {
         return project::create_task(branch, params.home_project.as_deref());
     }

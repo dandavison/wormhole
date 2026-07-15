@@ -34,7 +34,7 @@ Wormhole is a tool for working on software projects.
   discover it using the repo remote that is stored by git on disk.)
 
 - Wormhole is a process exposing an HTTP API, with a CLI client that is a thin wrapper over the HTTP
-  API. The CLI API includes `wormhole project list`, `wormhole task create`,
+  API. The CLI API includes `wormhole project list`, `wormhole project create`,
   `wormhole project switch`, etc.
 
 - On server start, `wormhole project list` lists all tasks discovered on disk.
@@ -179,9 +179,12 @@ wormhole kv set myapp land-in editor    # Set KV
 wormhole kv delete myapp land-in        # Delete KV
 wormhole kv delete --all land-in        # Delete a key from every project (e.g. clear pins)
 wormhole kv list myapp                  # List all KV for project
-wormhole task create <target>           # Create or update a task
-wormhole task create-from-sprint        # Create tasks for all sprint issues
-wormhole task create-from-review-requests # Create tasks from PR review requests
+wormhole project create <target>       # Create or update a project worktree (JIRA/PR/issue ref or repo:branch)
+wormhole project create-from-sprint     # Create projects for all sprint issues
+wormhole project create-from-review-requests # Create projects from PR review requests
+wormhole project done myrepo:ACT-1234   # Mark a non-JIRA project as done
+wormhole project hide myrepo:ACT-1234   # Hide a project from the dashboard
+wormhole project reopen myrepo:ACT-1234 # Unhide / clear local done status
 wormhole jira sprint list               # List JIRA sprint issues
 wormhole jira sprint show               # Show detailed sprint status
 wormhole refresh                        # Refresh in-memory data from disk/APIs
@@ -218,7 +221,8 @@ wormhole completion bash                # Generate shell completions
 | POST   | `/project/refresh`            | Refresh all in-memory data        |
 | POST   | `/project/refresh/<name>`     | Refresh single project            |
 | POST   | `/project/refresh-tasks`      | Refresh task worktrees            |
-| POST   | `/task/create-from-review-requests` | Create review tasks          |
+| POST   | `/project/create-from-review-requests` | Create projects from PR review requests |
+| POST   | `/project/create-from-github-ref` | Create project from a GitHub PR/issue ref |
 | POST   | `/batch`                      | Start a new batch                 |
 | GET    | `/batch`                      | List batches                      |
 | GET    | `/batch/<id>`                 | Batch status                      |

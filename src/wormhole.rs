@@ -152,11 +152,7 @@ async fn route(
             projects::refresh_tasks();
             Response::new(Body::from(""))
         }),
-        "/task/notify-agent" => Response::builder()
-            .status(StatusCode::GONE)
-            .body(Body::from("removed"))
-            .unwrap(),
-        "/task/create-from-review-requests" => require_post(method, || {
+        "/project/create-from-review-requests" => require_post(method, || {
             match crate::task::create_review_tasks(params.dry_run) {
                 Ok(result) => Response::builder()
                     .header("Content-Type", "application/json")
@@ -168,7 +164,7 @@ async fn route(
                     .unwrap(),
             }
         }),
-        "/task/create" => require_post(method, || {
+        "/project/create-from-github-ref" => require_post(method, || {
             let ref_str = match params.github_ref {
                 Some(ref r) => r.as_str(),
                 None => {

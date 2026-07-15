@@ -62,10 +62,20 @@ fn editor_cell() -> &'static RwLock<Editor> {
     EDITOR.get_or_init(|| RwLock::new(initial_editor()))
 }
 
-/// The `wormhole.toml` `editor` field is the source of truth; `WORMHOLE_EDITOR`
-/// is a fallback for when it is absent.
+/// Precedence: an explicitly-set `WORMHOLE_EDITOR` wins; otherwise the
+/// `wormhole.toml` `editor` field; otherwise the `WORMHOLE_EDITOR` default.
 fn initial_editor() -> Editor {
-    editor_from_config_file().unwrap_or_else(editor_from_env)
+    env_editor_override()
+        .or_else(editor_from_config_file)
+        .unwrap_or_else(editor_from_env)
+}
+
+/// An explicitly-set `WORMHOLE_EDITOR` is an absolute override of both the
+/// runtime global and per-project `editors` globs. Tests set `WORMHOLE_EDITOR=none`
+/// to run headless: focus/launch of GUI apps is suppressed wherever the editor is
+/// `none`, so this override must win regardless of `wormhole.toml`.
+fn env_editor_override() -> Option<Editor> {
+    std::env::var_os("WORMHOLE_EDITOR").map(|_| editor_from_env())
 }
 
 fn editor_from_config_file() -> Option<Editor> {
@@ -88,9 +98,10 @@ fn editor_from_env() -> Editor {
 }
 
 /// The active editor. Global and switchable at runtime via [`set_editor`];
-/// seeded from `wormhole.toml` on first access.
+/// seeded from `wormhole.toml` on first access. An explicitly-set
+/// `WORMHOLE_EDITOR` overrides the runtime global entirely (see [`initial_editor`]).
 pub fn editor() -> Editor {
-    editor_cell().read().unwrap().clone()
+    env_editor_override().unwrap_or_else(|| editor_cell().read().unwrap().clone())
 }
 
 pub fn set_editor(editor: Editor) {
@@ -244,6 +255,9 @@ fn load_config() -> ResolvedConfig {
 /// The editor mapped to `project_name` by the first matching `editors` glob in
 /// `wormhole.toml`, if any. Falls back to the global [`editor`] when none match.
 pub fn editor_for(project_name: &str) -> Option<Editor> {
+    if let Some(editor) = env_editor_override() {
+        return Some(editor);
+    }
     config()
         .editor_overrides
         .iter()
@@ -656,5 +670,15 @@ editors = [
             config.editor.and_then(|n| Editor::from_name(&n)),
             Some(Editor::VSCode)
         );
+    }
+
+    #[test]
+    fn test_explicit_env_editor_forces_headless() {
+        // The test harness's focus/launch suppression relies on editor()==None
+        // when WORMHOLE_EDITOR=none, which must hold regardless of the user's
+        // wormhole.toml `editor` field or per-project `editors` globs.
+        std::env::set_var("WORMHOLE_EDITOR", "none");
+        assert!(editor().is_none());
+        assert_eq!(editor_for("any-repo"), Some(Editor::None));
     }
 }

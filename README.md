@@ -381,6 +381,9 @@ wormhole-shell-reset     # re-fetch env vars from wormhole server
 ## Agent instructions
 - Prefer commands from the Makefile over direct `cargo` commands.
 - Always build with `--release` unless instructed otherwise.
+- For tests, default to `make test-unit` (unit tests only: no server, no tmux, no window focus).
+  `make test` also runs the integration tests; it is headless (`WORMHOLE_EDITOR=none`) and does not
+  grab focus, but it is slow.
 - Never run `make integration-test-ui-ask-for-permission-to-run` without asking the user first — it
   drives a real editor window and steals focus.
 

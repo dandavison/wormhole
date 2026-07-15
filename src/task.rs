@@ -35,7 +35,7 @@ pub fn create_task(repo: &str, branch: &str) -> Result<Project, String> {
 
     if !worktree_path.join(".git").exists() {
         git::create_worktree(&repo_path, &worktree_path, branch)?;
-        setup_task_worktree(&worktree_path, repo, branch)?;
+        setup_task_worktree(&worktree_path, &repo_path, repo, branch)?;
     }
 
     let task = Project {
@@ -351,19 +351,34 @@ fn resolve_project_path(project_name: &str) -> Result<PathBuf, String> {
         .ok_or_else(|| format!("Project '{}' not found", project_name))
 }
 
-pub fn setup_task_worktree(worktree_path: &Path, repo: &str, branch: &str) -> Result<(), String> {
-    conform_task_worktree(worktree_path, repo, branch, false).map(|_| ())
+pub fn setup_task_worktree(
+    worktree_path: &Path,
+    repo_path: &Path,
+    repo: &str,
+    branch: &str,
+) -> Result<(), String> {
+    conform_task_worktree(worktree_path, repo_path, repo, branch, false).map(|_| ())
 }
 
 /// Check/fix task worktree conformance. Returns list of actions taken (or
 /// that would be taken if `dry_run` is true).
 pub fn conform_task_worktree(
     worktree_path: &Path,
+    repo_path: &Path,
     repo: &str,
     branch: &str,
     dry_run: bool,
 ) -> Result<Vec<String>, String> {
     let mut actions = Vec::new();
+
+    // Must precede the git-dependent steps below: a dangling back-pointer makes
+    // every git command run inside the worktree fail.
+    if git::worktree_gitdir_broken(worktree_path) {
+        actions.push("repair gitdir link".into());
+        if !dry_run {
+            git::repair_worktree(repo_path, worktree_path)?;
+        }
+    }
 
     let task_dir = worktree_path.join(".task");
     if !task_dir.is_dir() {
@@ -446,7 +461,7 @@ mod tests {
         let worktree = dir.path();
 
         // First call seeds .task/CLAUDE.md
-        setup_task_worktree(worktree, "repo", "branch").unwrap();
+        setup_task_worktree(worktree, worktree, "repo", "branch").unwrap();
         let seeded = fs::read_to_string(worktree.join(".task/CLAUDE.md")).unwrap();
         assert!(seeded.contains("repo:branch"));
 
@@ -454,7 +469,7 @@ mod tests {
         fs::write(worktree.join(".task/CLAUDE.md"), "# Custom\n").unwrap();
 
         // Second call should not overwrite
-        setup_task_worktree(worktree, "repo", "branch").unwrap();
+        setup_task_worktree(worktree, worktree, "repo", "branch").unwrap();
         let preserved = fs::read_to_string(worktree.join(".task/CLAUDE.md")).unwrap();
         assert_eq!(preserved, "# Custom\n");
     }
@@ -464,7 +479,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let worktree = dir.path();
 
-        let actions = conform_task_worktree(worktree, "repo", "branch", false).unwrap();
+        let actions = conform_task_worktree(worktree, worktree, "repo", "branch", false).unwrap();
         assert!(actions.iter().any(|a| a.contains(".task/")));
         assert!(actions.iter().any(|a| a.contains("CLAUDE.md")));
     }
@@ -474,10 +489,54 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let worktree = dir.path();
 
-        let actions = conform_task_worktree(worktree, "repo", "branch", true).unwrap();
+        let actions = conform_task_worktree(worktree, worktree, "repo", "branch", true).unwrap();
         assert!(!actions.is_empty());
         assert!(!worktree.join(".task").exists());
         assert!(!worktree.join("CLAUDE.md").exists());
+    }
+
+    #[test]
+    fn conform_repairs_gitdir_link_after_repo_moved() {
+        use std::process::Command;
+
+        let dir = tempfile::tempdir().unwrap();
+        let repo = dir.path().join("repo");
+        let worktree = dir.path().join("wt");
+        fs::create_dir_all(&repo).unwrap();
+
+        let git = |args: &[&str], cwd: &Path| {
+            let ok = Command::new("git")
+                .args(args)
+                .current_dir(cwd)
+                .output()
+                .unwrap()
+                .status
+                .success();
+            assert!(ok, "git {:?} failed", args);
+        };
+        git(&["init"], &repo);
+        git(&["commit", "--allow-empty", "-m", "init"], &repo);
+        git(
+            &[
+                "worktree",
+                "add",
+                worktree.to_str().unwrap(),
+                "-b",
+                "branch",
+            ],
+            &repo,
+        );
+
+        // Move the main repo, leaving the worktree's .git back-pointer dangling.
+        let moved = dir.path().join("moved");
+        fs::rename(&repo, &moved).unwrap();
+        assert!(git::worktree_gitdir_broken(&worktree));
+
+        let actions = conform_task_worktree(&worktree, &moved, "repo", "branch", false).unwrap();
+        assert!(actions.iter().any(|a| a.contains("repair gitdir link")));
+        assert!(!git::worktree_gitdir_broken(&worktree));
+        // git now works inside the repaired worktree.
+        assert!(git::is_git_repo(&worktree));
     }
 
     #[test]
@@ -485,8 +544,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let worktree = dir.path();
 
-        conform_task_worktree(worktree, "repo", "branch", false).unwrap();
-        let actions = conform_task_worktree(worktree, "repo", "branch", false).unwrap();
+        conform_task_worktree(worktree, worktree, "repo", "branch", false).unwrap();
+        let actions = conform_task_worktree(worktree, worktree, "repo", "branch", false).unwrap();
         assert!(
             actions.is_empty(),
             "expected no actions, got: {:?}",

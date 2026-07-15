@@ -51,6 +51,36 @@ pub fn is_worktree(path: &Path) -> bool {
     false
 }
 
+/// Returns true if `worktree_path`'s `.git` back-pointer references a gitdir
+/// that no longer exists — e.g. the main repo was moved or removed, leaving the
+/// worktree's link dangling so that git commands run inside it fail.
+pub fn worktree_gitdir_broken(worktree_path: &Path) -> bool {
+    let Ok(content) = std::fs::read_to_string(worktree_path.join(".git")) else {
+        return false;
+    };
+    match content.strip_prefix("gitdir:") {
+        Some(gitdir) => !Path::new(gitdir.trim()).exists(),
+        None => false,
+    }
+}
+
+/// Repairs the two-way links between a repo and its worktree, fixing the
+/// worktree's `.git` back-pointer after the main repo has moved.
+pub fn repair_worktree(repo_path: &Path, worktree_path: &Path) -> Result<(), String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .args(["worktree", "repair"])
+        .arg(worktree_path)
+        .output()
+        .map_err(|e| format!("git worktree repair failed to run: {}", e))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+    }
+}
+
 pub fn github_repo_from_remote(path: &Path) -> Option<String> {
     let output = Command::new("git")
         .args(["remote", "get-url", "origin"])

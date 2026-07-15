@@ -431,7 +431,7 @@ pub enum DoctorCommand {
         #[arg(short, long, default_value = "text")]
         output: String,
     },
-    /// Conform task worktrees to desired state (.task/AGENTS.md, symlinks, etc.)
+    /// Conform task worktrees to desired state (.task/AGENTS.md, symlinks, gitdir links, etc.)
     Conform {
         /// Show what would be done without making changes
         #[arg(long)]

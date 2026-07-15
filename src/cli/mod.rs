@@ -68,30 +68,6 @@ fn complete_projects(current: &std::ffi::OsStr) -> Vec<CompletionCandidate> {
     candidates
 }
 
-fn complete_available_projects(_current: &std::ffi::OsStr) -> Vec<CompletionCandidate> {
-    let url = format!("http://127.0.0.1:{}/project/list", config::wormhole_port());
-    let response = match ureq::get(&url).call() {
-        Ok(r) => match r.into_string() {
-            Ok(s) => s,
-            Err(_) => return vec![],
-        },
-        Err(_) => return vec![],
-    };
-    let json: serde_json::Value = match serde_json::from_str(&response) {
-        Ok(v) => v,
-        Err(_) => return vec![],
-    };
-    let mut candidates = vec![];
-    if let Some(available) = json.get("available").and_then(|v| v.as_array()) {
-        for item in available {
-            if let Some(name) = item.as_str() {
-                candidates.push(CompletionCandidate::new(name));
-            }
-        }
-    }
-    candidates
-}
-
 #[derive(Parser)]
 #[command(name = "wormhole")]
 pub struct Cli {
@@ -105,63 +81,6 @@ pub enum JiraCommand {
     Sprint {
         #[command(subcommand)]
         command: Option<SprintCommand>,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum TaskCommand {
-    /// List tasks (optionally filtered by project)
-    List {
-        /// Project name to filter by
-        #[arg(add = ArgValueCompleter::new(complete_available_projects))]
-        project: Option<String>,
-        /// Output format: text (default) or json
-        #[arg(short, long, default_value = "text")]
-        output: String,
-        /// List only tasks with a tmux window
-        #[arg(long)]
-        active: bool,
-        /// Filter by status (e.g. "done", "in-progress")
-        #[arg(long)]
-        status: Option<String>,
-    },
-    /// Create or update a task
-    Create {
-        /// Target: PR number (#123), PR/issue URL, owner/repo#123, project key (repo:branch), JIRA URL, or JIRA key
-        #[arg(add = ArgValueCompleter::new(complete_projects))]
-        target: String,
-        /// Home project for the worktree
-        #[arg(short = 'p', long, add = ArgValueCompleter::new(complete_projects))]
-        home_project: Option<String>,
-        /// Show what would be created without actually creating
-        #[arg(long)]
-        dry_run: bool,
-    },
-    /// Create tasks from current sprint issues
-    CreateFromSprint,
-    /// Create tasks from GitHub PRs requesting your review
-    CreateFromReviewRequests {
-        /// Show what would be created without actually creating tasks
-        #[arg(long)]
-        dry_run: bool,
-    },
-    /// Mark a non-JIRA task as done (JIRA tasks get status from JIRA)
-    Done {
-        /// Task key (defaults to current directory)
-        #[arg(add = ArgValueCompleter::new(complete_projects))]
-        name: Option<String>,
-    },
-    /// Hide a task from the dashboard (regardless of status)
-    Hide {
-        /// Task key (defaults to current directory)
-        #[arg(add = ArgValueCompleter::new(complete_projects))]
-        name: Option<String>,
-    },
-    /// Unhide a hidden task / clear local done status
-    Reopen {
-        /// Task key (defaults to current directory)
-        #[arg(add = ArgValueCompleter::new(complete_projects))]
-        name: Option<String>,
     },
 }
 
@@ -293,6 +212,44 @@ pub enum ProjectCommand {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         command: Vec<String>,
     },
+    /// Create or update a project worktree from a JIRA/PR/issue ref or repo:branch
+    Create {
+        /// Target: PR number (#123), PR/issue URL, owner/repo#123, project key (repo:branch), JIRA URL, or JIRA key
+        #[arg(add = ArgValueCompleter::new(complete_projects))]
+        target: String,
+        /// Home project for the worktree
+        #[arg(short = 'p', long, add = ArgValueCompleter::new(complete_projects))]
+        home_project: Option<String>,
+        /// Show what would be created without actually creating
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Create projects from current sprint issues
+    CreateFromSprint,
+    /// Create projects from GitHub PRs requesting your review
+    CreateFromReviewRequests {
+        /// Show what would be created without actually creating
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Mark a non-JIRA project as done (JIRA projects get status from JIRA)
+    Done {
+        /// Project key (defaults to current directory)
+        #[arg(add = ArgValueCompleter::new(complete_projects))]
+        name: Option<String>,
+    },
+    /// Hide a project from the dashboard (regardless of status)
+    Hide {
+        /// Project key (defaults to current directory)
+        #[arg(add = ArgValueCompleter::new(complete_projects))]
+        name: Option<String>,
+    },
+    /// Unhide a hidden project / clear local done status
+    Reopen {
+        /// Project key (defaults to current directory)
+        #[arg(add = ArgValueCompleter::new(complete_projects))]
+        name: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -342,12 +299,6 @@ pub enum Command {
     Jira {
         #[command(subcommand)]
         command: JiraCommand,
-    },
-
-    /// Task operations (create from JIRA URL or sprint)
-    Task {
-        #[command(subcommand)]
-        command: TaskCommand,
     },
 
     /// Generate shell completions
@@ -713,6 +664,31 @@ pub fn run(command: Command) -> Result<(), String> {
                 }
                 Ok(())
             }
+            ProjectCommand::Create {
+                target,
+                home_project,
+                dry_run,
+            } => task::task_create(&client, &target, home_project, dry_run),
+            ProjectCommand::CreateFromSprint => task::task_create_from_sprint(&client),
+            ProjectCommand::CreateFromReviewRequests { dry_run } => {
+                task::task_create_from_review_requests(&client, dry_run)
+            }
+            ProjectCommand::Done { name } => {
+                let name = resolve_name(name);
+                client.kv_set(&name, "status", "done")?;
+                Ok(())
+            }
+            ProjectCommand::Hide { name } => {
+                let name = resolve_name(name);
+                client.kv_set(&name, "visibility", "hidden")?;
+                Ok(())
+            }
+            ProjectCommand::Reopen { name } => {
+                let name = resolve_name(name);
+                client.kv_delete(&name, "visibility")?;
+                client.kv_delete(&name, "status")?;
+                Ok(())
+            }
         },
 
         Command::Open { target, land_in } => {
@@ -826,46 +802,6 @@ pub fn run(command: Command) -> Result<(), String> {
             },
         },
 
-        Command::Task { command } => match command {
-            TaskCommand::List {
-                project,
-                output,
-                active,
-                status,
-            } => task::task_list(
-                &client,
-                project.as_deref(),
-                &output,
-                active,
-                status.as_deref(),
-            ),
-            TaskCommand::Create {
-                target,
-                home_project,
-                dry_run,
-            } => task::task_create(&client, &target, home_project, dry_run),
-            TaskCommand::CreateFromSprint => task::task_create_from_sprint(&client),
-            TaskCommand::CreateFromReviewRequests { dry_run } => {
-                task::task_create_from_review_requests(&client, dry_run)
-            }
-            TaskCommand::Done { name } => {
-                let name = resolve_task_name(name);
-                client.kv_set(&name, "status", "done")?;
-                Ok(())
-            }
-            TaskCommand::Hide { name } => {
-                let name = resolve_task_name(name);
-                client.kv_set(&name, "visibility", "hidden")?;
-                Ok(())
-            }
-            TaskCommand::Reopen { name } => {
-                let name = resolve_task_name(name);
-                client.kv_delete(&name, "visibility")?;
-                client.kv_delete(&name, "status")?;
-                Ok(())
-            }
-        },
-
         Command::Completion { shell } => {
             generate(shell, &mut Cli::command(), "wormhole", &mut io::stdout());
             Ok(())
@@ -958,7 +894,7 @@ pub fn run(command: Command) -> Result<(), String> {
     }
 }
 
-fn resolve_task_name(name: Option<String>) -> String {
+fn resolve_name(name: Option<String>) -> String {
     name.unwrap_or_else(|| {
         std::env::current_dir()
             .map(|p| p.to_string_lossy().to_string())

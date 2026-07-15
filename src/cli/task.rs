@@ -3,63 +3,7 @@ use crate::jira;
 use crate::project::ProjectKey;
 use crate::tty::TerminalHyperlink;
 
-use super::project;
 use super::util::*;
-
-pub(super) fn task_list(
-    client: &Client,
-    repo_filter: Option<&str>,
-    output: &str,
-    active: bool,
-    status: Option<&str>,
-) -> Result<(), String> {
-    let mut query_parts = vec!["tasks=true".to_string()];
-    if active {
-        query_parts.push("active=true".to_string());
-    }
-    let path = format!("/project/list?{}", query_parts.join("&"));
-    let response = client.get(&path)?;
-    if output == "json" {
-        println!("{}", response);
-        return Ok(());
-    }
-    let json: serde_json::Value = serde_json::from_str(&response).map_err(|e| e.to_string())?;
-    if let Some(current) = json.get("current").and_then(|v| v.as_array()) {
-        let mut items: Vec<_> = current
-            .iter()
-            .filter(|item| {
-                if let Some(filter) = repo_filter {
-                    item.get("project_key")
-                        .and_then(|k| k.as_str())
-                        .and_then(|k| k.split_once(':'))
-                        .is_some_and(|(repo, _)| repo == filter)
-                } else {
-                    true
-                }
-            })
-            .filter(|item| {
-                if let Some(s) = status {
-                    let s_lower = s.to_lowercase();
-                    item.get("kv")
-                        .and_then(|kv| kv.get("status"))
-                        .and_then(|v| v.as_str())
-                        .is_some_and(|st| st.to_lowercase() == s_lower)
-                } else {
-                    true
-                }
-            })
-            .collect();
-        items.sort_by(|a, b| {
-            let a_key = a.get("project_key").and_then(|k| k.as_str()).unwrap_or("");
-            let b_key = b.get("project_key").and_then(|k| k.as_str()).unwrap_or("");
-            a_key.cmp(b_key)
-        });
-        for item in &items {
-            println!("{}", project::render_project_item(item));
-        }
-    }
-    Ok(())
-}
 
 pub(super) fn task_create_from_sprint(client: &Client) -> Result<(), String> {
     use std::collections::HashMap;
@@ -291,9 +235,9 @@ pub(super) fn task_create_from_review_requests(
     dry_run: bool,
 ) -> Result<(), String> {
     let url = if dry_run {
-        "/task/create-from-review-requests?dry-run=true".to_string()
+        "/project/create-from-review-requests?dry-run=true".to_string()
     } else {
-        "/task/create-from-review-requests".to_string()
+        "/project/create-from-review-requests".to_string()
     };
     eprint!("Fetching review requests...");
     let response = client.post(&url)?;
@@ -595,7 +539,7 @@ fn task_create_from_github_ref(
     dry_run: bool,
 ) -> Result<(), String> {
     let encoded: String = url::form_urlencoded::byte_serialize(github_ref.as_bytes()).collect();
-    let mut url = format!("/task/create?ref={}", encoded);
+    let mut url = format!("/project/create-from-github-ref?ref={}", encoded);
     if let Some(hp) = home_project {
         url.push_str(&format!("&home-project={}", hp));
     }

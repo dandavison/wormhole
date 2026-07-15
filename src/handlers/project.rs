@@ -396,7 +396,7 @@ pub fn switch(name_or_path: &str, params: &QueryParams, sync: bool) -> Response<
         if let (Some(repo), Some(branch)) = (repo.as_ref(), branch.as_ref()) {
             return crate::task::open_task(repo, branch, land_in);
         }
-        if let Some((repo, branch)) = name_or_path.split_once(':') {
+        if let Some((repo, branch)) = ProjectKey::parse(&name_or_path).as_task() {
             return crate::task::open_task(repo, branch, land_in);
         }
         let project_path = {

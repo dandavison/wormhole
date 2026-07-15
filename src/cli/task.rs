@@ -39,7 +39,8 @@ pub(super) fn task_create_from_sprint(client: &Client) -> Result<(), String> {
         // Only process items with jira_key
         if let Some(jira_key) = item.get("kv").and_then(|kv| kv.get("jira_key")) {
             let jira_key = jira_key.as_str().ok_or("'jira_key' is not a string")?;
-            let (repo, branch) = project_key.split_once(':').ok_or_else(|| {
+            let key = ProjectKey::parse(project_key);
+            let (repo, branch) = key.as_task().ok_or_else(|| {
                 format!(
                     "Task with jira_key '{}' has invalid project_key '{}' (expected repo:branch)",
                     jira_key, project_key
@@ -308,7 +309,7 @@ fn find_task_by_jira_key(
             {
                 if kv_jira == jira_key {
                     if let Some(project_key) = item.get("project_key").and_then(|k| k.as_str()) {
-                        if let Some((repo, branch)) = project_key.split_once(':') {
+                        if let Some((repo, branch)) = ProjectKey::parse(project_key).as_task() {
                             return Ok(Some((repo.to_string(), branch.to_string())));
                         }
                     }
@@ -510,8 +511,9 @@ fn parse_create_target(
     }
 
     // Project key (repo:branch)
-    if let Some((repo, branch)) = target.split_once(':') {
-        let store_key = format!("{}:{}", repo, branch);
+    let key = ProjectKey::parse(target);
+    if let Some((repo, branch)) = key.as_task() {
+        let store_key = key.to_string();
         let existing = if client.kv_get(&store_key, "jira_key").is_ok() {
             Some((repo.to_string(), branch.to_string()))
         } else {

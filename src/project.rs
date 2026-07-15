@@ -14,6 +14,10 @@ impl RepoName {
     pub fn new(s: impl Into<String>) -> Self {
         Self(s.into())
     }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 impl fmt::Display for RepoName {
@@ -67,6 +71,13 @@ impl ProjectKey {
             Some((repo, branch)) => Self::task(repo, branch),
             None => Self::project(s),
         }
+    }
+
+    /// `(repo, branch)` when this key denotes a task; `None` for a plain project.
+    pub fn as_task(&self) -> Option<(&str, &str)> {
+        self.branch
+            .as_ref()
+            .map(|b| (self.repo.as_str(), b.as_str()))
     }
 }
 
@@ -208,5 +219,14 @@ mod tests {
             encoded.branch.is_none(),
             "encoded key parses as project (no colon found)"
         );
+    }
+
+    #[test]
+    fn test_as_task() {
+        assert_eq!(
+            ProjectKey::parse("repo:my-branch").as_task(),
+            Some(("repo", "my-branch"))
+        );
+        assert_eq!(ProjectKey::parse("repo").as_task(), None);
     }
 }

@@ -1,5 +1,5 @@
 wormhole-cd() {
-    if [ -n "$1" ]; then
+    if [ -n "${1:-}" ]; then
         builtin cd "$1"
     else
         builtin cd "$WORMHOLE_PROJECT_DIR"

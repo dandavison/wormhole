@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct ProjectView<V: Equatable>: View {
@@ -31,15 +32,35 @@ struct ProjectView<V: Equatable>: View {
 struct ProjectPopup<V: Equatable>: View {
     @ObservedObject var model: ProjectSelectorModel<V>
 
+    private let rowHeight: CGFloat = 24
+
+    private var maxHeight: CGFloat {
+        (NSScreen.main?.visibleFrame.height ?? 800) * 0.6
+    }
+
     var body: some View {
         let model = self.model
         let projects = model.projects
+        let contentHeight = CGFloat(projects.count) * rowHeight + 20
 
-        return VStack(spacing: 0) {
-            ForEach(projects.indices, id: \.self)  { idx in
-                ProjectView(project: projects[idx], model: model)
+        return ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(projects.indices, id: \.self)  { idx in
+                        ProjectView(project: projects[idx], model: model)
+                            .id(idx)
+                    }
+                }
+                .padding(10)
+            }
+            .frame(height: min(contentHeight, maxHeight))
+            .onChange(of: model.selectedProject) { selected in
+                guard let selected = selected,
+                      let idx = projects.firstIndex(of: selected) else { return }
+                withAnimation(.easeOut(duration: 0.1)) {
+                    proxy.scrollTo(idx, anchor: .center)
+                }
             }
         }
-        .padding(10)
     }
 }

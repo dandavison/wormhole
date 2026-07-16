@@ -194,13 +194,39 @@ pub fn pr_checkout(
         "--repo",
         &format!("{}/{}", owner, repo),
     ])
-    .current_dir(worktree_path);
-    let output = output_with_timeout(&mut cmd, Duration::from_secs(10), "gh pr checkout")?;
+    .current_dir(worktree_path)
+    .env("GIT_TERMINAL_PROMPT", "0")
+    .env("GIT_SSH_COMMAND", non_interactive_ssh_command());
+    let output = output_with_timeout(&mut cmd, Duration::from_secs(30), "gh pr checkout")?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("gh pr checkout failed: {}", stderr.trim()));
+        return Err(checkout_error_hint(stderr.trim()));
     }
     Ok(())
+}
+
+/// The wormhole server has no tty and nulls stdin, so an interactive SSH
+/// passphrase prompt would block invisibly until the timeout. BatchMode makes
+/// ssh fail fast instead, preserving any user-configured ssh command.
+fn non_interactive_ssh_command() -> String {
+    let base = std::env::var("GIT_SSH_COMMAND").unwrap_or_else(|_| "ssh".to_string());
+    format!("{base} -o BatchMode=yes -o ConnectTimeout=8")
+}
+
+fn checkout_error_hint(stderr: &str) -> String {
+    let auth_failure = stderr.contains("Permission denied")
+        || stderr.contains("Could not read from remote")
+        || stderr.contains("Host key verification failed")
+        || stderr.contains("Enter passphrase");
+    if auth_failure {
+        format!(
+            "gh pr checkout failed: git could not authenticate over SSH. Your key may be \
+             missing from ssh-agent or require a passphrase. Run `ssh-add` to load it into \
+             the agent, then retry.\n{stderr}"
+        )
+    } else {
+        format!("gh pr checkout failed: {stderr}")
+    }
 }
 
 fn output_with_timeout(cmd: &mut Command, timeout: Duration, what: &str) -> Result<Output, String> {
@@ -553,6 +579,18 @@ mod tests {
         cmd.args(["-c", "printf ok"]);
         let output = output_with_timeout(&mut cmd, Duration::from_secs(1), "test").unwrap();
         assert_eq!(String::from_utf8(output.stdout).unwrap(), "ok");
+    }
+
+    #[test]
+    fn checkout_error_hint_flags_ssh_auth_failure() {
+        let hint = checkout_error_hint("git@github.com: Permission denied (publickey).");
+        assert!(hint.contains("ssh-add"), "unexpected hint: {hint}");
+    }
+
+    #[test]
+    fn checkout_error_hint_passes_through_other_errors() {
+        let hint = checkout_error_hint("some other failure");
+        assert_eq!(hint, "gh pr checkout failed: some other failure");
     }
 
     #[test]

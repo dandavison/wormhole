@@ -106,13 +106,7 @@ impl ProjectPath {
         line: Option<usize>,
         projects: &Projects,
     ) -> Option<Self> {
-        let re = Regex::new(r"^(.*):([^:]*)$").unwrap();
-        let (path, line) = if let Some(captures) = re.captures(path) {
-            let line = captures.get(2).unwrap().as_str().parse::<usize>().ok();
-            (PathBuf::from(captures.get(1).unwrap().as_str()), line)
-        } else {
-            (PathBuf::from(path), line)
-        };
+        let (path, line) = resolve_file_path(path, line);
         if let Some(project) = projects.by_path(&path) {
             Some(ProjectPath {
                 project: project.clone(),
@@ -190,5 +184,63 @@ impl ProjectPath {
                 .and_then(|(p, _)| p.to_str())
                 .unwrap_or(""),
         )
+    }
+}
+
+/// Parse the `/file/` remainder into an absolute path and optional line.
+///
+/// The endpoint carries an absolute filesystem path, so wormhole URLs read
+/// `/file//Users/x` (the second slash is the path's own leading slash). A
+/// `//`->`/` collapse anywhere between the link and the server — common in
+/// terminals, URL handlers, and proxies — delivers `/file/Users/x`, leaving a
+/// relative remainder after the prefix strip. Restore the leading slash so the
+/// path resolves against a project rather than the server's working directory.
+fn resolve_file_path(raw: &str, line: Option<usize>) -> (PathBuf, Option<usize>) {
+    let re = Regex::new(r"^(.*):([^:]*)$").unwrap();
+    let (path, line) = if let Some(captures) = re.captures(raw) {
+        let line = captures.get(2).unwrap().as_str().parse::<usize>().ok();
+        (PathBuf::from(captures.get(1).unwrap().as_str()), line)
+    } else {
+        (PathBuf::from(raw), line)
+    };
+    let path = if path.is_absolute() {
+        path
+    } else {
+        PathBuf::from("/").join(path)
+    };
+    (path, line)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn restores_leading_slash_when_collapsed() {
+        let (path, line) = resolve_file_path(
+            "Users/dan/src/temporal-all/repos/temporal/chasm/lib/activity/activity.go",
+            Some(1),
+        );
+        assert_eq!(
+            path,
+            PathBuf::from(
+                "/Users/dan/src/temporal-all/repos/temporal/chasm/lib/activity/activity.go"
+            )
+        );
+        assert_eq!(line, Some(1));
+    }
+
+    #[test]
+    fn leaves_absolute_path_unchanged() {
+        let (path, line) = resolve_file_path("/Users/dan/src/wormhole/src/main.rs", None);
+        assert_eq!(path, PathBuf::from("/Users/dan/src/wormhole/src/main.rs"));
+        assert_eq!(line, None);
+    }
+
+    #[test]
+    fn parses_trailing_line_suffix() {
+        let (path, line) = resolve_file_path("Users/dan/src/wormhole/src/main.rs:42", None);
+        assert_eq!(path, PathBuf::from("/Users/dan/src/wormhole/src/main.rs"));
+        assert_eq!(line, Some(42));
     }
 }

@@ -4,7 +4,7 @@ local M = {}
 local ring = require("ring")
 
 M.host = "http://localhost:7117"
-M.dashboardApp = "Google Chrome"
+M.dashboardApp = nil -- nil => system default browser
 M.guiAppPath = "/Applications/Wormhole.app"
 M.selectRepeatInterval = 0.08 -- seconds between cycles when holding key
 M.selectDebounce = 0.02       -- minimum seconds between down arrows
@@ -185,8 +185,19 @@ end
 
 local dashboardPreviousApp = nil
 
+local function defaultBrowserName()
+    local bundleID = hs.urlevent.getDefaultHandler("http")
+    return bundleID and hs.application.nameForBundleID(bundleID) or nil
+end
+
 function M.focusDashboard()
-    local appName = M.dashboardApp
+    local appName = M.dashboardApp or defaultBrowserName()
+    local dashboardUrl = M.host .. "/"
+    if not appName then
+        hs.urlevent.openURL(dashboardUrl)
+        return
+    end
+
     local frontApp = hs.application.frontmostApplication()
     local isBrowser = frontApp and frontApp:name() == appName
 
@@ -200,7 +211,6 @@ function M.focusDashboard()
         dashboardPreviousApp = frontApp
     end
 
-    local dashboardUrl = M.host .. "/"
     local script = string.format([[
         (() => {
             const browser = Application("%s");

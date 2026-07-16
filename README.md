@@ -34,7 +34,7 @@ Wormhole is a tool for working on software projects.
   discover it using the repo remote that is stored by git on disk.)
 
 - Wormhole is a process exposing an HTTP API, with a CLI client that is a thin wrapper over the HTTP
-  API. The CLI API includes `wormhole project list`, `wormhole project create`,
+  API. The CLI API includes `wormhole project list`, `wormhole open`,
   `wormhole project switch`, etc.
 
 - On server start, `wormhole project list` lists all tasks discovered on disk.
@@ -83,7 +83,7 @@ Wormhole is a tool for working on software projects.
 ## The grid
 
 By default, wormhole doesn't even think about Cursor/VSCode. The Hammerspoon switcher slides left and
-right effortlessly between tmux windows, and a new wormhole project create is a very fast tmux spawn.
+right effortlessly between tmux windows, and a new wormhole open is a very fast tmux spawn.
 
 I think of wormhole as a two-dimensional grid. The x axis is projects. The y axis has two rows: the
 lower row is tmux, and the upper is the editor. The upper row is nullable (the lower is
@@ -156,7 +156,11 @@ wormhole server attach                  # Attach to running server
 wormhole open myapp                     # Switch to project by name
 wormhole open /path/to/repo             # Open/create project at path
 wormhole open /path/to/file.rs:42       # Open file at line in editor
-wormhole open myrepo:ACT-1234           # Open task (creates worktree if needed)
+wormhole open myrepo:my-branch          # Open task (creates worktree if needed)
+wormhole open https://github.com/o/r/pull/123 # Resolve a PR/issue URL into a worktree, then switch
+wormhole open o/r#123                    # Same, short form (also: bare #123 against cwd remote)
+wormhole open ACT-1234                   # Resolve a JIRA key/URL into a worktree, then switch
+wormhole open ACT-1234 -p myrepo        # Home project for the new worktree; --dry-run to preview
 wormhole project list                   # List projects (includes tasks)
 wormhole project list --available       # List available projects (from search_paths)
 wormhole project list --active          # List only projects with tmux windows
@@ -179,7 +183,6 @@ wormhole kv set myapp land-in editor    # Set KV
 wormhole kv delete myapp land-in        # Delete KV
 wormhole kv delete --all land-in        # Delete a key from every project (e.g. clear pins)
 wormhole kv list myapp                  # List all KV for project
-wormhole project create <target>       # Create or update a project worktree (JIRA/PR/issue ref or repo:branch)
 wormhole project create-from-sprint     # Create projects for all sprint issues
 wormhole project create-from-review-requests # Create projects from PR review requests
 wormhole project done myrepo:ACT-1234   # Mark a non-JIRA project as done

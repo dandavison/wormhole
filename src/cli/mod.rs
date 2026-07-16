@@ -212,18 +212,6 @@ pub enum ProjectCommand {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         command: Vec<String>,
     },
-    /// Create or update a project worktree from a JIRA/PR/issue ref or repo:branch
-    Create {
-        /// Target: PR number (#123), PR/issue URL, owner/repo#123, project key (repo:branch), JIRA URL, or JIRA key
-        #[arg(add = ArgValueCompleter::new(complete_projects))]
-        target: String,
-        /// Home project for the worktree
-        #[arg(short = 'p', long, add = ArgValueCompleter::new(complete_projects))]
-        home_project: Option<String>,
-        /// Show what would be created without actually creating
-        #[arg(long)]
-        dry_run: bool,
-    },
     /// Create projects from current sprint issues
     CreateFromSprint,
     /// Create projects from GitHub PRs requesting your review
@@ -279,14 +267,20 @@ pub enum Command {
         command: ProjectCommand,
     },
 
-    /// Open a file, directory, project, or task
+    /// Open a file, directory, project, task, or PR/issue/JIRA reference
     Open {
-        /// Path to file/directory, project name, or task (project:branch)
+        /// Path, project name, task (repo:branch), PR/issue URL, owner/repo#N, PR number (#N), or JIRA key/URL
         #[arg(value_hint = ValueHint::AnyPath, add = ArgValueCompleter::new(complete_projects))]
         target: String,
         /// Which application to focus (only for project/task, not file/directory)
         #[arg(long, value_name = "APP")]
         land_in: Option<String>,
+        /// Home project for a worktree created from a PR/issue/JIRA reference
+        #[arg(short = 'p', long, add = ArgValueCompleter::new(complete_projects))]
+        home_project: Option<String>,
+        /// For a PR/issue/JIRA reference, show what would be created without creating it
+        #[arg(long)]
+        dry_run: bool,
     },
 
     /// Key-value storage operations
@@ -664,11 +658,6 @@ pub fn run(command: Command) -> Result<(), String> {
                 }
                 Ok(())
             }
-            ProjectCommand::Create {
-                target,
-                home_project,
-                dry_run,
-            } => task::task_create(&client, &target, home_project, dry_run),
             ProjectCommand::CreateFromSprint => task::task_create_from_sprint(&client),
             ProjectCommand::CreateFromReviewRequests { dry_run } => {
                 task::task_create_from_review_requests(&client, dry_run)
@@ -691,7 +680,15 @@ pub fn run(command: Command) -> Result<(), String> {
             }
         },
 
-        Command::Open { target, land_in } => {
+        Command::Open {
+            target,
+            land_in,
+            home_project,
+            dry_run,
+        } => {
+            if task::is_create_ref(&target) {
+                return task::task_create(&client, &target, home_project, dry_run);
+            }
             let (path_str, line) = parse_path_and_line(&target);
             let target_path = std::path::Path::new(&path_str);
 

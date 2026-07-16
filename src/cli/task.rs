@@ -292,6 +292,15 @@ enum CreateTarget {
     GithubRef(String),
 }
 
+/// Does `target` name a PR/issue/JIRA reference that must be resolved into a
+/// worktree, as opposed to an existing file, directory, project, or task key?
+/// Used by `open` to route such references through the create flow.
+pub(super) fn is_create_ref(target: &str) -> bool {
+    crate::github::parse_github_ref(target).is_some()
+        || crate::handlers::describe::parse_jira_key_or_url(target).is_some()
+        || target.strip_prefix('#').unwrap_or(target).parse::<u64>().is_ok()
+}
+
 /// Find an existing task by JIRA key from the project list
 fn find_task_by_jira_key(
     client: &Client,
@@ -587,4 +596,38 @@ fn ensure_task(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_create_ref;
+
+    #[test]
+    fn create_refs_route_to_create() {
+        for target in [
+            "https://github.com/temporalio/temporal/pull/11097",
+            "https://github.com/temporalio/temporal/issues/42",
+            "temporalio/temporal#11097",
+            "#123",
+            "123",
+            "ACT-1234",
+            "https://mycompany.atlassian.net/browse/ACT-1234",
+        ] {
+            assert!(is_create_ref(target), "expected create ref: {target}");
+        }
+    }
+
+    #[test]
+    fn open_targets_do_not_route_to_create() {
+        for target in [
+            "temporal:my-branch",
+            "myrepo",
+            "src/cli/task.rs",
+            "src/cli/task.rs:42",
+            "/abs/path/to/dir",
+            "feature/foo",
+        ] {
+            assert!(!is_create_ref(target), "expected open target: {target}");
+        }
+    }
 }

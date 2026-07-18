@@ -298,7 +298,11 @@ enum CreateTarget {
 pub(super) fn is_create_ref(target: &str) -> bool {
     crate::github::parse_github_ref(target).is_some()
         || crate::handlers::describe::parse_jira_key_or_url(target).is_some()
-        || target.strip_prefix('#').unwrap_or(target).parse::<u64>().is_ok()
+        || target
+            .strip_prefix('#')
+            .unwrap_or(target)
+            .parse::<u64>()
+            .is_ok()
 }
 
 /// Find an existing task by JIRA key from the project list

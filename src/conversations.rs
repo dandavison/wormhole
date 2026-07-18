@@ -168,6 +168,10 @@ fn extract_text(content: &[ContentBlock]) -> String {
     parts.join("\n")
 }
 
+/// Bumped whenever `render_conversation`'s output format changes, so already
+/// synced files are regenerated even when their source transcript is unchanged.
+const RENDER_VERSION: u32 = 2;
+
 pub fn render_conversation(
     project: &str,
     date: &str,
@@ -175,6 +179,7 @@ pub fn render_conversation(
     messages: &[Message],
 ) -> String {
     let mut out = format!("# {} | {} | {}\n", project, date, session_uuid);
+    out.push_str(&format!("<!-- render-version: {} -->\n", RENDER_VERSION));
     for msg in messages {
         let heading = match msg.role {
             Role::User => "User",
@@ -689,7 +694,10 @@ fn materialize(
         let out_dir = output_dir.join(&dir_name);
         let out_file = out_dir.join(out_filename(&date, &slug, short_id));
 
-        if out_file.exists() && !source_newer(&t.path, &out_file) {
+        if out_file.exists()
+            && !source_newer(&t.path, &out_file)
+            && existing_render_version(&out_file) == Some(RENDER_VERSION)
+        {
             skipped += 1;
             continue;
         }
@@ -820,6 +828,23 @@ fn copy_mtime(source: &Path, dest: &Path) {
             let _ = f.set_modified(mtime);
         }
     }
+}
+
+/// The `render-version` marker of an already-synced file, or None when absent
+/// (files written before versioning, which must be regenerated).
+fn existing_render_version(path: &Path) -> Option<u32> {
+    use std::io::BufRead;
+    let file = std::fs::File::open(path).ok()?;
+    for line in std::io::BufReader::new(file)
+        .lines()
+        .take(3)
+        .map_while(Result::ok)
+    {
+        if let Some(rest) = line.trim().strip_prefix("<!-- render-version:") {
+            return rest.trim_end_matches("-->").trim().parse().ok();
+        }
+    }
+    None
 }
 
 fn source_newer(source: &Path, dest: &Path) -> bool {
@@ -1424,6 +1449,56 @@ mod tests {
     }
 
     #[test]
+    fn test_materialize_regenerates_on_stale_render_version() {
+        use std::time::Duration;
+
+        let src_dir = tempfile::tempdir().unwrap();
+        let out_dir = tempfile::tempdir().unwrap();
+        let src = src_dir.path().join("sess-abc.jsonl");
+        std::fs::write(
+            &src,
+            r#"{"type":"user","message":{"content":"Hello"},"uuid":"u1","sessionId":"abc"}
+{"type":"assistant","message":{"content":[{"type":"text","text":"Hi there"}]},"uuid":"a1","sessionId":"abc"}
+"#,
+        )
+        .unwrap();
+        let source_mtime = SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+        std::fs::File::open(&src)
+            .unwrap()
+            .set_modified(source_mtime)
+            .unwrap();
+
+        let transcripts = vec![TranscriptFile {
+            project_key: "wormhole".to_string(),
+            transcript_id: "00000000-0000-0000-0000-000000000abc".to_string(),
+            path: src.clone(),
+            source: TranscriptSource::ClaudeCode,
+        }];
+
+        // Pre-existing output with an older render version and an up-to-date mtime:
+        // the mtime check alone would skip it, but the stale version forces a rewrite.
+        let date = file_date(&src);
+        let out_file = out_dir
+            .path()
+            .join("wormhole")
+            .join(format!("{}-hello-00000000.md", date));
+        std::fs::create_dir_all(out_file.parent().unwrap()).unwrap();
+        std::fs::write(
+            &out_file,
+            "# stale\n<!-- render-version: 1 -->\n\nold body\n",
+        )
+        .unwrap();
+        std::fs::File::open(&out_file)
+            .unwrap()
+            .set_modified(source_mtime)
+            .unwrap();
+
+        let result = materialize(&transcripts, &[], out_dir.path(), None, None);
+        assert_eq!(result.synced, 1);
+        assert_eq!(existing_render_version(&out_file), Some(RENDER_VERSION));
+    }
+
+    #[test]
     fn test_prune_removes_dupes_but_keeps_sourceless_copies() {
         let out_dir = tempfile::tempdir().unwrap();
         let src_dir = tempfile::tempdir().unwrap();
@@ -1498,8 +1573,17 @@ mod tests {
         let uuid = "8afac8bb-1234-5678-9abc-def012345678";
         let rendered = render_conversation("wormhole", "2026-02-25", uuid, &messages);
         assert!(rendered.starts_with(&format!("# wormhole | 2026-02-25 | {}\n", uuid)));
+        assert_eq!(existing_render_version_str(&rendered), Some(RENDER_VERSION));
         assert!(rendered.contains("## User\n\nHello\n"));
         assert!(rendered.contains("## Assistant\n\nHi there!\n"));
+    }
+
+    fn existing_render_version_str(rendered: &str) -> Option<u32> {
+        rendered.lines().take(3).find_map(|l| {
+            l.trim()
+                .strip_prefix("<!-- render-version:")
+                .and_then(|r| r.trim_end_matches("-->").trim().parse().ok())
+        })
     }
 
     #[test]

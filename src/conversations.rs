@@ -1081,8 +1081,9 @@ fn parse_claude_code_jsonl_str(content: &str) -> Result<Vec<Message>, String> {
     Ok(messages)
 }
 
-/// Extract user text from CC JSONL. Content may be a string or an array of blocks.
-/// Skip tool_result blocks (those are tool responses, not user-authored text).
+/// Extract user text from CC JSONL. Content may be a string or an array of
+/// blocks. tool_result blocks are rendered inline so tool output (file
+/// contents, command output) stays searchable.
 fn extract_cc_user_text(record: &serde_json::Value) -> String {
     let content = match record.get("message").and_then(|m| m.get("content")) {
         Some(c) => c,
@@ -1097,17 +1098,22 @@ fn extract_cc_user_text(record: &serde_json::Value) -> String {
     };
     let mut parts = Vec::new();
     for block in blocks {
-        let btype = block.get("type").and_then(|t| t.as_str()).unwrap_or("");
-        if btype == "text" {
-            if let Some(text) = block.get("text").and_then(|t| t.as_str()) {
-                parts.push(text);
+        match block.get("type").and_then(|t| t.as_str()).unwrap_or("") {
+            "text" => {
+                if let Some(text) = block.get("text").and_then(|t| t.as_str()) {
+                    parts.push(text.to_string());
+                }
             }
+            "tool_result" => parts.push(render_tool_result(block)),
+            _ => {}
         }
     }
     parts.join("\n")
 }
 
-/// Extract assistant text from CC JSONL. Content is always an array; keep only text blocks.
+/// Extract assistant text from CC JSONL. Content is always an array; text blocks
+/// pass through and tool_use blocks are rendered inline so the call arguments
+/// (paths, patterns, edited code) stay searchable.
 fn extract_cc_assistant_text(record: &serde_json::Value) -> String {
     let blocks = match record
         .get("message")
@@ -1119,14 +1125,45 @@ fn extract_cc_assistant_text(record: &serde_json::Value) -> String {
     };
     let mut parts = Vec::new();
     for block in blocks {
-        let btype = block.get("type").and_then(|t| t.as_str()).unwrap_or("");
-        if btype == "text" {
-            if let Some(text) = block.get("text").and_then(|t| t.as_str()) {
-                parts.push(text);
+        match block.get("type").and_then(|t| t.as_str()).unwrap_or("") {
+            "text" => {
+                if let Some(text) = block.get("text").and_then(|t| t.as_str()) {
+                    parts.push(text.to_string());
+                }
             }
+            "tool_use" => parts.push(render_tool_use(block)),
+            _ => {}
         }
     }
     parts.join("\n")
+}
+
+/// A `tool_use` block as searchable text: a labelled header plus its input JSON.
+fn render_tool_use(block: &serde_json::Value) -> String {
+    let name = block.get("name").and_then(|n| n.as_str()).unwrap_or("tool");
+    match block.get("input") {
+        Some(input) if !input.is_null() => {
+            let rendered =
+                serde_json::to_string_pretty(input).unwrap_or_else(|_| input.to_string());
+            format!("[tool_use: {}]\n{}", name, rendered)
+        }
+        _ => format!("[tool_use: {}]", name),
+    }
+}
+
+/// A `tool_result` block as searchable text. Result content is a string or an
+/// array of blocks; keep the text of each.
+fn render_tool_result(block: &serde_json::Value) -> String {
+    let body = match block.get("content") {
+        Some(serde_json::Value::String(s)) => s.clone(),
+        Some(serde_json::Value::Array(blocks)) => blocks
+            .iter()
+            .filter_map(|b| b.get("text").and_then(|t| t.as_str()))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        _ => String::new(),
+    };
+    format!("[tool_result]\n{}", body)
 }
 
 #[derive(Deserialize)]
@@ -1469,17 +1506,34 @@ mod tests {
     fn test_parse_claude_code_jsonl() {
         let input = r#"{"type":"queue-operation","operation":"dequeue","sessionId":"abc"}
 {"type":"user","message":{"content":"Hello world"},"uuid":"u1","sessionId":"abc"}
-{"type":"assistant","message":{"content":[{"type":"text","text":"Hi!"},{"type":"tool_use","id":"t1","name":"Read"}]},"uuid":"u2","sessionId":"abc"}
+{"type":"assistant","message":{"content":[{"type":"text","text":"Hi!"},{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"/tmp/foo.rs"}}]},"uuid":"u2","sessionId":"abc"}
 {"type":"user","message":{"content":[{"tool_use_id":"t1","type":"tool_result","content":"file contents"}]},"uuid":"u3","sessionId":"abc"}
 {"type":"assistant","message":{"content":[{"type":"text","text":"Got it."}]},"uuid":"u4","sessionId":"abc"}"#;
         let messages = parse_claude_code_jsonl_str(input).unwrap();
-        assert_eq!(messages.len(), 3);
+        assert_eq!(messages.len(), 4);
         assert_eq!(messages[0].role, Role::User);
         assert_eq!(messages[0].text, "Hello world");
         assert_eq!(messages[1].role, Role::Assistant);
-        assert_eq!(messages[1].text, "Hi!");
-        assert_eq!(messages[2].role, Role::Assistant);
-        assert_eq!(messages[2].text, "Got it.");
+        assert_eq!(
+            messages[1].text,
+            "Hi!\n[tool_use: Read]\n{\n  \"file_path\": \"/tmp/foo.rs\"\n}"
+        );
+        assert_eq!(messages[2].role, Role::User);
+        assert_eq!(messages[2].text, "[tool_result]\nfile contents");
+        assert_eq!(messages[3].role, Role::Assistant);
+        assert_eq!(messages[3].text, "Got it.");
+    }
+
+    #[test]
+    fn test_tool_content_is_searchable() {
+        // An identifier that appears only inside tool call args and tool output —
+        // never in prose — must survive into the rendered conversation.
+        let input = r#"{"type":"user","message":{"content":"look into the timer"},"uuid":"u1","sessionId":"abc"}
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Grep","input":{"pattern":"DeferredResetAttempts"}}]},"uuid":"u2","sessionId":"abc"}
+{"type":"user","message":{"content":[{"tool_use_id":"t1","type":"tool_result","content":[{"type":"text","text":"activity.go:42: DeferredResetAttempts int32"}]}]},"uuid":"u3","sessionId":"abc"}"#;
+        let messages = parse_claude_code_jsonl_str(input).unwrap();
+        let rendered = render_conversation("proj", "2026-07-17", "abc", &messages);
+        assert_eq!(rendered.matches("DeferredResetAttempts").count(), 2);
     }
 
     #[test]

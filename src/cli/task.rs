@@ -347,6 +347,7 @@ pub(super) fn task_create(
     client: &Client,
     target: &str,
     home_project: Option<String>,
+    land_in: Option<String>,
     dry_run: bool,
 ) -> Result<(), String> {
     // Refresh to get latest task list
@@ -357,7 +358,13 @@ pub(super) fn task_create(
 
     // GitHub ref (PR or issue): non-interactive flow via server
     if let CreateTarget::GithubRef(ref github_ref) = create_target {
-        return task_create_from_github_ref(client, github_ref, home_project.as_deref(), dry_run);
+        return task_create_from_github_ref(
+            client,
+            github_ref,
+            home_project.as_deref(),
+            land_in,
+            dry_run,
+        );
     }
 
     // Get JIRA info if we have a JIRA key
@@ -492,6 +499,10 @@ pub(super) fn task_create(
         println!("Created task {}", task_key.hyperlink());
     }
 
+    // Switch to the task
+    let query = build_switch_query(&land_in, &None, &None, &None);
+    client.get(&format!("/project/switch/{}{}", task_key, query))?;
+
     Ok(())
 }
 
@@ -551,6 +562,7 @@ fn task_create_from_github_ref(
     client: &Client,
     github_ref: &str,
     home_project: Option<&str>,
+    land_in: Option<String>,
     dry_run: bool,
 ) -> Result<(), String> {
     let encoded: String = url::form_urlencoded::byte_serialize(github_ref.as_bytes()).collect();
@@ -566,18 +578,33 @@ fn task_create_from_github_ref(
     eprintln!(" done");
     let result: serde_json::Value =
         serde_json::from_str(&response).map_err(|e| format!("Failed to parse response: {}", e))?;
-    if let Some(created) = result.get("created").and_then(|v| v.as_str()) {
-        let key_str = created.split(" (").next().unwrap_or(created);
+    // Extract the task key from whichever outcome we got: "repo:branch (...)"
+    let created_key = result
+        .get("created")
+        .and_then(|v| v.as_str())
+        .map(|s| s.split(" (").next().unwrap_or(s).to_string());
+    let skipped_key = result
+        .get("skipped")
+        .and_then(|v| v.as_str())
+        .map(|s| s.split(" already exists").next().unwrap_or(s).to_string());
+    if let Some(ref key_str) = created_key {
         let key = ProjectKey::parse(key_str);
         println!("  {}", key.hyperlink());
     }
-    if let Some(skipped) = result.get("skipped").and_then(|v| v.as_str()) {
-        let key_str = skipped.split(" already exists").next().unwrap_or(skipped);
+    if let Some(ref key_str) = skipped_key {
         let key = ProjectKey::parse(key_str);
         println!("  Skipped: {} already exists", key.hyperlink());
     }
     if let Some(error) = result.get("error").and_then(|v| v.as_str()) {
         eprintln!("  Error: {}", error);
+    }
+
+    // Switch to the task (created, or already existing)
+    if !dry_run {
+        if let Some(key_str) = created_key.or(skipped_key) {
+            let query = build_switch_query(&land_in, &None, &None, &None);
+            client.get(&format!("/project/switch/{}{}", key_str, query))?;
+        }
     }
     Ok(())
 }

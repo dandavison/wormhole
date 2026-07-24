@@ -687,7 +687,7 @@ pub fn run(command: Command) -> Result<(), String> {
             dry_run,
         } => {
             if task::is_create_ref(&target) {
-                return task::task_create(&client, &target, home_project, dry_run);
+                return task::task_create(&client, &target, home_project, land_in, dry_run);
             }
             let (path_str, line) = parse_path_and_line(&target);
             let target_path = std::path::Path::new(&path_str);

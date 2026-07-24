@@ -270,15 +270,10 @@ pub fn create_github_ref_task(
         }
     };
 
-    projects::refresh_tasks();
     let task_key_str = format!("{}:{}", home, branch);
-    let existing = {
-        let projects = projects::lock();
-        projects
-            .all()
-            .iter()
-            .any(|p| p.is_task() && p.store_key().to_string() == task_key_str)
-    };
+    let existing = git::task_worktree_path(config::worktree_dir(), &home, &branch)
+        .join(".git")
+        .exists();
 
     if kind == GithubRefKind::Issue && existing {
         return Ok(GithubTaskResult {
@@ -331,13 +326,12 @@ pub fn create_github_ref_task(
 }
 
 fn build_github_repo_map() -> std::collections::HashMap<String, config::CanonicalName> {
-    let mut map = std::collections::HashMap::new();
-    for (name, path) in config::available_projects() {
-        if let Some(github_repo) = git::github_repo_from_remote(&path) {
-            map.insert(github_repo, name);
-        }
-    }
-    map
+    use rayon::prelude::*;
+    // One `git remote` subprocess per available repo; run them in parallel.
+    config::available_projects()
+        .into_par_iter()
+        .filter_map(|(name, path)| git::github_repo_from_remote(&path).map(|repo| (repo, name)))
+        .collect()
 }
 
 fn resolve_project_path(project_name: &str) -> Result<PathBuf, String> {

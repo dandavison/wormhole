@@ -350,8 +350,14 @@ pub(super) fn task_create(
     land_in: Option<String>,
     dry_run: bool,
 ) -> Result<(), String> {
-    // Refresh to get latest task list
-    let _ = client.post("/project/refresh-tasks");
+    // GitHub PR/issue and bare PR numbers resolve entirely server-side, which
+    // does its own refresh; only the JIRA / repo:branch flows below read the
+    // local task list during parsing and need it refreshed first.
+    let server_resolved = crate::github::parse_github_ref(target).is_some()
+        || target.strip_prefix('#').unwrap_or(target).parse::<u64>().is_ok();
+    if !server_resolved {
+        let _ = client.post("/project/refresh-tasks");
+    }
 
     // Parse target to determine what we're working with
     let (create_target, existing_task) = parse_create_target(client, target)?;

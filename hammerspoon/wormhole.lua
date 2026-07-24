@@ -275,15 +275,13 @@ end
 
 function M.bindKeys(keymap)
     M.bindSelect({ "cmd" }, "f13")
-    hs.hotkey.bind({ "cmd", "control" }, "left", M.previous)
-    hs.hotkey.bind({ "cmd", "control" }, "right", M.next)
-    hs.hotkey.bind({ "cmd", "control" }, "up", M.editor)
-    hs.hotkey.bind({ "cmd", "control" }, "down", M.terminal)
+    -- right_option shows the ring overlay; right_option+arrows navigate it
+    -- (handled by ring.bind's eventtap, since hs.hotkey can't distinguish
+    -- left/right option)
     hs.hotkey.bind({ "cmd", "control" }, ".", M.pin)
     hs.hotkey.bind({ "cmd", "alt" }, "k", M.createHotkeyOverlay(keymap))
     M.bindProjectHotkeys(keymap)
     ring.bind()
-    M.bindDashboardKey()
 end
 
 return M

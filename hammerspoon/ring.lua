@@ -1,4 +1,4 @@
--- Ring switcher: ctrl+cmd+left/right navigation with overlay
+-- Ring switcher: hold right_option for the overlay, +arrows to navigate
 local M = {}
 
 M.host = "http://localhost:7117"
@@ -124,12 +124,35 @@ function M.terminal()
 end
 
 function M.bind()
-    tap = hs.eventtap.new({ hs.eventtap.event.types.flagsChanged }, function(event)
-        local flags = event:getFlags()
-        if flags.ctrl and flags.cmd and not flags.alt and not flags.shift then
-            show()
-        else
-            hide()
+    -- 0x40 = right-side alt bit in the raw CGEvent flags
+    local RIGHT_ALT = 0x40
+    local rightOptionDown = false
+    local nav = {
+        [hs.keycodes.map.left] = M.previous,
+        [hs.keycodes.map.right] = M.next,
+        [hs.keycodes.map.up] = M.editor,
+        [hs.keycodes.map.down] = M.terminal,
+    }
+    tap = hs.eventtap.new({
+        hs.eventtap.event.types.flagsChanged,
+        hs.eventtap.event.types.keyDown,
+    }, function(event)
+        if event:getType() == hs.eventtap.event.types.flagsChanged then
+            local down = (event:getRawEventData().CGEventData.flags & RIGHT_ALT) ~= 0
+            if down and not rightOptionDown then
+                show()
+            elseif not down and rightOptionDown then
+                hide()
+            end
+            rightOptionDown = down
+            return false
+        end
+        if rightOptionDown then
+            local fn = nav[event:getKeyCode()]
+            if fn then
+                fn()
+                return true
+            end
         end
         return false
     end)

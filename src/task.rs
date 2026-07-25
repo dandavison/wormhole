@@ -325,13 +325,30 @@ pub fn create_github_ref_task(
     })
 }
 
-fn build_github_repo_map() -> std::collections::HashMap<String, config::CanonicalName> {
-    use rayon::prelude::*;
-    // One `git remote` subprocess per available repo; run them in parallel.
-    config::available_projects()
-        .into_par_iter()
-        .filter_map(|(name, path)| git::github_repo_from_remote(&path).map(|repo| (repo, name)))
-        .collect()
+type GithubRepoMap = std::collections::HashMap<String, config::CanonicalName>;
+
+static GITHUB_REPO_MAP: std::sync::Mutex<Option<GithubRepoMap>> = std::sync::Mutex::new(None);
+
+/// Map each available repo's GitHub `owner/repo` to its local project name.
+/// Built from `git remote` per repo — stable for the server's lifetime, so it
+/// is cached and only rebuilt after `invalidate_github_repo_map` (on refresh).
+fn build_github_repo_map() -> GithubRepoMap {
+    let mut cache = GITHUB_REPO_MAP.lock().unwrap();
+    if cache.is_none() {
+        use rayon::prelude::*;
+        // One `git remote` subprocess per available repo; run them in parallel.
+        let map = config::available_projects()
+            .into_par_iter()
+            .filter_map(|(name, path)| git::github_repo_from_remote(&path).map(|repo| (repo, name)))
+            .collect();
+        *cache = Some(map);
+    }
+    cache.as_ref().unwrap().clone()
+}
+
+/// Drop the cached GitHub repo map so the next lookup rescans remotes.
+pub fn invalidate_github_repo_map() {
+    *GITHUB_REPO_MAP.lock().unwrap() = None;
 }
 
 fn resolve_project_path(project_name: &str) -> Result<PathBuf, String> {

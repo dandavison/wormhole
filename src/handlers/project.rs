@@ -146,6 +146,9 @@ pub fn refresh_all() {
     // Re-read the active editor from wormhole.toml
     crate::config::reload_editor();
 
+    // Rescan repo remotes (available projects may have changed)
+    crate::task::invalidate_github_repo_map();
+
     // Refresh tasks from filesystem
     projects::refresh_tasks();
 

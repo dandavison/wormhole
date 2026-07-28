@@ -164,16 +164,7 @@ pub fn create_worktree(
     worktree_path: &Path,
     branch_name: &str,
 ) -> Result<(), String> {
-    if let Some(parent) = worktree_path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create directory {}: {}", parent.display(), e))?;
-    }
-    // Remove broken remnant (exists but not a git worktree) to avoid
-    // `git worktree add` failing with "already exists".
-    if worktree_path.exists() && !worktree_path.join(".git").exists() {
-        std::fs::remove_dir_all(worktree_path)
-            .map_err(|e| format!("Failed to remove broken worktree dir: {}", e))?;
-    }
+    prepare_worktree_dir(worktree_path)?;
 
     let args = if branch_exists(repo_path, branch_name) {
         if let Some(existing_path) = branch_checked_out_at(repo_path, branch_name) {
@@ -211,73 +202,102 @@ pub fn create_worktree(
     }
 }
 
-/// If the branch has no upstream and a remote tracking branch exists, set it.
-/// Checks `origin` first, then other remotes. Returns the remote tracking
-/// branch (e.g. `origin/main`) if one was found, or `None` if tracking was
-/// already set or no matching remote branch exists.
+/// Create a worktree with detached HEAD. The PR flow uses this so that
+/// `gh pr checkout` creates the branch itself, setting the correct upstream
+/// (including the fork remote for fork PRs).
+pub fn create_worktree_detached(repo_path: &Path, worktree_path: &Path) -> Result<(), String> {
+    prepare_worktree_dir(worktree_path)?;
+    let output = Command::new("git")
+        .args([
+            "worktree",
+            "add",
+            "--detach",
+            worktree_path.to_str().unwrap(),
+            "HEAD",
+        ])
+        .current_dir(repo_path)
+        .output()
+        .map_err(|e| format!("Failed to run git worktree: {}", e))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(format!("git worktree add failed: {}", stderr.trim()))
+    }
+}
+
+fn prepare_worktree_dir(worktree_path: &Path) -> Result<(), String> {
+    if let Some(parent) = worktree_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create directory {}: {}", parent.display(), e))?;
+    }
+    // Remove broken remnant (exists but not a git worktree) to avoid
+    // `git worktree add` failing with "already exists".
+    if worktree_path.exists() && !worktree_path.join(".git").exists() {
+        std::fs::remove_dir_all(worktree_path)
+            .map_err(|e| format!("Failed to remove broken worktree dir: {}", e))?;
+    }
+    Ok(())
+}
+
+/// If the branch has no upstream, set it to the same-named branch on the
+/// default remote (`origin`, or the repo's only remote), even if the remote
+/// branch does not exist locally yet (e.g. a wormhole-created branch not yet
+/// pushed), so `git push`/`git pull` work once it is.
+/// Returns the upstream (e.g. `origin/main`) if one was set or would be set,
+/// or `None` if tracking was already set or the repo has no suitable remote.
 /// When `apply` is true, actually sets the upstream; when false, only checks.
 pub fn ensure_upstream_tracking(
     worktree_path: &Path,
     branch_name: &str,
     apply: bool,
 ) -> Option<String> {
-    let has_upstream = Command::new("git")
+    if has_upstream(worktree_path, branch_name) {
+        return None;
+    }
+    let remote = default_remote(worktree_path)?;
+    if apply {
+        let set = |key: &str, value: String| {
+            let _ = Command::new("git")
+                .args(["config", &format!("branch.{}.{}", branch_name, key), &value])
+                .current_dir(worktree_path)
+                .output();
+        };
+        set("remote", remote.clone());
+        set("merge", format!("refs/heads/{}", branch_name));
+    }
+    Some(format!("{}/{}", remote, branch_name))
+}
+
+fn has_upstream(worktree_path: &Path, branch_name: &str) -> bool {
+    Command::new("git")
         .args(["config", &format!("branch.{}.remote", branch_name)])
         .current_dir(worktree_path)
         .output()
         .map(|o| o.status.success())
-        .unwrap_or(false);
-    if has_upstream {
-        return None;
-    }
-    let remote_branch = find_remote_tracking_branch(worktree_path, branch_name)?;
-    if apply {
-        let _ = Command::new("git")
-            .args(["branch", "--set-upstream-to", &remote_branch, branch_name])
-            .current_dir(worktree_path)
-            .output();
-    }
-    Some(remote_branch)
+        .unwrap_or(false)
 }
 
-/// Find a remote tracking branch for `branch_name`.
-/// Prefers `origin/<branch>`, falls back to the first match from any remote.
-fn find_remote_tracking_branch(worktree_path: &Path, branch_name: &str) -> Option<String> {
-    // Try origin first
-    let origin_ref = format!("origin/{}", branch_name);
-    if remote_ref_exists(worktree_path, &origin_ref) {
-        return Some(origin_ref);
-    }
-    // Search all remotes via for-each-ref
-    let suffix = format!("/{}", branch_name);
+/// The remote to track for new branches: `origin` if it exists, else the
+/// repo's only remote, else None.
+fn default_remote(worktree_path: &Path) -> Option<String> {
     let output = Command::new("git")
-        .args([
-            "for-each-ref",
-            "--format=%(refname:strip=2)",
-            "refs/remotes/",
-        ])
+        .args(["remote"])
         .current_dir(worktree_path)
         .output()
         .ok()?;
+    if !output.status.success() {
+        return None;
+    }
     let stdout = String::from_utf8_lossy(&output.stdout);
-    stdout
-        .lines()
-        .find(|line| line.ends_with(&suffix))
-        .map(String::from)
-}
-
-fn remote_ref_exists(worktree_path: &Path, remote_branch: &str) -> bool {
-    Command::new("git")
-        .args([
-            "show-ref",
-            "--verify",
-            "--quiet",
-            &format!("refs/remotes/{}", remote_branch),
-        ])
-        .current_dir(worktree_path)
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+    let remotes: Vec<&str> = stdout.lines().collect();
+    if remotes.contains(&"origin") {
+        Some("origin".to_string())
+    } else if remotes.len() == 1 {
+        Some(remotes[0].to_string())
+    } else {
+        None
+    }
 }
 
 fn branch_exists(repo_path: &Path, branch_name: &str) -> bool {
@@ -644,6 +664,165 @@ detached
         let result = create_worktree(&repo, &worktree_path, "ACT-123");
         assert!(result.is_ok(), "create_worktree failed: {:?}", result);
         assert!(worktree_path.exists());
+    }
+
+    #[test]
+    fn test_create_worktree_new_branch_sets_optimistic_upstream() {
+        use std::fs;
+
+        let temp = tempfile::tempdir().unwrap();
+        let repo = temp.path().join("repo");
+
+        fs::create_dir_all(&repo).unwrap();
+        Command::new("git")
+            .args(["init"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "--allow-empty", "-m", "init"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["remote", "add", "origin", "git@github.com:owner/repo.git"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+
+        let worktree_path = repo.join("worktrees/feat-x");
+        create_worktree(&repo, &worktree_path, "feat-x").unwrap();
+
+        assert_eq!(git_config(&worktree_path, "branch.feat-x.remote"), "origin");
+        assert_eq!(
+            git_config(&worktree_path, "branch.feat-x.merge"),
+            "refs/heads/feat-x"
+        );
+    }
+
+    #[test]
+    fn test_create_worktree_sets_upstream_to_existing_remote_branch() {
+        use std::fs;
+
+        let temp = tempfile::tempdir().unwrap();
+        let repo = temp.path().join("repo");
+
+        fs::create_dir_all(&repo).unwrap();
+        Command::new("git")
+            .args(["init"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "--allow-empty", "-m", "init"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["remote", "add", "origin", "git@github.com:owner/repo.git"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["update-ref", "refs/remotes/origin/feat-x", "HEAD"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+
+        let worktree_path = repo.join("worktrees/feat-x");
+        create_worktree(&repo, &worktree_path, "feat-x").unwrap();
+
+        let upstream = Command::new("git")
+            .args(["rev-parse", "--abbrev-ref", "feat-x@{upstream}"])
+            .current_dir(&worktree_path)
+            .output()
+            .unwrap();
+        assert!(upstream.status.success());
+        assert_eq!(
+            String::from_utf8_lossy(&upstream.stdout).trim(),
+            "origin/feat-x"
+        );
+    }
+
+    #[test]
+    fn test_create_worktree_no_remote_leaves_upstream_unset() {
+        use std::fs;
+
+        let temp = tempfile::tempdir().unwrap();
+        let repo = temp.path().join("repo");
+
+        fs::create_dir_all(&repo).unwrap();
+        Command::new("git")
+            .args(["init"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "--allow-empty", "-m", "init"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+
+        let worktree_path = repo.join("worktrees/feat-x");
+        create_worktree(&repo, &worktree_path, "feat-x").unwrap();
+
+        assert!(git_config_opt(&worktree_path, "branch.feat-x.remote").is_none());
+    }
+
+    fn git_config(path: &Path, key: &str) -> String {
+        git_config_opt(path, key).unwrap_or_else(|| panic!("{} not set", key))
+    }
+
+    fn git_config_opt(path: &Path, key: &str) -> Option<String> {
+        let output = Command::new("git")
+            .args(["config", key])
+            .current_dir(path)
+            .output()
+            .unwrap();
+        if output.status.success() {
+            Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
+        } else {
+            None
+        }
+    }
+
+    #[test]
+    fn test_create_worktree_detached() {
+        use std::fs;
+
+        let temp = tempfile::tempdir().unwrap();
+        let repo = temp.path().join("repo");
+
+        fs::create_dir_all(&repo).unwrap();
+        Command::new("git")
+            .args(["init"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "--allow-empty", "-m", "init"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+
+        let worktree_path = repo.join("worktrees/pr-1");
+        create_worktree_detached(&repo, &worktree_path).unwrap();
+
+        assert!(worktree_path.join(".git").exists());
+        // HEAD is detached: no symbolic ref, but a branch can be created here
+        // (as `gh pr checkout` does).
+        let symbolic_ref = Command::new("git")
+            .args(["symbolic-ref", "-q", "HEAD"])
+            .current_dir(&worktree_path)
+            .output()
+            .unwrap();
+        assert!(!symbolic_ref.status.success());
+        let checkout = Command::new("git")
+            .args(["checkout", "-b", "pr-branch"])
+            .current_dir(&worktree_path)
+            .output()
+            .unwrap();
+        assert!(checkout.status.success());
     }
 
     #[test]

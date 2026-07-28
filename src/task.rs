@@ -18,6 +18,17 @@ pub fn get_task_by_branch(repo: &str, branch: &str) -> Option<Project> {
 
 /// Create a task. The branch name is the task identity.
 pub fn create_task(repo: &str, branch: &str) -> Result<Project, String> {
+    create_task_inner(repo, branch, false)
+}
+
+/// Create a task whose worktree starts with detached HEAD; the caller must
+/// check out `branch` itself. Used by the PR flow, where `gh pr checkout`
+/// creates the branch with the correct upstream (fork-aware).
+pub fn create_task_detached(repo: &str, branch: &str) -> Result<Project, String> {
+    create_task_inner(repo, branch, true)
+}
+
+fn create_task_inner(repo: &str, branch: &str, detached: bool) -> Result<Project, String> {
     let worktree_path = git::task_worktree_path(config::worktree_dir(), repo, branch);
 
     if let Some(task) = get_task_by_branch(repo, branch) {
@@ -34,7 +45,11 @@ pub fn create_task(repo: &str, branch: &str) -> Result<Project, String> {
     }
 
     if !worktree_path.join(".git").exists() {
-        git::create_worktree(&repo_path, &worktree_path, branch)?;
+        if detached {
+            git::create_worktree_detached(&repo_path, &worktree_path)?;
+        } else {
+            git::create_worktree(&repo_path, &worktree_path, branch)?;
+        }
         setup_task_worktree(&worktree_path, &repo_path, repo, branch)?;
     }
 
@@ -190,7 +205,7 @@ pub fn create_review_tasks(dry_run: bool) -> Result<ReviewTaskResult, String> {
             continue;
         }
 
-        match create_task(home.as_str(), &branch) {
+        match create_task_detached(home.as_str(), &branch) {
             Ok(task) => {
                 let worktree = task.working_tree();
                 if let Err(e) = crate::github::pr_checkout(&worktree, owner, repo_name, pr.number) {
@@ -292,7 +307,10 @@ pub fn create_github_ref_task(
         });
     }
 
-    let task = create_task(&home, &branch)?;
+    let task = match kind {
+        GithubRefKind::Pr => create_task_detached(&home, &branch)?,
+        GithubRefKind::Issue => create_task(&home, &branch)?,
+    };
     let key = ProjectKey::task(&home, &branch);
 
     match kind {

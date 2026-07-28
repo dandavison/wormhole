@@ -367,6 +367,12 @@ pub fn refresh_tasks() {
 
     let tasks = discover_tasks(additional_paths);
 
+    for task in tasks.values() {
+        if let Some(branch) = &task.branch {
+            git::ensure_upstream_tracking(&task.working_tree(), branch.as_str(), true);
+        }
+    }
+
     let mut changed = false;
     let mut projects = lock();
     for (key, project) in tasks {

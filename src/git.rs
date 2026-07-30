@@ -745,6 +745,77 @@ detached
     }
 
     #[test]
+    fn test_create_worktree_checks_out_existing_remote_branch_commit() {
+        use std::fs;
+
+        let temp = tempfile::tempdir().unwrap();
+        let repo = temp.path().join("repo");
+
+        fs::create_dir_all(&repo).unwrap();
+        Command::new("git")
+            .args(["init"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "--allow-empty", "-m", "init"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["remote", "add", "origin", "git@github.com:owner/repo.git"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+        // A remote branch whose tip is a distinct commit not reachable from HEAD.
+        Command::new("git")
+            .args(["commit", "--allow-empty", "-m", "remote-only work"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+        let remote_tip = String::from_utf8_lossy(
+            &Command::new("git")
+                .args(["rev-parse", "HEAD"])
+                .current_dir(&repo)
+                .output()
+                .unwrap()
+                .stdout,
+        )
+        .trim()
+        .to_string();
+        Command::new("git")
+            .args(["update-ref", "refs/remotes/origin/feat-x", &remote_tip])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+        // Move HEAD back so it differs from the remote branch tip.
+        Command::new("git")
+            .args(["reset", "--hard", "HEAD~1"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+
+        let worktree_path = repo.join("worktrees/feat-x");
+        create_worktree(&repo, &worktree_path, "feat-x").unwrap();
+
+        let head = String::from_utf8_lossy(
+            &Command::new("git")
+                .args(["rev-parse", "HEAD"])
+                .current_dir(&worktree_path)
+                .output()
+                .unwrap()
+                .stdout,
+        )
+        .trim()
+        .to_string();
+        assert_eq!(head, remote_tip, "worktree should be at remote branch tip");
+        assert_eq!(
+            git_config(&worktree_path, "branch.feat-x.remote"),
+            "origin"
+        );
+    }
+
+    #[test]
     fn test_create_worktree_no_remote_leaves_upstream_unset() {
         use std::fs;
 

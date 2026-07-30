@@ -815,6 +815,18 @@ function injectStyles() {
             padding: 0.1rem 0.3rem;
             border-radius: 2px;
         }
+        .wormhole-inbox-btn {
+            font-size: 0.7rem;
+            padding: 0 0.4rem;
+            margin-left: 0.5rem;
+            line-height: 1.5;
+            vertical-align: middle;
+            border-radius: 3px;
+        }
+        .wormhole-inbox-btn-existing {
+            border-color: #2ea043;
+            color: #2ea043;
+        }
     `;
     document.head.appendChild(style);
 }
@@ -846,7 +858,7 @@ function shouldInject() {
     if (isGitHubPage()) {
         const path = window.location.pathname;
         if (!path.match(/^\/[^/]+\/[^/]+/)) return false;
-        if (path.match(/^\/(settings|notifications|new|login|signup)/)) return false;
+        if (path.match(/^\/(settings|notifications|new|login|signup|pulls)/)) return false;
         return true;
     } else if (isJiraPage()) {
         // /browse/ACT-108 or board view with ?selectedIssue=ACT-108
@@ -854,6 +866,108 @@ function shouldInject() {
             window.location.search.includes('selectedIssue=');
     }
     return false;
+}
+
+// -- GitHub PR inbox (/pulls) --
+// Each PR row gets a button that opens the wormhole task for that PR,
+// creating it (a `gh pr checkout` worktree) on demand if it doesn't exist yet.
+
+function isInboxPage() {
+    return isGitHubPage() && window.location.pathname.startsWith('/pulls');
+}
+
+const inboxDescribeCache = new Map();
+
+async function describeUrl(url) {
+    if (inboxDescribeCache.has(url)) return inboxDescribeCache.get(url);
+    try {
+        const resp = await fetch(`${WORMHOLE_BASE}/project/describe`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url })
+        });
+        if (resp.ok) {
+            const info = await resp.json();
+            inboxDescribeCache.set(url, info);
+            return info;
+        }
+    } catch (err) {
+        console.warn('[Wormhole] describe error:', err.message);
+    }
+    return null;
+}
+
+function injectInboxButtons() {
+    injectStyles();
+    const links = document.querySelectorAll('a[data-hovercard-type="pull_request"][href*="/pull/"]');
+    for (const link of links) {
+        const prUrl = link.href;
+        if (!/\/pull\/\d+/.test(prUrl)) continue;
+        const container = link.closest('[data-listview-item-title-container]')
+            || link.closest('h3')?.parentElement;
+        if (!container || container.querySelector('.wormhole-inbox-btn')) continue;
+        const badges = container.querySelector('[class*="trailingBadgesContainer"]');
+        (badges || container).appendChild(createInboxButton(prUrl));
+    }
+}
+
+function createInboxButton(prUrl) {
+    const btn = document.createElement('button');
+    btn.className = 'wormhole-btn wormhole-inbox-btn';
+    btn.textContent = '>_';
+    btn.title = 'Open wormhole task for this PR (creates it if needed)';
+    btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        jumpToPr(prUrl, btn);
+    });
+    // Lazy enrichment: on first hover, mark whether the task already exists.
+    btn.addEventListener('mouseenter', async () => {
+        if (btn.dataset.enriched) return;
+        btn.dataset.enriched = '1';
+        const info = await describeUrl(prUrl);
+        if (info?.name && info?.kind === 'task') {
+            btn.classList.add('wormhole-inbox-btn-existing');
+            btn.title = `Open existing wormhole task: ${info.name}`;
+        }
+    });
+    return btn;
+}
+
+async function jumpToPr(prUrl, btn) {
+    const orig = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '…';
+    try {
+        const ref = encodeURIComponent(prUrl);
+        const resp = await fetch(
+            `${WORMHOLE_BASE}/project/create-from-github-ref?ref=${ref}`,
+            { method: 'POST' }
+        );
+        if (!resp.ok) {
+            console.warn('[Wormhole] create-from-github-ref failed:', await resp.text());
+            btn.textContent = '✗';
+            return;
+        }
+        const result = await resp.json();
+        const raw = result.created || result.skipped;
+        if (result.error || !raw) {
+            console.warn('[Wormhole] create failed:', result.error);
+            btn.textContent = '✗';
+            return;
+        }
+        // Result is "repo:branch (created)" or "repo:branch already exists"
+        const key = raw.split(' (')[0].split(' already exists')[0].trim();
+        await fetch(`${WORMHOLE_BASE}/project/switch/${key}?land-in=terminal-only`);
+        btn.classList.add('wormhole-inbox-btn-existing');
+        btn.textContent = '✓';
+    } catch (err) {
+        console.warn('[Wormhole] jumpToPr error:', err.message);
+        btn.textContent = '✗';
+    } finally {
+        btn.disabled = false;
+        setTimeout(() => { btn.textContent = orig; }, 1500);
+    }
 }
 
 let retryCount = 0;
@@ -905,8 +1019,13 @@ async function injectButtons() {
     }
 }
 
+function dispatch() {
+    if (isInboxPage()) injectInboxButtons();
+    else injectButtons();
+}
+
 // Run on page load
-injectButtons();
+dispatch();
 
 // Re-run on navigation (SPA routing) - debounced
 let lastUrl = window.location.href;
@@ -928,7 +1047,10 @@ const observer = new MutationObserver(() => {
         document.querySelectorAll('.wormhole-vscode-container').forEach(el => el.remove());
         document.body.style.overflow = '';
         clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(injectButtons, 100);
+        debounceTimer = setTimeout(dispatch, 100);
+    } else if (isInboxPage()) {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(injectInboxButtons, 200);
     } else if (!document.querySelector('.wormhole-buttons') && shouldInject() && !injecting) {
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(injectButtons, 200);

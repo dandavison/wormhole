@@ -166,6 +166,12 @@ pub fn create_worktree(
 ) -> Result<(), String> {
     prepare_worktree_dir(worktree_path)?;
 
+    if !branch_exists(repo_path, branch_name) {
+        fetch_branch(repo_path, branch_name);
+    }
+    let remote_start_point = remote_with_branch(repo_path, branch_name)
+        .map(|remote| format!("{}/{}", remote, branch_name));
+
     let args = if branch_exists(repo_path, branch_name) {
         if let Some(existing_path) = branch_checked_out_at(repo_path, branch_name) {
             vacate_branch(&existing_path, branch_name)?;
@@ -175,6 +181,15 @@ pub fn create_worktree(
             "add",
             worktree_path.to_str().unwrap(),
             branch_name,
+        ]
+    } else if let Some(start_point) = remote_start_point.as_deref() {
+        vec![
+            "worktree",
+            "add",
+            "-b",
+            branch_name,
+            worktree_path.to_str().unwrap(),
+            start_point,
         ]
     } else {
         vec![
@@ -312,6 +327,41 @@ fn branch_exists(repo_path: &Path, branch_name: &str) -> bool {
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false)
+}
+
+/// Best-effort fetch of `branch_name` from the default remote into its
+/// remote-tracking ref, so a worktree can be created from an as-yet-unfetched
+/// branch. Silent on failure (offline, no such remote branch, etc).
+fn fetch_branch(repo_path: &Path, branch_name: &str) {
+    let Some(remote) = default_remote(repo_path) else {
+        return;
+    };
+    let _ = Command::new("git")
+        .args([
+            "fetch",
+            &remote,
+            &format!("refs/heads/{0}:refs/remotes/{1}/{0}", branch_name, remote),
+        ])
+        .current_dir(repo_path)
+        .output();
+}
+
+/// The remote (preferring `origin`) that has a remote-tracking branch for
+/// `branch_name`, or `None` if no fetched remote branch exists.
+fn remote_with_branch(repo_path: &Path, branch_name: &str) -> Option<String> {
+    let remote = default_remote(repo_path)?;
+    let exists = Command::new("git")
+        .args([
+            "show-ref",
+            "--verify",
+            "--quiet",
+            &format!("refs/remotes/{}/{}", remote, branch_name),
+        ])
+        .current_dir(repo_path)
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+    exists.then_some(remote)
 }
 
 fn branch_checked_out_at(repo_path: &Path, branch_name: &str) -> Option<PathBuf> {

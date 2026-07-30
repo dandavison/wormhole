@@ -276,12 +276,12 @@ pub fn open_workspace(project: &Project) {
                     return;
                 }
             };
-            execute_command(
-                editor.cli_executable_name(),
-                ["--new-window", workspace_path.to_str().unwrap()],
-                project_dir,
-            )
-            .map(|_| ())
+            let mut args = vec!["--new-window", workspace_path.to_str().unwrap()];
+            if editor == Cursor {
+                // Bypass Cursor's Agents window, which otherwise opens on startup.
+                args.push("--classic");
+            }
+            execute_command(editor.cli_executable_name(), args, project_dir).map(|_| ())
         }
         Emacs => execute_command("emacsclient", ["-n", "."], project_dir).map(|_| ()),
         IntelliJ | PyCharm | PyCharmCE => execute_command(

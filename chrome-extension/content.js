@@ -835,6 +835,7 @@ function getTargetSelectors() {
     if (isGitHubPage()) {
         return [
             '.markdown-title',
+            'h1[data-component="PH_Title"]',
             '[class*="pr-sticky-title"]',
         ];
     } else if (isJiraPage()) {
@@ -1030,6 +1031,14 @@ dispatch();
 // Re-run on navigation (SPA routing) - debounced
 let lastUrl = window.location.href;
 let debounceTimer = null;
+let ensureTimer = null;
+
+// Guarantees a trailing call even while the page mutates continuously (e.g. the
+// PR "changes" diff view), unlike a debounce that a mutation storm keeps resetting.
+function scheduleEnsure(fn) {
+    if (ensureTimer) return;
+    ensureTimer = setTimeout(() => { ensureTimer = null; fn(); }, 200);
+}
 
 const observer = new MutationObserver(() => {
     if (window.location.href !== lastUrl) {
@@ -1049,11 +1058,9 @@ const observer = new MutationObserver(() => {
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(dispatch, 100);
     } else if (isInboxPage()) {
-        clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(injectInboxButtons, 200);
+        scheduleEnsure(injectInboxButtons);
     } else if (!document.querySelector('.wormhole-buttons') && shouldInject() && !injecting) {
-        clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(injectButtons, 200);
+        scheduleEnsure(injectButtons);
     }
 });
 observer.observe(document.body, { childList: true, subtree: true });

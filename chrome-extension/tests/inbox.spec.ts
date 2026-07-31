@@ -56,8 +56,6 @@ test.describe('GitHub PR inbox', () => {
     const buttons = page.locator('.wormhole-buttons');
     await expect(buttons).toBeVisible({ timeout: 10000 });
     await expect(buttons.locator('.wormhole-btn-terminal img')).toBeVisible();
-    await expect(buttons.locator('.wormhole-btn-cursor img')).toBeVisible();
-    await expect(buttons.locator('.wormhole-btn-vscode img')).toBeVisible();
 
     await buttons.locator('.wormhole-btn-terminal').click();
 

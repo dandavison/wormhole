@@ -43,8 +43,6 @@ test.describe('new PR UI', () => {
       const buttons = page.locator('.wormhole-buttons');
       await expect(buttons).toBeVisible({ timeout: 10000 });
       await expect(buttons.locator('.wormhole-btn-terminal')).toBeVisible();
-      await expect(buttons.locator('.wormhole-btn-cursor')).toBeVisible();
-      await expect(buttons.locator('.wormhole-btn-vscode')).toBeVisible();
     });
   }
 

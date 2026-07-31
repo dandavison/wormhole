@@ -49,7 +49,11 @@ async function getDescribe() {
     return null;
 }
 
-function createButtons(info) {
+// Build the wormhole button bar. Used identically for PR pages, repo/JIRA pages,
+// and GitHub PR-inbox rows. `info` is the /project/describe result (may be null
+// when we haven't resolved a task yet); `ref` is a GitHub PR URL that can be
+// opened on demand (create-if-missing) when no task exists yet.
+function createButtons(info, ref) {
     const container = document.createElement('div');
     container.className = 'wormhole-buttons';
 
@@ -63,8 +67,8 @@ function createButtons(info) {
         html += `<a class="wormhole-link wormhole-link-jira" href="${info.jira_url}" title="Open JIRA">${info.jira_key}</a>`;
     }
 
-    // Terminal/Cursor/VSCode buttons if we have a task/project
-    if (info?.name && info?.kind) {
+    // Terminal/Cursor/VSCode buttons when we have a task/project, or a PR we can open on demand
+    if ((info?.name && info?.kind) || isPrUrl(ref)) {
         html += `
             <button class="wormhole-btn wormhole-btn-icon wormhole-btn-terminal" title="Open in Terminal"><img src="data:image/png;base64,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" alt="Terminal"></button>
             <button class="wormhole-btn wormhole-btn-icon wormhole-btn-cursor" title="Open in Cursor"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAMAAACdt4HsAAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAXcJy6UTwAAAGhUExURff39Pn59vj49dPTz42Mh/r69+Pj4JOTjj8+OCMiG+/v662tqFFQSiYlHiQjHPX18sTEwGdmYCsqJGdmYcXEwPb28tjY1IB/ejU0LSUkHYCAeufn45qalUNCPENDPPHx7rSzr1ZWUCcmH8rKxm1tZy4tJm5tZ9zc2YeHgTg3MYeHgurq56GhnEhHQfPz8Lq6tlxcVignIN3d2XV1by8uJyEgGICAeyEgGT08NVJRS09OSDs6M/X18WloY1ZVT76+uurq5uzs6O3t6qSjn2ppYyIhGjo5MomIg97e2vPy73JxbCAfGElIQaKinba2sikoIV1cVru6tujo5VlYUjAvKXV0b9DQzJ2dmI+OieHh3dra1kVEPk5NR6mppPb284OCfSopImNiXcHBvcfHwzY1LzMyK3x7dtXV0fDw7EFAOZaWkeXl4fn597CvqywrJFNSTLe2skdHQD8+N97d2mNjXeHh3o+Piru7tzAvKElIQoiIg8vLxzk4MW5uaPz8+bW0sN/f2+np5ldWUODg3EFAOsC/u0ZFPvb18lpZU42Nh/////7Hc1oAAAABYktHRIqFaHd2AAAACXBIWXMAAA8uAAAPLgEh0EwaAAAAB3RJTUUH6gEeEiU4Kf6EPwAAACV0RVh0ZGF0ZTpjcmVhdGUAMjAyNi0wMS0zMFQxODozNDo1MCswMDowMOXwHaoAAAAldEVYdGRhdGU6bW9kaWZ5ADIwMjUtMDktMTBUMDk6MTk6MTArMDA6MDAZCYFsAAAAKHRFWHRkYXRlOnRpbWVzdGFtcAAyMDI2LTAxLTMwVDE4OjM3OjU2KzAwOjAwS18K8AAAApNJREFUWMPtl+lXEzEUxSeBlAZIBkFrw2KhWAoWCl2gVVuX2iouCCqCCyCigICKu7jirvzXZlK6AJNZP+nhnn5pTvM7efck790qyr7+fwEuF9shrKmtrYHQ6XbkqfNi7K3zIEcIVN/QSCjhn8aGemS/eLXpQDMmQri55eAhe1ZA4Dvsx4xsi2F/qw9YrwOitvYOWt4uEPRIe5tVK1CgsytIyS7RYFdnwIoVQOk+GsJERzjU062YWQFBuLcPM6IrhvuOhY2tQJH+ASrZXrRioD8irwNEB4dilBiKxoYGo5I6YDyRHMamGk4m4pIyRlLp4yfMdTI1or8/k02dOn3mbMREuXM0m9EFqPkCO39hFAFoqIuXLudVGYAwdmUsYnhd0NVkwQDAbR6fuBaVXxd4/QY2BvAbN3lzCsoQYDpGzAD8xqVv3dZ/OeDOXWoO4HWwmdmcnhVz9/hFswDgiPn7C+qeOtCDh8wigFuxuLS86+XAR3ntnVoE8Jezsrr2eMcBnjxlNgBaP11/Nld1gLV10SisA/hvn3sqVYDV7UUbAPriZdlJsLxC7QO8o2WAukQdnKACQAuLzA0A5l6VWq0zAJqdJ24A4PUMdQWAbyrN2gkATKWpK0A0UTWsZIBMVgpAbyerxk1B0lR5W2f6ABiZqDoAk7V1Plg2sC4AjI1XlvCGdLDojDYBAPF35VWj0aboDNfiCd6XlkyGq7J3vGsA9OFjcYGP996wadLhAaOnEjA0QOBT8aulgCHqqIo4HPB5M6QdwHLEUXaELOr98vUb1orvsB6yhBW+VhHzqPf7dNB2zBNWqE0tPGjSHz9/US1o/rafuUXUxf4/zFnUVUphu+A4bCsi7m9tOY/7wgp3fzj29a/oL09sk0pvLkBgAAAAAElFTkSuQmCC" alt="Cursor"></button>
@@ -99,7 +103,7 @@ function createButtons(info) {
         termBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
-            switchProject('terminal');
+            openTarget(ref, info, 'terminal-only', termBtn);
         });
     }
 
@@ -107,7 +111,7 @@ function createButtons(info) {
         cursorBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
-            switchProject('editor');
+            openTarget(ref, info, 'editor', cursorBtn);
         });
     }
 
@@ -115,7 +119,7 @@ function createButtons(info) {
         vscodeBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
-            toggleVSCode(info.name, vscodeBtn);
+            toggleVSCodeFor(ref, info, vscodeBtn);
         });
     }
 
@@ -569,30 +573,66 @@ function closeVSCode() {
     }
 }
 
-async function switchProject(landIn) {
-    try {
-        const info = await getDescribe();
-        if (!info || !info.name) {
-            console.warn('[Wormhole] No project/task found');
-            return;
-        }
+function isPrUrl(url) {
+    return !!url && /github\.com\/[^/]+\/[^/]+\/pull\/\d+/.test(url);
+}
 
-        const params = new URLSearchParams({
-            'land-in': landIn === 'terminal' ? 'terminal-only' : landIn,
-        });
+// Resolve the wormhole task name for a button: prefer an already-known name,
+// else describe the PR URL, else create the task on demand (gh pr checkout).
+async function resolveTaskName(ref, info) {
+    if (info?.name) return info.name;
+    if (!ref) return null;
+    const described = await describeUrl(ref);
+    if (described?.name) return described.name;
+    return await createFromRef(ref);
+}
 
-        const switchResp = await fetch(
-            `${WORMHOLE_BASE}/project/switch/${info.name}?${params}`
-        );
-
-        if (!switchResp.ok) {
-            console.warn('[Wormhole] switch failed:', await switchResp.text());
-        } else {
-            console.log('[Wormhole] Switched to', info.name);
-        }
-    } catch (err) {
-        console.warn('[Wormhole] Error:', err.message);
+async function createFromRef(ref) {
+    const resp = await fetch(
+        `${WORMHOLE_BASE}/project/create-from-github-ref?ref=${encodeURIComponent(ref)}`,
+        { method: 'POST' }
+    );
+    if (!resp.ok) {
+        console.warn('[Wormhole] create-from-github-ref failed:', await resp.text());
+        return null;
     }
+    const result = await resp.json();
+    const raw = result.created || result.skipped;
+    if (result.error || !raw) {
+        console.warn('[Wormhole] create failed:', result.error);
+        return null;
+    }
+    // Result is "repo:branch (created)" or "repo:branch already exists"
+    return raw.split(' (')[0].split(' already exists')[0].trim();
+}
+
+async function switchByName(name, landIn) {
+    const resp = await fetch(`${WORMHOLE_BASE}/project/switch/${name}?land-in=${landIn}`);
+    if (!resp.ok) console.warn('[Wormhole] switch failed:', await resp.text());
+}
+
+// Open a task in terminal/editor: fast path when it exists, create-then-open otherwise.
+async function openTarget(ref, info, landIn, btn) {
+    if (btn) { btn.style.opacity = '0.5'; btn.disabled = true; }
+    try {
+        const name = await resolveTaskName(ref, info);
+        if (name) await switchByName(name, landIn);
+        else console.warn('[Wormhole] nothing to open (no task or PR ref)');
+    } catch (err) {
+        console.warn('[Wormhole] openTarget error:', err.message);
+    } finally {
+        if (btn) { btn.style.opacity = ''; btn.disabled = false; }
+    }
+}
+
+async function toggleVSCodeFor(ref, info, vscodeBtn) {
+    if (vscodeExpanded) {
+        toggleVSCode(info?.name, vscodeBtn);
+        return;
+    }
+    const name = await resolveTaskName(ref, info);
+    if (name) toggleVSCode(name, vscodeBtn);
+    else console.warn('[Wormhole] VSCode: no task to open');
 }
 
 function injectStyles() {
@@ -815,18 +855,6 @@ function injectStyles() {
             padding: 0.1rem 0.3rem;
             border-radius: 2px;
         }
-        .wormhole-inbox-btn {
-            font-size: 0.7rem;
-            padding: 0 0.4rem;
-            margin-left: 0.5rem;
-            line-height: 1.5;
-            vertical-align: middle;
-            border-radius: 3px;
-        }
-        .wormhole-inbox-btn-existing {
-            border-color: #2ea043;
-            color: #2ea043;
-        }
     `;
     document.head.appendChild(style);
 }
@@ -870,17 +898,17 @@ function shouldInject() {
 }
 
 // -- GitHub PR inbox (/pulls) --
-// Each PR row gets a button that opens the wormhole task for that PR,
-// creating it (a `gh pr checkout` worktree) on demand if it doesn't exist yet.
+// Each PR row gets the same button bar as a PR page (createButtons), keyed on
+// the row's PR URL so the task is opened, or created on demand, on click.
 
 function isInboxPage() {
     return isGitHubPage() && window.location.pathname.startsWith('/pulls');
 }
 
-const inboxDescribeCache = new Map();
+const describeCache = new Map();
 
 async function describeUrl(url) {
-    if (inboxDescribeCache.has(url)) return inboxDescribeCache.get(url);
+    if (describeCache.has(url)) return describeCache.get(url);
     try {
         const resp = await fetch(`${WORMHOLE_BASE}/project/describe`, {
             method: 'POST',
@@ -889,7 +917,7 @@ async function describeUrl(url) {
         });
         if (resp.ok) {
             const info = await resp.json();
-            inboxDescribeCache.set(url, info);
+            describeCache.set(url, info);
             return info;
         }
     } catch (err) {
@@ -903,71 +931,24 @@ function injectInboxButtons() {
     const links = document.querySelectorAll('a[data-hovercard-type="pull_request"][href*="/pull/"]');
     for (const link of links) {
         const prUrl = link.href;
-        if (!/\/pull\/\d+/.test(prUrl)) continue;
+        if (!isPrUrl(prUrl)) continue;
         const container = link.closest('[data-listview-item-title-container]')
             || link.closest('h3')?.parentElement;
-        if (!container || container.querySelector('.wormhole-inbox-btn')) continue;
+        if (!container || container.querySelector('.wormhole-buttons')) continue;
         const badges = container.querySelector('[class*="trailingBadgesContainer"]');
-        (badges || container).appendChild(createInboxButton(prUrl));
+        const bar = createButtons(null, prUrl);
+        if (!bar) continue;
+        (badges || container).appendChild(bar);
+        // Lazily upgrade to the task-aware bar (fast switch, agent button) on hover.
+        bar.addEventListener('mouseenter', () => enrichInboxRow(prUrl, bar), { once: true });
     }
 }
 
-function createInboxButton(prUrl) {
-    const btn = document.createElement('button');
-    btn.className = 'wormhole-btn wormhole-inbox-btn';
-    btn.textContent = '>_';
-    btn.title = 'Open wormhole task for this PR (creates it if needed)';
-    btn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        jumpToPr(prUrl, btn);
-    });
-    // Lazy enrichment: on first hover, mark whether the task already exists.
-    btn.addEventListener('mouseenter', async () => {
-        if (btn.dataset.enriched) return;
-        btn.dataset.enriched = '1';
-        const info = await describeUrl(prUrl);
-        if (info?.name && info?.kind === 'task') {
-            btn.classList.add('wormhole-inbox-btn-existing');
-            btn.title = `Open existing wormhole task: ${info.name}`;
-        }
-    });
-    return btn;
-}
-
-async function jumpToPr(prUrl, btn) {
-    const orig = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = '…';
-    try {
-        const ref = encodeURIComponent(prUrl);
-        const resp = await fetch(
-            `${WORMHOLE_BASE}/project/create-from-github-ref?ref=${ref}`,
-            { method: 'POST' }
-        );
-        if (!resp.ok) {
-            console.warn('[Wormhole] create-from-github-ref failed:', await resp.text());
-            btn.textContent = '✗';
-            return;
-        }
-        const result = await resp.json();
-        const raw = result.created || result.skipped;
-        if (result.error || !raw) {
-            console.warn('[Wormhole] create failed:', result.error);
-            btn.textContent = '✗';
-            return;
-        }
-        // Result is "repo:branch (created)" or "repo:branch already exists"
-        const key = raw.split(' (')[0].split(' already exists')[0].trim();
-        await fetch(`${WORMHOLE_BASE}/project/switch/${key}?land-in=terminal-only`);
-        btn.classList.add('wormhole-inbox-btn-existing');
-        btn.textContent = '✓';
-    } catch (err) {
-        console.warn('[Wormhole] jumpToPr error:', err.message);
-        btn.textContent = '✗';
-    } finally {
-        btn.disabled = false;
-        setTimeout(() => { btn.textContent = orig; }, 1500);
+async function enrichInboxRow(prUrl, bar) {
+    const info = await describeUrl(prUrl);
+    if (info?.name) {
+        const fresh = createButtons(info, prUrl);
+        if (fresh) bar.replaceWith(fresh);
     }
 }
 
@@ -1004,7 +985,8 @@ async function injectButtons() {
             // Triple-check after async call
             if (document.querySelector('.wormhole-buttons')) return;
 
-            const buttons = createButtons(info);
+            const ref = isPrUrl(window.location.href) ? window.location.href : null;
+            const buttons = createButtons(info, ref);
             if (buttons) {
                 targetElement.appendChild(buttons);
             }

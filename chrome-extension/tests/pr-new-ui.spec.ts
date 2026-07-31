@@ -47,4 +47,20 @@ test.describe('new PR UI', () => {
       await expect(buttons.locator('.wormhole-btn-vscode')).toBeVisible();
     });
   }
+
+  test('buttons still appear when the PR has no task yet (create-on-demand)', async ({ context }) => {
+    const page = await context.newPage();
+    await page.route('https://github.com/temporalio/temporal/pull/11191', (r) =>
+      r.fulfill({ contentType: 'text/html', body: PAGE })
+    );
+    await page.route('http://localhost:7117/**', (r) =>
+      r.fulfill({ contentType: 'application/json', body: '{}' })
+    );
+
+    await page.goto('https://github.com/temporalio/temporal/pull/11191');
+
+    const buttons = page.locator('.wormhole-buttons');
+    await expect(buttons).toBeVisible({ timeout: 10000 });
+    await expect(buttons.locator('.wormhole-btn-terminal')).toBeVisible();
+  });
 });

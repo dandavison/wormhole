@@ -34,6 +34,9 @@ test.describe('GitHub PR inbox', () => {
 
     await page.route('http://localhost:7117/**', (route) => {
       const url = new URL(route.request().url());
+      if (url.pathname === '/project/describe') {
+        return route.fulfill({ contentType: 'application/json', body: '{}' });
+      }
       if (url.pathname === '/project/create-from-github-ref') {
         createRef = url.searchParams.get('ref');
         return route.fulfill({
@@ -50,10 +53,13 @@ test.describe('GitHub PR inbox', () => {
 
     await page.goto('https://github.com/pulls/inbox');
 
-    const btn = page.locator('.wormhole-inbox-btn');
-    await expect(btn).toBeVisible({ timeout: 10000 });
+    const buttons = page.locator('.wormhole-buttons');
+    await expect(buttons).toBeVisible({ timeout: 10000 });
+    await expect(buttons.locator('.wormhole-btn-terminal img')).toBeVisible();
+    await expect(buttons.locator('.wormhole-btn-cursor img')).toBeVisible();
+    await expect(buttons.locator('.wormhole-btn-vscode img')).toBeVisible();
 
-    await btn.click();
+    await buttons.locator('.wormhole-btn-terminal').click();
 
     await expect
       .poll(() => createRef, { timeout: 5000 })

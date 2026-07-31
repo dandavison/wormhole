@@ -60,6 +60,10 @@ pub struct WormholeTest {
 
 impl WormholeTest {
     pub fn new(port: u16) -> Self {
+        Self::new_with_env(port, &[])
+    }
+
+    pub fn new_with_env(port: u16, extra_env: &[(&str, &str)]) -> Self {
         if std::env::var("WORMHOLE_TEST").is_err() {
             panic!(
                 "Set WORMHOLE_TEST=1 to run tests. \
@@ -101,6 +105,7 @@ impl WormholeTest {
         if let Some(ref editor) = wormhole_editor {
             env_vars.push(("WORMHOLE_EDITOR", editor));
         }
+        env_vars.extend_from_slice(extra_env);
         tmux.start(
             "./target/debug/wormhole",
             Some(port),

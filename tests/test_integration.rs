@@ -1035,6 +1035,37 @@ fn test_switch_creates_task_from_colon_syntax() {
 }
 
 #[test]
+fn test_default_project_branch_resolution() {
+    let default_project = format!("{}default-project", TEST_PREFIX);
+    let other_project = format!("{}other-project", TEST_PREFIX);
+    let default_dir = format!("/tmp/{}", default_project);
+    let other_dir = format!("/tmp/{}", other_project);
+    let existing_branch = format!("{}existing-branch", TEST_PREFIX);
+    let new_branch = format!("{}new-default-branch", TEST_PREFIX);
+    let test = harness::WormholeTest::new_with_env(
+        18926,
+        &[("WORMHOLE_DEFAULT_PROJECT", &default_project)],
+    );
+
+    init_git_repo(&default_dir);
+    init_git_repo(&other_dir);
+    test.create_project(&default_dir, &default_project);
+    test.create_project(&other_dir, &other_project);
+    test.create_task(&existing_branch, &other_project);
+
+    test.cli(&format!("wormhole open ':{}'", existing_branch))
+        .unwrap();
+    test.assert_tmux_cwd(&test.task_worktree_path(&other_project, &existing_branch));
+
+    test.cli(&format!("wormhole open ':{}'", new_branch))
+        .unwrap();
+    assert!(
+        test.task_in_list(&default_project, &new_branch),
+        "new branch-only task should be created in the default project"
+    );
+}
+
+#[test]
 fn test_remove_task_deletes_worktree_from_disk() {
     let test = harness::WormholeTest::new(8958);
 

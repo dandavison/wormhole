@@ -166,6 +166,7 @@ impl SearchPathEntry {
 struct ResolvedConfig {
     search_paths: Vec<ResolvedSearchPath>,
     worktree_dir: PathBuf,
+    default_project: Option<String>,
     editor_overrides: Vec<EditorOverride>,
 }
 
@@ -213,6 +214,10 @@ fn load_config() -> ResolvedConfig {
         .or_else(|| file.worktree_dir.as_deref().map(expand_tilde))
         .unwrap_or_else(default_worktree_dir);
 
+    let default_project = std::env::var("WORMHOLE_DEFAULT_PROJECT")
+        .ok()
+        .filter(|name| !name.is_empty());
+
     let editor_overrides = file
         .editors
         .iter()
@@ -237,6 +242,7 @@ fn load_config() -> ResolvedConfig {
     ResolvedConfig {
         search_paths,
         worktree_dir,
+        default_project,
         editor_overrides,
     }
 }
@@ -307,6 +313,10 @@ pub fn search_paths() -> Vec<&'static ResolvedSearchPath> {
 
 pub fn worktree_dir() -> &'static Path {
     &config().worktree_dir
+}
+
+pub fn default_project() -> Option<&'static str> {
+    config().default_project.as_deref()
 }
 
 /// Re-read card_commands from the config file (not cached).

@@ -399,7 +399,8 @@ pub fn switch(name_or_path: &str, params: &QueryParams, sync: bool) -> Response<
         if let (Some(repo), Some(branch)) = (repo.as_ref(), branch.as_ref()) {
             return crate::task::open_task(repo, branch, land_in);
         }
-        if let Some((repo, branch)) = ProjectKey::parse(&name_or_path).as_task() {
+        let key = resolve_project_key(&name_or_path)?;
+        if let Some((repo, branch)) = key.as_task() {
             return crate::task::open_task(repo, branch, land_in);
         }
         let project_path = {
@@ -466,6 +467,43 @@ pub fn vscode_url(name: &str) -> Response<Body> {
             .status(StatusCode::NOT_FOUND)
             .body(Body::from(format!("Project '{}' not found", key)))
             .unwrap(),
+    }
+}
+
+fn resolve_project_key(name: &str) -> Result<ProjectKey, String> {
+    let key = ProjectKey::parse(name);
+    let Some(("", branch)) = key.as_task() else {
+        return Ok(key);
+    };
+    if branch.is_empty() {
+        return Err("Branch name cannot be empty".to_string());
+    }
+
+    let mut matches: Vec<_> = projects::lock()
+        .keys()
+        .into_iter()
+        .filter(|key| key.branch.as_ref().is_some_and(|b| b.as_str() == branch))
+        .collect();
+    match matches.len() {
+        0 => config::default_project()
+            .map(|repo| ProjectKey::task(repo, branch))
+            .ok_or_else(|| {
+                format!(
+                    "No existing task has branch '{branch}' and WORMHOLE_DEFAULT_PROJECT is not set"
+                )
+            }),
+        1 => Ok(matches.pop().unwrap()),
+        _ => {
+            matches.sort_by_key(|key| key.to_string());
+            Err(format!(
+                "Task branch '{branch}' is ambiguous; use one of: {}",
+                matches
+                    .into_iter()
+                    .map(|key| key.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ))
+        }
     }
 }
 

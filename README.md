@@ -157,6 +157,7 @@ wormhole open myapp                     # Switch to project by name
 wormhole open /path/to/repo             # Open/create project at path
 wormhole open /path/to/file.rs:42       # Open file at line in editor
 wormhole open myrepo:my-branch          # Open task (creates worktree if needed)
+wormhole open :my-branch                # Open an existing task by branch, or use the default project
 wormhole open https://github.com/o/r/pull/123 # Resolve a PR/issue URL into a worktree, then switch
 wormhole open o/r#123                    # Same, short form (also: bare #123 against cwd remote)
 wormhole open ACT-1234                   # Resolve a JIRA key/URL into a worktree, then switch
@@ -319,6 +320,7 @@ compatibility._
 |---------------------------|--------------------------------------------------------------------|
 | `WORMHOLE_SEARCH_PATHS`   | Colon-separated directories to search for projects                 |
 | `WORMHOLE_WORKTREE_DIR`   | Where task worktrees are created (default: `~/worktrees`)          |
+| `WORMHOLE_DEFAULT_PROJECT` | Project used for a new task opened as `:branch`                   |
 | `WORMHOLE_PORT`           | HTTP API port (default: 7117)                                      |
 | `WORMHOLE_EDITOR`         | Editor to use (`cursor`, `code`, `code-insiders`, `emacs`, `none`) |
 | `JIRA_INSTANCE`           | JIRA instance name (e.g., `mycompany` for mycompany.atlassian.net) |

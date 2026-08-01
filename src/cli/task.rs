@@ -354,7 +354,11 @@ pub(super) fn task_create(
     // does its own refresh; only the JIRA / repo:branch flows below read the
     // local task list during parsing and need it refreshed first.
     let server_resolved = crate::github::parse_github_ref(target).is_some()
-        || target.strip_prefix('#').unwrap_or(target).parse::<u64>().is_ok();
+        || target
+            .strip_prefix('#')
+            .unwrap_or(target)
+            .parse::<u64>()
+            .is_ok();
     if !server_resolved {
         let _ = client.post("/project/refresh-tasks");
     }

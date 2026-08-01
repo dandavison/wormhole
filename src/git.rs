@@ -82,24 +82,41 @@ pub fn repair_worktree(repo_path: &Path, worktree_path: &Path) -> Result<(), Str
 }
 
 /// Relocate a worktree, leaving no empty branch directory behind.
+///
+/// Renames rather than using `git worktree move`, which refuses to touch a
+/// worktree containing submodules, then fixes up the path back-pointers the
+/// rename invalidates: `worktree repair` for the worktree's own gitdir, and
+/// `submodule update` for each submodule's `core.worktree`.
 pub fn move_worktree(repo_path: &Path, from: &Path, to: &Path) -> Result<(), String> {
-    if let Some(parent) = to.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("failed to create {}: {}", parent.display(), e))?;
+    if to.exists() {
+        return Err(format!("{} already exists", to.display()));
     }
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(repo_path)
-        .args(["worktree", "move"])
-        .arg(from)
-        .arg(to)
-        .output()
-        .map_err(|e| format!("git worktree move failed to run: {}", e))?;
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
-    }
+    let parent = to
+        .parent()
+        .ok_or_else(|| format!("{} has no parent directory", to.display()))?;
+    std::fs::create_dir_all(parent)
+        .map_err(|e| format!("failed to create {}: {}", parent.display(), e))?;
+    std::fs::rename(from, to).map_err(|e| {
+        format!(
+            "failed to move {} to {}: {}",
+            from.display(),
+            to.display(),
+            e
+        )
+    })?;
     if let Some(parent) = from.parent() {
         let _ = std::fs::remove_dir(parent);
+    }
+    repair_worktree(repo_path, to)?;
+    if to.join(".gitmodules").is_file() {
+        let output = Command::new("git")
+            .args(["submodule", "update", "--init", "--recursive"])
+            .current_dir(to)
+            .output()
+            .map_err(|e| format!("git submodule update failed to run: {}", e))?;
+        if !output.status.success() {
+            return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+        }
     }
     Ok(())
 }
@@ -1130,6 +1147,89 @@ detached
         assert_eq!(
             task_worktree_path(wt_dir, "cli", "feature/auth"),
             PathBuf::from("/home/user/worktrees/cli/feature--auth/cli")
+        );
+    }
+
+    #[test]
+    fn test_move_worktree_containing_submodule() {
+        use std::fs;
+
+        let temp = tempfile::tempdir().unwrap();
+        let child_src = temp.path().join("child_src");
+        let repo = temp.path().join("repo");
+        let git = |args: &[&str], cwd: &Path| {
+            let out = Command::new("git")
+                .args(args)
+                .current_dir(cwd)
+                .output()
+                .unwrap();
+            assert!(
+                out.status.success(),
+                "git {:?}: {}",
+                args,
+                String::from_utf8_lossy(&out.stderr)
+            );
+        };
+
+        fs::create_dir_all(&child_src).unwrap();
+        git(&["init"], &child_src);
+        git(&["commit", "--allow-empty", "-m", "init"], &child_src);
+
+        fs::create_dir_all(&repo).unwrap();
+        git(&["init"], &repo);
+        git(&["commit", "--allow-empty", "-m", "init"], &repo);
+        git(
+            &[
+                "-c",
+                "protocol.file.allow=always",
+                "submodule",
+                "add",
+                child_src.to_str().unwrap(),
+                "child",
+            ],
+            &repo,
+        );
+        git(&["commit", "-m", "add submodule"], &repo);
+
+        let from = temp.path().join("wt/old/repo");
+        let to = temp.path().join("wt/new/repo");
+        git(
+            &[
+                "-c",
+                "protocol.file.allow=always",
+                "worktree",
+                "add",
+                from.to_str().unwrap(),
+                "-b",
+                "branch",
+            ],
+            &repo,
+        );
+        git(
+            &[
+                "-c",
+                "protocol.file.allow=always",
+                "submodule",
+                "update",
+                "--init",
+            ],
+            &from,
+        );
+
+        move_worktree(&repo, &from, &to).unwrap();
+
+        assert!(!from.exists());
+        assert!(to.join("child").is_dir());
+        // The submodule's core.worktree back-pointer must survive the move.
+        let status = Command::new("git")
+            .args(["status", "--short"])
+            .current_dir(to.join("child"))
+            .output()
+            .unwrap();
+        assert!(
+            status.status.success(),
+            "git in moved submodule: {}",
+            String::from_utf8_lossy(&status.stderr)
         );
     }
 }

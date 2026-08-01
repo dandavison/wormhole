@@ -60,13 +60,14 @@ pub fn open(project: &Project) -> Result<(), String> {
     if let Some(window) = get_window(&window_name) {
         tmux(["select-window", "-t", &window.id]);
     } else {
+        let cwd = project.checked_working_tree()?;
         let vars = shell_env_vars(project);
         let window_id = tmux_vec(vec![
             "new-window".to_string(),
             "-n".to_string(),
             window_name.clone(),
             "-c".to_string(),
-            project.working_tree().to_string_lossy().to_string(),
+            cwd.to_string_lossy().to_string(),
             "-P".to_string(),
             "-F".to_string(),
             "#{window_id}".to_string(),

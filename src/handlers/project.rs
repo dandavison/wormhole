@@ -409,6 +409,7 @@ pub fn switch(name_or_path: &str, params: &QueryParams, sync: bool) -> Response<
         };
         match project_path {
             Some(pp) => {
+                pp.project.checked_working_tree()?;
                 pp.open_with_options(Mutation::Insert, land_in);
                 Ok(())
             }

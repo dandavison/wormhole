@@ -177,6 +177,21 @@ impl Project {
             .unwrap_or_else(|| self.repo_path.clone())
     }
 
+    /// Guard every open against a working tree that isn't on disk: `tmux
+    /// new-window -c` silently falls back to $HOME for a missing directory.
+    pub fn checked_working_tree(&self) -> Result<PathBuf, String> {
+        let path = self.working_tree();
+        if path.is_dir() {
+            Ok(path)
+        } else {
+            Err(format!(
+                "{}: working tree {} does not exist. Run `wormhole doctor conform` to repair it.",
+                self.store_key(),
+                path.display()
+            ))
+        }
+    }
+
     pub fn is_open(&self) -> bool {
         config::TERMINAL.exists(self)
     }

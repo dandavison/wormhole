@@ -77,6 +77,8 @@ pub fn open_task(repo: &str, branch: &str, land_in: Option<LandIn>) -> Result<()
         create_task(repo, branch)?
     };
 
+    project.checked_working_tree()?;
+
     {
         let mut projects = projects::lock();
         projects.add_project(project.clone());

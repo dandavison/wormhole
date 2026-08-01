@@ -68,7 +68,10 @@ impl ConformResult {
 }
 
 pub fn conform(dry_run: bool) -> Response<Body> {
-    let available = config::available_projects();
+    let mut available = config::available_projects();
+    for (name, path) in crate::projects::registered_repo_paths() {
+        available.entry(name).or_insert(path);
+    }
     let repo_paths: Vec<_> = available.into_iter().collect();
 
     let worktree_dir = config::worktree_dir();
@@ -80,28 +83,7 @@ pub fn conform(dry_run: bool) -> Response<Body> {
             git::list_worktrees(path)
                 .into_iter()
                 .filter(|wt| wt.path.starts_with(&worktree_base))
-                .filter_map(|wt| {
-                    let branch = wt.branch.as_deref()?;
-                    let task_key = format!("{}:{}", name, branch);
-                    match task::conform_task_worktree(
-                        &wt.path,
-                        path,
-                        name.as_str(),
-                        branch,
-                        dry_run,
-                    ) {
-                        Ok(actions) => Some(ConformTaskResult {
-                            task: task_key,
-                            actions,
-                            error: None,
-                        }),
-                        Err(e) => Some(ConformTaskResult {
-                            task: task_key,
-                            actions: vec![],
-                            error: Some(e),
-                        }),
-                    }
-                })
+                .filter_map(|wt| conform_worktree(&wt, path, name.as_str(), dry_run))
                 .collect::<Vec<_>>()
         })
         .collect();
@@ -133,6 +115,53 @@ pub fn conform(dry_run: bool) -> Response<Body> {
         orphans_removed,
     };
     json_response(&result)
+}
+
+/// Relocate the worktree if its directory doesn't encode the branch it holds
+/// (e.g. the branch was renamed in place) — every lookup derives the path from
+/// (repo, branch), so such a worktree is unreachable — then conform its
+/// contents.
+fn conform_worktree(
+    wt: &git::Worktree,
+    repo_path: &std::path::Path,
+    repo: &str,
+    dry_run: bool,
+) -> Option<ConformTaskResult> {
+    let branch = wt.branch.as_deref()?;
+    let task = format!("{}:{}", repo, branch);
+    let mut actions = Vec::new();
+    let mut path = wt.path.clone();
+
+    let canonical = git::task_worktree_path(config::worktree_dir(), repo, branch);
+    if path != canonical {
+        actions.push(format!("move worktree to {}", canonical.display()));
+        if !dry_run {
+            if let Err(e) = git::move_worktree(repo_path, &path, &canonical) {
+                return Some(ConformTaskResult {
+                    task,
+                    actions,
+                    error: Some(e),
+                });
+            }
+            path = canonical;
+        }
+    }
+
+    match task::conform_task_worktree(&path, repo_path, repo, branch, dry_run) {
+        Ok(more) => {
+            actions.extend(more);
+            Some(ConformTaskResult {
+                task,
+                actions,
+                error: None,
+            })
+        }
+        Err(e) => Some(ConformTaskResult {
+            task,
+            actions,
+            error: Some(e),
+        }),
+    }
 }
 
 // --- persisted-data ---

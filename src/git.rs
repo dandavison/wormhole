@@ -81,6 +81,29 @@ pub fn repair_worktree(repo_path: &Path, worktree_path: &Path) -> Result<(), Str
     }
 }
 
+/// Relocate a worktree, leaving no empty branch directory behind.
+pub fn move_worktree(repo_path: &Path, from: &Path, to: &Path) -> Result<(), String> {
+    if let Some(parent) = to.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("failed to create {}: {}", parent.display(), e))?;
+    }
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .args(["worktree", "move"])
+        .arg(from)
+        .arg(to)
+        .output()
+        .map_err(|e| format!("git worktree move failed to run: {}", e))?;
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
+    if let Some(parent) = from.parent() {
+        let _ = std::fs::remove_dir(parent);
+    }
+    Ok(())
+}
+
 pub fn github_repo_from_remote(path: &Path) -> Option<String> {
     let output = Command::new("git")
         .args(["remote", "get-url", "origin"])
@@ -859,10 +882,7 @@ detached
         .trim()
         .to_string();
         assert_eq!(head, remote_tip, "worktree should be at remote branch tip");
-        assert_eq!(
-            git_config(&worktree_path, "branch.feat-x.remote"),
-            "origin"
-        );
+        assert_eq!(git_config(&worktree_path, "branch.feat-x.remote"), "origin");
     }
 
     #[test]

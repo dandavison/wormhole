@@ -354,18 +354,20 @@ fn discover_tasks(
         .collect()
 }
 
-pub fn refresh_tasks() {
-    let additional_paths: HashMap<CanonicalName, PathBuf> = {
-        let store = PROJECTS_STORE.lock().unwrap();
-        store
-            .all
-            .iter()
-            .filter(|(_, p)| !p.is_task())
-            .map(|(_, project)| (project.repo_name.clone(), project.repo_path.clone()))
-            .collect()
-    };
+/// Repos of registered non-task projects, which may lie outside the configured
+/// search paths.
+pub fn registered_repo_paths() -> HashMap<CanonicalName, PathBuf> {
+    let store = PROJECTS_STORE.lock().unwrap();
+    store
+        .all
+        .iter()
+        .filter(|(_, p)| !p.is_task())
+        .map(|(_, project)| (project.repo_name.clone(), project.repo_path.clone()))
+        .collect()
+}
 
-    let tasks = discover_tasks(additional_paths);
+pub fn refresh_tasks() {
+    let tasks = discover_tasks(registered_repo_paths());
 
     for task in tasks.values() {
         if let Some(branch) = &task.branch {

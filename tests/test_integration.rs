@@ -1294,3 +1294,61 @@ fn test_close_zen_mode_window() {
         "Editor window should be closed even in zen mode"
     );
 }
+
+#[test]
+fn test_worktree_whose_dir_does_not_match_its_branch() {
+    // A worktree directory named for one branch, holding another (e.g. the
+    // branch was renamed in place). The task is discovered under the branch
+    // name, so its computed worktree path does not exist on disk. Opening it
+    // must fail loudly rather than silently landing tmux in $HOME, and
+    // `doctor conform` must relocate the worktree to its canonical path.
+    let test = harness::WormholeTest::new(8967);
+
+    let home_proj = format!("{}mismatch-home", TEST_PREFIX);
+    let home_dir = format!("/tmp/{}", home_proj);
+    let old_branch = "feature";
+    let new_branch = "feature-renamed";
+
+    init_git_repo(&home_dir);
+    test.create_project(&home_dir, &home_proj);
+
+    let stale_worktree = test.create_worktree_directly(&home_dir, &home_proj, old_branch);
+    Command::new("git")
+        .args(["branch", "-m", old_branch, new_branch])
+        .current_dir(&stale_worktree)
+        .output()
+        .unwrap();
+
+    test.cli("wormhole refresh").unwrap();
+    assert!(
+        test.task_in_list(&home_proj, new_branch),
+        "task should be discovered under its branch name"
+    );
+
+    let key = test.task_store_key(new_branch, &home_proj);
+    let err = test
+        .cli(&format!("wormhole open '{}'", key))
+        .expect_err("opening a task with no worktree at its canonical path must fail");
+    assert!(
+        err.contains("does not exist"),
+        "expected a missing-worktree error, got: {}",
+        err
+    );
+
+    test.cli("wormhole doctor conform").unwrap();
+
+    let canonical = test.task_worktree_path(&home_proj, new_branch);
+    assert!(
+        std::path::Path::new(&canonical).is_dir(),
+        "conform should move the worktree to {}",
+        canonical
+    );
+    assert!(
+        !std::path::Path::new(&stale_worktree).exists(),
+        "conform should leave nothing at {}",
+        stale_worktree
+    );
+
+    test.cli(&format!("wormhole open '{}'", key)).unwrap();
+    test.assert_tmux_cwd(&canonical);
+}

@@ -71,6 +71,47 @@ pub fn list_projects(active_only: bool, tasks_only: bool, with_editor: bool) -> 
         .unwrap()
 }
 
+/// Every project's working tree, for callers that need to attribute an
+/// arbitrary path to a project. A task's working tree is its worktree; a base
+/// project's is its repo path. The shared repo path is never reported for a
+/// task, so a path inside the main checkout maps to the base project.
+/// Includes available-but-unopened projects, so attribution covers repos that
+/// are not currently in the ring.
+pub fn list_worktrees() -> Response<Body> {
+    let mut output: Vec<serde_json::Value> = Vec::new();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    for project in projects::lock().all() {
+        let key = project.store_key().to_string();
+        seen.insert(key.clone());
+        output.push(serde_json::json!({
+            "project_key": key,
+            "repo": project.repo_name.as_str(),
+            "branch": project.branch.as_ref().map(|b| b.as_str()),
+            "working_tree": project.working_tree(),
+            "repo_path": project.repo_path,
+        }));
+    }
+
+    for (name, path) in config::available_projects() {
+        if seen.contains(name.as_str()) {
+            continue;
+        }
+        output.push(serde_json::json!({
+            "project_key": name.as_str(),
+            "repo": name.as_str(),
+            "branch": serde_json::Value::Null,
+            "working_tree": path,
+            "repo_path": path,
+        }));
+    }
+
+    Response::builder()
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string_pretty(&output).unwrap()))
+        .unwrap()
+}
+
 pub fn debug_projects() -> Response<Body> {
     let projects = projects::lock();
 

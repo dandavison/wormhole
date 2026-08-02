@@ -217,6 +217,7 @@ wormhole completion bash                # Generate shell completions
 | GET    | `/project/current/editor`     | Focus/open the current project's editor |
 | GET    | `/project/current/terminal`   | Focus the current project's terminal |
 | GET    | `/project/debug`              | Debug info                        |
+| GET    | `/project/worktrees`          | Every project's working tree (for path attribution) |
 | GET    | `/project/show[/<name>]`      | Task info (JIRA, PR, CLAUDE.md)   |
 | POST   | `/project/describe`           | Describe URL (JIRA/GitHub lookup) |
 | GET    | `/project/vscode/<name>`      | Get embedded VSCode URL           |

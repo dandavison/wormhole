@@ -440,22 +440,7 @@ pub fn switch(name_or_path: &str, params: &QueryParams, sync: bool) -> Response<
         if let (Some(repo), Some(branch)) = (repo.as_ref(), branch.as_ref()) {
             return crate::task::open_task(repo, branch, land_in);
         }
-        let key = resolve_project_key(&name_or_path)?;
-        if let Some((repo, branch)) = key.as_task() {
-            return crate::task::open_task(repo, branch, land_in);
-        }
-        let project_path = {
-            let mut projects = projects::lock();
-            resolve_project(&mut projects, &name_or_path)?
-        };
-        match project_path {
-            Some(pp) => {
-                pp.project.checked_working_tree()?;
-                pp.open_with_options(Mutation::Insert, land_in);
-                Ok(())
-            }
-            None => Err(format!("Project '{}' not found", name_or_path)),
-        }
+        open_project(&name_or_path, land_in)
     };
 
     if sync {
@@ -509,6 +494,31 @@ pub fn vscode_url(name: &str) -> Response<Body> {
             .status(StatusCode::NOT_FOUND)
             .body(Body::from(format!("Project '{}' not found", key)))
             .unwrap(),
+    }
+}
+
+/// Open a project or task by name, creating the worktree if it is a task that
+/// does not exist yet. A project need not already be in the ring: that is the
+/// point, since most of them are not.
+pub fn open_project(
+    name_or_path: &str,
+    land_in: Option<crate::wormhole::LandIn>,
+) -> Result<(), String> {
+    let key = resolve_project_key(name_or_path)?;
+    if let Some((repo, branch)) = key.as_task() {
+        return crate::task::open_task(repo, branch, land_in);
+    }
+    let project_path = {
+        let mut projects = projects::lock();
+        resolve_project(&mut projects, name_or_path)?
+    };
+    match project_path {
+        Some(pp) => {
+            pp.project.checked_working_tree()?;
+            pp.open_with_options(Mutation::Insert, land_in);
+            Ok(())
+        }
+        None => Err(format!("Project '{}' not found", name_or_path)),
     }
 }
 

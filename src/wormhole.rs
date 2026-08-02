@@ -497,7 +497,8 @@ async fn handle_kv_request(method: &Method, kv_path: &str, req: Request<Body>) -
 }
 
 /// Resume an agent session by id, in a named project. The caller already knows
-/// both; senderos owns the index that maps one to the other.
+/// both; senderos owns the index that maps one to the other. The project need
+/// not be open — it is opened the same way switching to it would.
 fn resume_session(
     project_key: Option<&str>,
     session_id: Option<&str>,
@@ -510,24 +511,17 @@ fn resume_session(
             .unwrap();
     };
 
-    let key = crate::project::ProjectKey::parse(project_key);
-    if projects::lock().by_key(&key).is_none() {
-        return Response::builder()
-            .status(StatusCode::NOT_FOUND)
-            .body(Body::from(format!("Project not found: {}", key)))
-            .unwrap();
-    }
-
     let (pk, sid) = (project_key.to_string(), session_id.to_string());
     thread::spawn(move || {
+        if let Err(e) = project::open_project(&pk, Some(LandIn::TerminalOnly)) {
+            ps!("resume-session: {}", e);
+            return;
+        }
         let project = {
             let store = projects::lock();
             store.by_key(&crate::project::ProjectKey::parse(&pk))
         };
         if let Some(project) = project {
-            project
-                .as_project_path()
-                .open(Mutation::Insert, Some(LandIn::TerminalOnly));
             crate::tmux::resume_claude_session(&project, &sid, fork);
         }
     });

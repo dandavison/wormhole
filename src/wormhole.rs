@@ -80,6 +80,7 @@ pub struct QueryParams {
     pub prune: bool,
     pub session: Option<String>,
     pub fork: bool,
+    pub pid: Option<u32>,
 }
 
 pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
@@ -228,6 +229,7 @@ async fn route(
                 params.project.as_deref(),
                 params.session.as_deref(),
                 params.fork,
+                params.pid,
             )
         }),
         "/conversations/sync" => require_post(method, || {
@@ -503,6 +505,7 @@ fn resume_session(
     project_key: Option<&str>,
     session_id: Option<&str>,
     fork: bool,
+    pid: Option<u32>,
 ) -> Response<Body> {
     let (Some(project_key), Some(session_id)) = (project_key, session_id) else {
         return Response::builder()
@@ -516,6 +519,15 @@ fn resume_session(
         if let Err(e) = project::open_project(&pk, Some(LandIn::TerminalOnly)) {
             ps!("resume-session: {}", e);
             return;
+        }
+        // A session that is already running wants focusing, not starting again.
+        // Forking is the exception: that is a request for a second session.
+        if !fork {
+            if let Some(pid) = pid {
+                if crate::tmux::focus_pane_with_pid(pid) {
+                    return;
+                }
+            }
         }
         let project = {
             let store = projects::lock();
@@ -638,6 +650,7 @@ impl QueryParams {
             prune: false,
             session: None,
             fork: false,
+            pid: None,
         };
         if let Some(query) = query {
             for (key, val) in form_urlencoded::parse(query.as_bytes()) {
@@ -670,6 +683,7 @@ impl QueryParams {
                     "project" => params.project = Some(val.to_string()),
                     "session" => params.session = Some(val.to_string()),
                     "fork" => params.fork = val == "true" || val == "1",
+                    "pid" => params.pid = val.parse().ok(),
                     "role" => params.role = Some(val.to_string()),
                     "wait" => params.wait = val.parse().ok(),
                     "since" => params.since = Some(val.to_string()),

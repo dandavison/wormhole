@@ -250,9 +250,9 @@ wormhole completion bash                # Generate shell completions
 | DELETE | `/kv-all/<key>`               | Delete key from all projects      |
 | GET    | `/kv/<project>`               | List project KV                   |
 | GET    | `/kv`                         | List all KV                       |
-| POST   | `/conversations/resume-session` | Resume an agent session by id (`?project=&session=&fork=`) |
+| POST   | `/conversations/resume-session` | Resume an agent session by id (`?project=&session=&fork=&pid=`) |
 
-Query params: `land-in=terminal|editor|terminal-only|none`, `line=N`, `home-project=<project>`, `branch=<branch>`, `active=true`, `current=true`, `completed=true`, `dry-run=true`, `sync=true`, `pwd=<path>`, `run=<id>`, `offset=N`, `role=<role>`, `wait=N`, `remove=true`, `session=<id>`, `fork=true`
+Query params: `land-in=terminal|editor|terminal-only|none`, `line=N`, `home-project=<project>`, `branch=<branch>`, `active=true`, `current=true`, `completed=true`, `dry-run=true`, `sync=true`, `pwd=<path>`, `run=<id>`, `offset=N`, `role=<role>`, `wait=N`, `remove=true`, `session=<id>`, `fork=true`, `pid=N`
 
 ## Message Intents
 

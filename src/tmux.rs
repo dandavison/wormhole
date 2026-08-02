@@ -179,6 +179,41 @@ pub fn resume_claude_session(project: &Project, session_id: &str, fork: bool) {
     tmux(["select-pane", "-t", pane_id]);
 }
 
+/// Focus the pane a process is running in. Returns false when it is not in one.
+///
+/// A session started by hand lives in a pane wormhole never tagged, so looking
+/// for the tag is not enough: found by the controlling terminal of the process
+/// itself, which is the pane's tty.
+pub fn focus_pane_with_pid(pid: u32) -> bool {
+    let Some(tty) = tty_of(pid) else {
+        return false;
+    };
+    let fmt = "#{pane_id} #{window_id} #{pane_tty}";
+    for line in tmux(["list-panes", "-a", "-F", fmt]).lines() {
+        let mut fields = line.split_whitespace();
+        let (Some(pane), Some(window), Some(pane_tty)) =
+            (fields.next(), fields.next(), fields.next())
+        else {
+            continue;
+        };
+        if pane_tty.trim_start_matches("/dev/") == tty {
+            tmux(["select-window", "-t", window]);
+            tmux(["select-pane", "-t", pane]);
+            return true;
+        }
+    }
+    false
+}
+
+fn tty_of(pid: u32) -> Option<String> {
+    let output = Command::new("ps")
+        .args(["-o", "tty=", "-p", &pid.to_string()])
+        .output()
+        .ok()?;
+    let tty = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    (!tty.is_empty() && tty != "??").then_some(tty)
+}
+
 const SESSION_PANE_OPTION: &str = "@wormhole_claude_session";
 
 fn find_session_pane(window_id: &str, session_id: &str) -> Option<String> {

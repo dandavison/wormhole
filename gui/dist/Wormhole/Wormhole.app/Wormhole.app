@@ -1,0 +1,1 @@
+/Users/dan/src/wormhole/gui/dist/Wormhole/Wormhole.app

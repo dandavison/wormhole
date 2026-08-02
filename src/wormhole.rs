@@ -78,6 +78,8 @@ pub struct QueryParams {
     pub with_editor: bool,
     pub remove: bool,
     pub prune: bool,
+    pub session: Option<String>,
+    pub fork: bool,
 }
 
 pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
@@ -221,6 +223,13 @@ async fn route(
         "/favicon.png" => handlers::favicon(),
         "/shell" => project::shell_env(params.pwd.as_deref()),
         "/kv" => crate::kv::list_all_kv_fresh(),
+        "/conversations/resume-session" => require_post(method, || {
+            resume_session(
+                params.project.as_deref(),
+                params.session.as_deref(),
+                params.fork,
+            )
+        }),
         "/conversations/sync" => require_post(method, || {
             let projects = project_dirs_for_sync();
             let filter: Option<Vec<&str>> = params
@@ -487,6 +496,51 @@ async fn handle_kv_request(method: &Method, kv_path: &str, req: Request<Body>) -
     }
 }
 
+/// Resume an agent session by id, in a named project. The caller already knows
+/// both; senderos owns the index that maps one to the other.
+fn resume_session(
+    project_key: Option<&str>,
+    session_id: Option<&str>,
+    fork: bool,
+) -> Response<Body> {
+    let (Some(project_key), Some(session_id)) = (project_key, session_id) else {
+        return Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body(Body::from("Both ?project= and ?session= are required"))
+            .unwrap();
+    };
+
+    let key = crate::project::ProjectKey::parse(project_key);
+    if projects::lock().by_key(&key).is_none() {
+        return Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(Body::from(format!("Project not found: {}", key)))
+            .unwrap();
+    }
+
+    let (pk, sid) = (project_key.to_string(), session_id.to_string());
+    thread::spawn(move || {
+        let project = {
+            let store = projects::lock();
+            store.by_key(&crate::project::ProjectKey::parse(&pk))
+        };
+        if let Some(project) = project {
+            project
+                .as_project_path()
+                .open(Mutation::Insert, Some(LandIn::TerminalOnly));
+            crate::tmux::resume_claude_session(&project, &sid, fork);
+        }
+    });
+
+    Response::builder()
+        .header("Content-Type", "application/json")
+        .body(Body::from(
+            serde_json::json!({ "session_id": session_id, "project": project_key, "fork": fork })
+                .to_string(),
+        ))
+        .unwrap()
+}
+
 fn handle_conversation_resume(synced_file_path: &str) -> Response<Body> {
     let synced_file = std::path::Path::new(synced_file_path);
 
@@ -528,7 +582,7 @@ fn handle_conversation_resume(synced_file_path: &str) -> Response<Body> {
             project
                 .as_project_path()
                 .open(Mutation::Insert, Some(LandIn::TerminalOnly));
-            crate::tmux::resume_claude_session(&project, &sid);
+            crate::tmux::resume_claude_session(&project, &sid, false);
         }
     });
 
@@ -588,6 +642,8 @@ impl QueryParams {
             with_editor: false,
             remove: false,
             prune: false,
+            session: None,
+            fork: false,
         };
         if let Some(query) = query {
             for (key, val) in form_urlencoded::parse(query.as_bytes()) {
@@ -618,6 +674,8 @@ impl QueryParams {
                     "run" => params.run = val.parse().ok(),
                     "offset" => params.offset = val.parse().ok(),
                     "project" => params.project = Some(val.to_string()),
+                    "session" => params.session = Some(val.to_string()),
+                    "fork" => params.fork = val == "true" || val == "1",
                     "role" => params.role = Some(val.to_string()),
                     "wait" => params.wait = val.parse().ok(),
                     "since" => params.since = Some(val.to_string()),

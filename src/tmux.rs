@@ -134,7 +134,9 @@ fn project_window_ids(store_key: &str) -> Vec<String> {
 /// Open (or focus) a tmux pane running `claude -r <session_id>` in the project's
 /// window. A pane already running this session is reused; otherwise a new pane
 /// is split off, tagged with the session id, and `claude -r` is launched in it.
-pub fn resume_claude_session(project: &Project, session_id: &str) {
+/// With `fork`, the resumed session is branched into a new one instead of
+/// being continued, so the original is left as it was.
+pub fn resume_claude_session(project: &Project, session_id: &str, fork: bool) {
     let _ = open(project);
     let window = match get_window(&project.store_key().to_string()) {
         Some(w) => w,
@@ -168,7 +170,10 @@ pub fn resume_claude_session(project: &Project, session_id: &str) {
         SESSION_PANE_OPTION,
         session_id,
     ]);
-    let cmd = format!("claude -r {session_id}");
+    let cmd = match fork {
+        true => format!("claude -r {session_id} --fork-session"),
+        false => format!("claude -r {session_id}"),
+    };
     tmux(["send-keys", "-t", pane_id, cmd.as_str(), "Enter"]);
     tmux(["select-window", "-t", &window.id]);
     tmux(["select-pane", "-t", pane_id]);

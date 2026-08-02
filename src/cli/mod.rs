@@ -149,7 +149,7 @@ pub enum ProjectCommand {
         /// Also remove the project (deletes worktree and KV data for tasks)
         #[arg(long)]
         remove: bool,
-        /// Prompt before closing each project (RET = close, n = skip)
+        /// Prompt before closing each project (RET = close, n = skip); implies --all
         #[arg(short, long)]
         interactive: bool,
     },
@@ -558,6 +558,7 @@ pub fn run(command: Command) -> Result<(), String> {
                 remove,
                 interactive,
             } => {
+                let all = all || interactive;
                 let remove_query = if remove { "?remove=true" } else { "" };
                 if all && !interactive {
                     client.post(&format!("/project/close-all{}", remove_query))?;

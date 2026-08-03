@@ -499,7 +499,7 @@ async fn handle_kv_request(method: &Method, kv_path: &str, req: Request<Body>) -
 }
 
 /// Resume an agent session by id, in a named project. The caller already knows
-/// both; senderos owns the index that maps one to the other. The project need
+/// both; agent-sessions owns the index that maps one to the other. The project need
 /// not be open — it is opened the same way switching to it would.
 fn resume_session(
     project_key: Option<&str>,

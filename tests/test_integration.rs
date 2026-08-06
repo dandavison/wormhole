@@ -1368,78 +1368,53 @@ fn test_run_in_terminal() {
     std::fs::create_dir_all(&elsewhere).unwrap();
     test.create_project(&dir, &proj);
 
-    // Runs in the named directory, not the project's working tree, and keeps
-    // running: a pane sitting at a prompt is a different case, tested below.
     let cmd = "printf RAN:%s\\\\n \"$PWD\"; sleep 300";
     let query = format!(
-        "project={}&cwd={}&cmd={}&tag=t1",
+        "project={}&cwd={}&cmd={}",
         proj,
         urlencode(&elsewhere),
         urlencode(cmd)
     );
     test.http_post(&format!("/terminal/run?{}", query)).unwrap();
 
-    assert!(
-        test.wait_until(|| test.tagged_panes("t1").len() == 1, 10),
-        "expected one pane tagged t1, got {:?}",
-        test.tagged_panes("t1")
-    );
-    let pane = test.tagged_panes("t1").remove(0);
     let expected = format!("RAN:{}", elsewhere);
     assert!(
-        test.wait_until(|| test.capture_pane(&pane).contains(&expected), 10),
-        "expected {:?} on screen, got {:?}",
+        test.wait_until(|| test.pane_showing(&expected).is_some(), 10),
+        "expected {:?} on screen in some pane of {}",
         expected,
-        test.capture_pane(&pane)
+        test.pane_listing()
     );
+    let pane = test.pane_showing(&expected).unwrap();
 
-    // Asking again for something already running focuses that pane rather than
-    // opening a second one or typing into it.
-    test.http_post(&format!("/terminal/run?{}", query)).unwrap();
+    // A pid says the thing is already running: its pane is focused, and nothing
+    // is run a second time.
+    let pid = test.pane_foreground_pid(&pane);
+    let panes = test.pane_count();
+    test.http_post(&format!("/terminal/run?{}&pid={}", query, pid))
+        .unwrap();
     assert!(
-        test.wait_until(|| test.tagged_panes("t1").len() == 1, 5),
-        "a second request must not open a second pane: {:?}",
-        test.tagged_panes("t1")
+        test.wait_until(|| test.focused_pane() == pane, 10),
+        "a pid names a pane to focus, and this is {}",
+        test.pane_listing()
+    );
+    assert_eq!(
+        test.pane_count(),
+        panes,
+        "focusing is instead of running, not as well: {}",
+        test.pane_listing()
     );
     assert_eq!(
         test.capture_pane(&pane).matches(&expected).count(),
         1,
-        "the running pane must not be typed into"
+        "the pane it is running in must not be typed into"
     );
 
-    // A tagged pane whose command has finished is reused, since the tag outlives
-    // the process and focusing a finished pane is a silent nothing.
-    let once = format!(
-        "project={}&cwd={}&cmd={}&tag=t2",
-        proj,
-        urlencode(&dir),
-        urlencode("printf DONE:%s\\\\n once")
-    );
-    test.http_post(&format!("/terminal/run?{}", once)).unwrap();
+    // Without a pid there is nothing to focus, so it runs, in a pane of its own.
+    test.http_post(&format!("/terminal/run?{}", query)).unwrap();
     assert!(
-        test.wait_until(
-            || test
-                .tagged_panes("t2")
-                .first()
-                .is_some_and(|p| test.capture_pane(p).contains("DONE:once")),
-            10
-        ),
-        "expected the command to have run in the pane tagged t2"
-    );
-    let pane = test.tagged_panes("t2").remove(0);
-    test.http_post(&format!("/terminal/run?{}", once)).unwrap();
-    assert!(
-        test.wait_until(
-            || test.capture_pane(&pane).matches("DONE:once").count() == 2,
-            10
-        ),
-        "expected the finished pane to be reused, got {:?}",
-        test.capture_pane(&pane)
-    );
-    assert_eq!(
-        test.tagged_panes("t2").len(),
-        1,
-        "reuse means one pane, not two"
+        test.wait_until(|| test.pane_count() == panes + 1, 10),
+        "expected a pane of its own: {}",
+        test.pane_listing()
     );
 }
 

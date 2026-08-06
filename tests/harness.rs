@@ -507,24 +507,78 @@ impl WormholeTest {
         String::from_utf8_lossy(&output.stdout).trim().to_string()
     }
 
-    /// Panes on the test server whose `@wormhole_pane_tag` is `tag`.
-    pub fn tagged_panes(&self, tag: &str) -> Vec<String> {
-        let output = Command::new("tmux")
+    /// The pid of whatever is running in a pane, as a caller who started it
+    /// would know it.
+    pub fn pane_foreground_pid(&self, pane_id: &str) -> u32 {
+        let tty = Command::new("tmux")
             .args([
                 "-L",
                 &self.tmux.socket,
-                "list-panes",
-                "-a",
-                "-F",
-                "#{pane_id}\t#{@wormhole_pane_tag}",
+                "display-message",
+                "-p",
+                "-t",
+                pane_id,
+                "#{pane_tty}",
             ])
+            .output()
+            .unwrap();
+        let tty = String::from_utf8_lossy(&tty.stdout).trim().to_string();
+        let ps = Command::new("ps")
+            .args([
+                "-t",
+                tty.trim_start_matches("/dev/"),
+                "-o",
+                "stat=,pid=,comm=",
+            ])
+            .output()
+            .unwrap();
+        let listing = String::from_utf8_lossy(&ps.stdout).to_string();
+        listing
+            .lines()
+            .find(|line| line.contains('+') && line.contains("sleep"))
+            .and_then(|line| line.split_whitespace().nth(1))
+            .unwrap_or_else(|| panic!("no foreground process in {}: {}", pane_id, listing))
+            .parse()
+            .unwrap()
+    }
+
+    /// Every pane and what is running in it, for saying what went wrong.
+    pub fn pane_listing(&self) -> String {
+        self.tmux_lines(&[
+            "list-panes",
+            "-a",
+            "-F",
+            "#{pane_id} #{pane_current_command}",
+        ])
+        .join(", ")
+    }
+
+    pub fn pane_count(&self) -> usize {
+        self.tmux_lines(&["list-panes", "-a", "-F", "#{pane_id}"])
+            .len()
+    }
+
+    pub fn focused_pane(&self) -> String {
+        self.tmux_lines(&["display-message", "-p", "#{pane_id}"])
+            .join("")
+    }
+
+    /// The pane with `text` on screen, of which there should be one.
+    pub fn pane_showing(&self, text: &str) -> Option<String> {
+        self.tmux_lines(&["list-panes", "-a", "-F", "#{pane_id}"])
+            .into_iter()
+            .find(|pane| self.capture_pane(pane).contains(text))
+    }
+
+    fn tmux_lines(&self, args: &[&str]) -> Vec<String> {
+        let output = Command::new("tmux")
+            .args(["-L", &self.tmux.socket])
+            .args(args)
             .output()
             .unwrap();
         String::from_utf8_lossy(&output.stdout)
             .lines()
-            .filter_map(|line| line.split_once('\t'))
-            .filter(|(_, pane_tag)| *pane_tag == tag)
-            .map(|(pane, _)| pane.to_string())
+            .map(|line| line.to_string())
             .collect()
     }
 

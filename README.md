@@ -250,9 +250,9 @@ wormhole completion bash                # Generate shell completions
 | DELETE | `/kv-all/<key>`               | Delete key from all projects      |
 | GET    | `/kv/<project>`               | List project KV                   |
 | GET    | `/kv`                         | List all KV                       |
-| POST   | `/terminal/run`               | Run a command in a pane of a project, in a named directory (`?project=&cwd=&cmd=&tag=&pid=`) |
+| POST   | `/terminal/run`               | Run a command in a pane of a project, in a named directory (`?project=&cwd=&cmd=&pid=`) |
 
-Query params: `land-in=terminal|editor|terminal-only|none`, `line=N`, `home-project=<project>`, `branch=<branch>`, `active=true`, `current=true`, `completed=true`, `dry-run=true`, `sync=true`, `pwd=<path>`, `run=<id>`, `offset=N`, `role=<role>`, `wait=N`, `remove=true`, `cmd=<command>`, `tag=<name>`, `cwd=<path>`, `pid=N`
+Query params: `land-in=terminal|editor|terminal-only|none`, `line=N`, `home-project=<project>`, `branch=<branch>`, `active=true`, `current=true`, `completed=true`, `dry-run=true`, `sync=true`, `pwd=<path>`, `run=<id>`, `offset=N`, `role=<role>`, `wait=N`, `remove=true`, `cmd=<command>`, `cwd=<path>`, `pid=N`
 
 ## Message Intents
 

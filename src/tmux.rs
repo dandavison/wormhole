@@ -131,49 +131,30 @@ fn project_window_ids(store_key: &str) -> Vec<String> {
     ids
 }
 
-/// Run `cmd` in a pane of the project's window, started in `cwd`, and focus it.
+/// Run `cmd` in a pane of its own in the project's window, started in `cwd`,
+/// and focus it.
 ///
 /// What the command is, and which directory it has to be run in, are the
 /// caller's business: a program that files its state by directory can only be
 /// picked up where it was left, and this has no way of knowing that. It obeys.
 ///
-/// `tag` names what the pane is for, so a second request for the same thing
-/// finds it again. A tagged pane with something still running in it is focused
-/// rather than disturbed; one sitting at a prompt is reused, since the tag
-/// outlives the process and focusing a finished pane is a silent nothing. An
-/// empty tag names nothing and so matches nothing: a pane of its own, rather
-/// than the first untagged pane somebody happened to be working in.
-pub fn run_in_pane(project: &Project, cwd: &str, cmd: &str, tag: &str) {
+/// Always a new pane. Whether a pane still has something running in it cannot
+/// be told from outside with any confidence — an interactive shell here keeps
+/// helpers of its own in the foreground, which read exactly like a program that
+/// has not finished — and a pane guessed wrong about is either typed into while
+/// somebody is working in it or focused while nothing is. Whether the thing is
+/// already running is known to the caller, who says so with a pid, and that
+/// pane is focused instead of this being called at all.
+pub fn run_in_pane(project: &Project, cwd: &str, cmd: &str) {
     let _ = open(project);
     let window = match get_window(&project.store_key().to_string()) {
         Some(w) => w,
         None => return,
     };
-    let tagged = (!tag.is_empty())
-        .then(|| find_tagged_pane(&window.id, tag))
-        .flatten();
-    if let Some(pane_id) = &tagged {
-        if pane_is_busy(pane_id) {
-            tmux(["select-window", "-t", &window.id]);
-            tmux(["select-pane", "-t", pane_id]);
-            return;
-        }
-    }
-    let (pane_id, reused) = match tagged {
-        Some(pane_id) => (pane_id, true),
-        None => match split_pane(&window.id, cwd) {
-            Some(pane_id) => (pane_id, false),
-            None => return,
-        },
+    let Some(pane_id) = split_pane(&window.id, cwd) else {
+        return;
     };
-    tmux(["set-option", "-p", "-t", &pane_id, PANE_TAG_OPTION, tag]);
-    // A pane split for this lands in `cwd` already; one left over from before
-    // is wherever it was, which is what has to be corrected.
-    let cd = match reused {
-        true => format!("cd {} && ", crate::batch::shell_escape(cwd)),
-        false => String::new(),
-    };
-    tmux(["send-keys", "-t", &pane_id, &format!("{cd}{cmd}"), "Enter"]);
+    tmux(["send-keys", "-t", &pane_id, cmd, "Enter"]);
     tmux(["select-window", "-t", &window.id]);
     tmux(["select-pane", "-t", &pane_id]);
 }
@@ -191,36 +172,6 @@ fn split_pane(window_id: &str, cwd: &str) -> Option<String> {
     ]);
     let pane_id = pane_id.trim();
     (!pane_id.is_empty()).then(|| pane_id.to_string())
-}
-
-/// Whether something is still running in a pane, as against it sitting at a
-/// prompt.
-///
-/// Not `pane_current_command`, which reports the shell wrapper and not what it
-/// runs. The pane's own shell is named by `#{pane_pid}`; anything else in the
-/// foreground on its tty — `+` in the process state — is a program that has
-/// not finished.
-fn pane_is_busy(pane_id: &str) -> bool {
-    let fmt = "#{pane_tty} #{pane_pid}";
-    let info = tmux(["display-message", "-p", "-t", pane_id, fmt]);
-    let mut fields = info.split_whitespace();
-    let (Some(tty), Some(shell_pid)) = (fields.next(), fields.next()) else {
-        return false;
-    };
-    let tty = tty.trim_start_matches("/dev/");
-    let Ok(output) = Command::new("ps")
-        .args(["-t", tty, "-o", "stat=,pid="])
-        .output()
-    else {
-        return false;
-    };
-    String::from_utf8_lossy(&output.stdout).lines().any(|line| {
-        let mut fields = line.split_whitespace();
-        let (Some(state), Some(pid)) = (fields.next(), fields.next()) else {
-            return false;
-        };
-        state.contains('+') && pid != shell_pid
-    })
 }
 
 /// Focus the pane a process is running in. Returns false when it is not in one.
@@ -256,18 +207,6 @@ fn tty_of(pid: u32) -> Option<String> {
         .ok()?;
     let tty = String::from_utf8_lossy(&output.stdout).trim().to_string();
     (!tty.is_empty() && tty != "??").then_some(tty)
-}
-
-const PANE_TAG_OPTION: &str = "@wormhole_pane_tag";
-
-fn find_tagged_pane(window_id: &str, tag: &str) -> Option<String> {
-    let fmt = format!("#{{pane_id}} #{{{PANE_TAG_OPTION}}}");
-    tmux(["list-panes", "-t", window_id, "-F", fmt.as_str()])
-        .lines()
-        .find_map(|line| {
-            let (pane, pane_tag) = line.split_once(' ')?;
-            (pane_tag == tag).then(|| pane.to_string())
-        })
 }
 
 fn get_window(name: &str) -> Option<Window> {

@@ -79,7 +79,6 @@ pub struct QueryParams {
     pub remove: bool,
     pub prune: bool,
     pub cmd: Option<String>,
-    pub tag: Option<String>,
     pub pid: Option<u32>,
     pub cwd: Option<String>,
 }
@@ -230,7 +229,6 @@ async fn route(
                 params.project.as_deref(),
                 params.cwd.as_deref(),
                 params.cmd.as_deref(),
-                params.tag.as_deref(),
                 params.pid,
             )
         }),
@@ -513,7 +511,6 @@ fn run_in_terminal(
     project_key: Option<&str>,
     cwd: Option<&str>,
     cmd: Option<&str>,
-    tag: Option<&str>,
     pid: Option<u32>,
 ) -> Response<Body> {
     let (Some(project_key), Some(cwd), Some(cmd)) = (project_key, cwd, cmd) else {
@@ -523,12 +520,7 @@ fn run_in_terminal(
             .unwrap();
     };
 
-    let (pk, dir, command, tag) = (
-        project_key.to_string(),
-        cwd.to_string(),
-        cmd.to_string(),
-        tag.unwrap_or_default().to_string(),
-    );
+    let (pk, dir, command) = (project_key.to_string(), cwd.to_string(), cmd.to_string());
     thread::spawn(move || {
         if let Err(e) = project::open_project(&pk, Some(LandIn::TerminalOnly)) {
             ps!("terminal/run: {}", e);
@@ -545,7 +537,7 @@ fn run_in_terminal(
             store.by_key(&crate::project::ProjectKey::parse(&pk))
         };
         if let Some(project) = project {
-            crate::tmux::run_in_pane(&project, &dir, &command, &tag);
+            crate::tmux::run_in_pane(&project, &dir, &command);
         }
     });
 
@@ -602,7 +594,7 @@ fn handle_conversation_resume(synced_file_path: &str) -> Response<Body> {
             // what it always did: the project's own working tree.
             let cwd = project.working_tree().to_string_lossy().to_string();
             let cmd = crate::conversations::resume_command(&sid);
-            crate::tmux::run_in_pane(&project, &cwd, &cmd, &sid);
+            crate::tmux::run_in_pane(&project, &cwd, &cmd);
         }
     });
 
@@ -663,7 +655,6 @@ impl QueryParams {
             remove: false,
             prune: false,
             cmd: None,
-            tag: None,
             pid: None,
             cwd: None,
         };
@@ -697,7 +688,6 @@ impl QueryParams {
                     "offset" => params.offset = val.parse().ok(),
                     "project" => params.project = Some(val.to_string()),
                     "cmd" => params.cmd = Some(val.to_string()),
-                    "tag" => params.tag = Some(val.to_string()),
                     "pid" => params.pid = val.parse().ok(),
                     "cwd" => params.cwd = Some(val.to_string()),
                     "role" => params.role = Some(val.to_string()),

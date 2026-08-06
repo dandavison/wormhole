@@ -10,6 +10,7 @@ use crate::config;
 use crate::tty::TerminalHyperlink;
 
 mod doctor;
+mod hint;
 mod jira;
 pub mod project;
 mod task;
@@ -281,6 +282,13 @@ pub enum Command {
         /// For a PR/issue/JIRA reference, show what would be created without creating it
         #[arg(long)]
         dry_run: bool,
+    },
+
+    /// Open a fragment of terminal text (a terminal hint match). Resolves file
+    /// paths, pdb/traceback frames, and task identifiers; never creates anything
+    Hint {
+        /// Text matched in the terminal, e.g. `src/main.rs:91` or `wormhole:dan/hints`
+        text: String,
     },
 
     /// Key-value storage operations
@@ -721,6 +729,8 @@ pub fn run(command: Command) -> Result<(), String> {
             }
             Ok(())
         }
+
+        Command::Hint { text } => hint::open(&client, &text),
 
         Command::Kv { command } => match command {
             KvCommand::Get {

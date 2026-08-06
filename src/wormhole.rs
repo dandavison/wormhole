@@ -81,6 +81,7 @@ pub struct QueryParams {
     pub session: Option<String>,
     pub fork: bool,
     pub pid: Option<u32>,
+    pub cwd: Option<String>,
 }
 
 pub async fn service(req: Request<Body>) -> Result<Response<Body>, Infallible> {
@@ -228,6 +229,7 @@ async fn route(
             resume_session(
                 params.project.as_deref(),
                 params.session.as_deref(),
+                params.cwd.as_deref(),
                 params.fork,
                 params.pid,
             )
@@ -498,23 +500,32 @@ async fn handle_kv_request(method: &Method, kv_path: &str, req: Request<Body>) -
     }
 }
 
-/// Resume an agent session by id, in a named project. The caller already knows
-/// both; agent-sessions owns the index that maps one to the other. The project need
-/// not be open — it is opened the same way switching to it would.
+/// Resume an agent session by id, in a named project, in the directory it was
+/// had in. agent-sessions owns the index and knows all three; the project says
+/// which window, and the cwd is not a free choice — an agent files its
+/// transcripts by directory and finds nothing when started elsewhere. The
+/// project need not be open: it is opened the same way switching to it would.
 fn resume_session(
     project_key: Option<&str>,
     session_id: Option<&str>,
+    cwd: Option<&str>,
     fork: bool,
     pid: Option<u32>,
 ) -> Response<Body> {
-    let (Some(project_key), Some(session_id)) = (project_key, session_id) else {
+    let (Some(project_key), Some(session_id), Some(cwd)) = (project_key, session_id, cwd) else {
         return Response::builder()
             .status(StatusCode::BAD_REQUEST)
-            .body(Body::from("Both ?project= and ?session= are required"))
+            .body(Body::from(
+                "?project=, ?session= and ?cwd= are all required",
+            ))
             .unwrap();
     };
 
-    let (pk, sid) = (project_key.to_string(), session_id.to_string());
+    let (pk, sid, cwd) = (
+        project_key.to_string(),
+        session_id.to_string(),
+        cwd.to_string(),
+    );
     thread::spawn(move || {
         if let Err(e) = project::open_project(&pk, Some(LandIn::TerminalOnly)) {
             ps!("resume-session: {}", e);
@@ -534,7 +545,7 @@ fn resume_session(
             store.by_key(&crate::project::ProjectKey::parse(&pk))
         };
         if let Some(project) = project {
-            crate::tmux::resume_claude_session(&project, &sid, fork);
+            crate::tmux::resume_claude_session(&project, &sid, &cwd, fork);
         }
     });
 
@@ -588,7 +599,10 @@ fn handle_conversation_resume(synced_file_path: &str) -> Response<Body> {
             project
                 .as_project_path()
                 .open(Mutation::Insert, Some(LandIn::TerminalOnly));
-            crate::tmux::resume_claude_session(&project, &sid, false);
+            // No cwd travels with a synced conversation file, so this keeps
+            // what it always did: the project's own working tree.
+            let cwd = project.working_tree().to_string_lossy().to_string();
+            crate::tmux::resume_claude_session(&project, &sid, &cwd, false);
         }
     });
 
@@ -651,6 +665,7 @@ impl QueryParams {
             session: None,
             fork: false,
             pid: None,
+            cwd: None,
         };
         if let Some(query) = query {
             for (key, val) in form_urlencoded::parse(query.as_bytes()) {
@@ -684,6 +699,7 @@ impl QueryParams {
                     "session" => params.session = Some(val.to_string()),
                     "fork" => params.fork = val == "true" || val == "1",
                     "pid" => params.pid = val.parse().ok(),
+                    "cwd" => params.cwd = Some(val.to_string()),
                     "role" => params.role = Some(val.to_string()),
                     "wait" => params.wait = val.parse().ok(),
                     "since" => params.since = Some(val.to_string()),

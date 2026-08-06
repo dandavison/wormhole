@@ -463,7 +463,7 @@ pub fn shell_command_line(command: &[String]) -> String {
         .join(" ")
 }
 
-fn shell_escape(s: &str) -> String {
+pub fn shell_escape(s: &str) -> String {
     if s.chars()
         .all(|c| c.is_alphanumeric() || "-_./=:@%+,".contains(c))
     {

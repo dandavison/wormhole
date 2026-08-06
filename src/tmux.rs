@@ -132,51 +132,102 @@ fn project_window_ids(store_key: &str) -> Vec<String> {
 }
 
 /// Open (or focus) a tmux pane running `claude -r <session_id>` in the project's
-/// window. A pane already running this session is reused; otherwise a new pane
-/// is split off, tagged with the session id, and `claude -r` is launched in it.
-/// With `fork`, the resumed session is branched into a new one instead of
-/// being continued, so the original is left as it was.
-pub fn resume_claude_session(project: &Project, session_id: &str, fork: bool) {
+/// window, started in `cwd`.
+///
+/// The directory is not a free choice and is not the project's working tree:
+/// claude files a session under the directory it was had in, and started
+/// anywhere else it reports the session as missing and exits, leaving a pane
+/// that looks like a resume that did nothing. The caller knows which directory
+/// that is; this only obeys.
+///
+/// A pane where the session is still running is focused. A pane tagged with the
+/// session where claude has since exited is reused: the tag outlives the
+/// process, and focusing a dead pane is the same silent nothing. With `fork`,
+/// the session is branched instead of continued, leaving the original as it was.
+pub fn resume_claude_session(project: &Project, session_id: &str, cwd: &str, fork: bool) {
     let _ = open(project);
     let window = match get_window(&project.store_key().to_string()) {
         Some(w) => w,
         None => return,
     };
-    if let Some(pane_id) = find_session_pane(&window.id, session_id) {
-        tmux(["select-window", "-t", &window.id]);
-        tmux(["select-pane", "-t", &pane_id]);
-        return;
+    let tagged = find_session_pane(&window.id, session_id);
+    if let Some(pane_id) = &tagged {
+        if pane_running_claude(pane_id) {
+            tmux(["select-window", "-t", &window.id]);
+            tmux(["select-pane", "-t", pane_id]);
+            return;
+        }
     }
-    let dir = project.working_tree().to_string_lossy().to_string();
+    let (pane_id, stale) = match tagged {
+        Some(pane_id) => (pane_id, true),
+        None => match split_pane(&window.id, cwd) {
+            Some(pane_id) => (pane_id, false),
+            None => return,
+        },
+    };
+    tmux([
+        "set-option",
+        "-p",
+        "-t",
+        &pane_id,
+        SESSION_PANE_OPTION,
+        session_id,
+    ]);
+    // A pane split for this lands in `cwd` already; one left over from before
+    // is wherever it was, which is what has to be corrected.
+    let cd = match stale {
+        true => format!("cd {} && ", crate::batch::shell_escape(cwd)),
+        false => String::new(),
+    };
+    let branch = match fork {
+        true => " --fork-session",
+        false => "",
+    };
+    let cmd = format!("{cd}claude -r {session_id}{branch}");
+    tmux(["send-keys", "-t", &pane_id, cmd.as_str(), "Enter"]);
+    tmux(["select-window", "-t", &window.id]);
+    tmux(["select-pane", "-t", &pane_id]);
+}
+
+fn split_pane(window_id: &str, cwd: &str) -> Option<String> {
     let pane_id = tmux_vec(vec![
         "split-window".to_string(),
         "-t".to_string(),
-        window.id.clone(),
+        window_id.to_string(),
         "-c".to_string(),
-        dir,
+        cwd.to_string(),
         "-P".to_string(),
         "-F".to_string(),
         "#{pane_id}".to_string(),
     ]);
     let pane_id = pane_id.trim();
-    if pane_id.is_empty() {
-        return;
+    (!pane_id.is_empty()).then(|| pane_id.to_string())
+}
+
+/// Whether claude is still running in a pane, by its tty rather than by
+/// `pane_current_command`, which reports the shell wrapper and not what it runs.
+fn pane_running_claude(pane_id: &str) -> bool {
+    let tty = tmux(["display-message", "-p", "-t", pane_id, "#{pane_tty}"]);
+    let tty = tty.trim().trim_start_matches("/dev/");
+    if tty.is_empty() {
+        return false;
     }
-    tmux([
-        "set-option",
-        "-p",
-        "-t",
-        pane_id,
-        SESSION_PANE_OPTION,
-        session_id,
-    ]);
-    let cmd = match fork {
-        true => format!("claude -r {session_id} --fork-session"),
-        false => format!("claude -r {session_id}"),
+    let Ok(output) = Command::new("ps")
+        .args(["-t", tty, "-o", "command="])
+        .output()
+    else {
+        return false;
     };
-    tmux(["send-keys", "-t", pane_id, cmd.as_str(), "Enter"]);
-    tmux(["select-window", "-t", &window.id]);
-    tmux(["select-pane", "-t", pane_id]);
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .any(|line| line.split_whitespace().next().is_some_and(is_claude))
+}
+
+fn is_claude(command: &str) -> bool {
+    command
+        .rsplit('/')
+        .next()
+        .is_some_and(|name| name == "claude")
 }
 
 /// Focus the pane a process is running in. Returns false when it is not in one.

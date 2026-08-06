@@ -507,6 +507,37 @@ impl WormholeTest {
         String::from_utf8_lossy(&output.stdout).trim().to_string()
     }
 
+    /// Panes on the test server whose `@wormhole_pane_tag` is `tag`.
+    pub fn tagged_panes(&self, tag: &str) -> Vec<String> {
+        let output = Command::new("tmux")
+            .args([
+                "-L",
+                &self.tmux.socket,
+                "list-panes",
+                "-a",
+                "-F",
+                "#{pane_id}\t#{@wormhole_pane_tag}",
+            ])
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .filter_map(|line| line.split_once('\t'))
+            .filter(|(_, pane_tag)| *pane_tag == tag)
+            .map(|(pane, _)| pane.to_string())
+            .collect()
+    }
+
+    /// What a pane has on screen. The only way to see that a command really ran
+    /// in it, as against a pane merely having been opened.
+    pub fn capture_pane(&self, pane_id: &str) -> String {
+        let output = Command::new("tmux")
+            .args(["-L", &self.tmux.socket, "capture-pane", "-p", "-t", pane_id])
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&output.stdout).to_string()
+    }
+
     /// Kill a tmux window by name directly (bypassing wormhole)
     pub fn kill_tmux_window(&self, name: &str) {
         // Get window index by name (avoids : being parsed as session:window separator)

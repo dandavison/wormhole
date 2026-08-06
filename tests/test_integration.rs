@@ -1352,3 +1352,105 @@ fn test_worktree_whose_dir_does_not_match_its_branch() {
     test.cli(&format!("wormhole open '{}'", key)).unwrap();
     test.assert_tmux_cwd(&canonical);
 }
+
+#[test]
+fn test_run_in_terminal() {
+    // A command run in a project's terminal, in a directory of the caller's
+    // choosing. The pane existing proves nothing — what is asserted is that the
+    // command reached a shell and ran there, which is what silently failed when
+    // the daemon composed the command itself and chose the directory itself.
+    let test = harness::WormholeTest::new(8968);
+
+    let proj = format!("{}terminal-run", TEST_PREFIX);
+    let dir = format!("/tmp/{}", proj);
+    let elsewhere = format!("{}/deeper", dir);
+    init_git_repo(&dir);
+    std::fs::create_dir_all(&elsewhere).unwrap();
+    test.create_project(&dir, &proj);
+
+    // Runs in the named directory, not the project's working tree, and keeps
+    // running: a pane sitting at a prompt is a different case, tested below.
+    let cmd = "printf RAN:%s\\\\n \"$PWD\"; sleep 300";
+    let query = format!(
+        "project={}&cwd={}&cmd={}&tag=t1",
+        proj,
+        urlencode(&elsewhere),
+        urlencode(cmd)
+    );
+    test.http_post(&format!("/terminal/run?{}", query)).unwrap();
+
+    assert!(
+        test.wait_until(|| test.tagged_panes("t1").len() == 1, 10),
+        "expected one pane tagged t1, got {:?}",
+        test.tagged_panes("t1")
+    );
+    let pane = test.tagged_panes("t1").remove(0);
+    let expected = format!("RAN:{}", elsewhere);
+    assert!(
+        test.wait_until(|| test.capture_pane(&pane).contains(&expected), 10),
+        "expected {:?} on screen, got {:?}",
+        expected,
+        test.capture_pane(&pane)
+    );
+
+    // Asking again for something already running focuses that pane rather than
+    // opening a second one or typing into it.
+    test.http_post(&format!("/terminal/run?{}", query)).unwrap();
+    assert!(
+        test.wait_until(|| test.tagged_panes("t1").len() == 1, 5),
+        "a second request must not open a second pane: {:?}",
+        test.tagged_panes("t1")
+    );
+    assert_eq!(
+        test.capture_pane(&pane).matches(&expected).count(),
+        1,
+        "the running pane must not be typed into"
+    );
+
+    // A tagged pane whose command has finished is reused, since the tag outlives
+    // the process and focusing a finished pane is a silent nothing.
+    let once = format!(
+        "project={}&cwd={}&cmd={}&tag=t2",
+        proj,
+        urlencode(&dir),
+        urlencode("printf DONE:%s\\\\n once")
+    );
+    test.http_post(&format!("/terminal/run?{}", once)).unwrap();
+    assert!(
+        test.wait_until(
+            || test
+                .tagged_panes("t2")
+                .first()
+                .is_some_and(|p| test.capture_pane(p).contains("DONE:once")),
+            10
+        ),
+        "expected the command to have run in the pane tagged t2"
+    );
+    let pane = test.tagged_panes("t2").remove(0);
+    test.http_post(&format!("/terminal/run?{}", once)).unwrap();
+    assert!(
+        test.wait_until(
+            || test.capture_pane(&pane).matches("DONE:once").count() == 2,
+            10
+        ),
+        "expected the finished pane to be reused, got {:?}",
+        test.capture_pane(&pane)
+    );
+    assert_eq!(
+        test.tagged_panes("t2").len(),
+        1,
+        "reuse means one pane, not two"
+    );
+}
+
+fn urlencode(value: &str) -> String {
+    value
+        .bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b'/' => {
+                (b as char).to_string()
+            }
+            _ => format!("%{:02X}", b),
+        })
+        .collect()
+}

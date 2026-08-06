@@ -199,6 +199,12 @@ pub fn parse_conversation_header(path: &Path) -> Option<(String, String)> {
     parse_header_line(&first_line)
 }
 
+/// How a session named in a synced file is picked back up. All that is left of
+/// this module's knowledge of Claude Code that anything outside it depends on.
+pub fn resume_command(session_id: &str) -> String {
+    format!("claude -r {session_id}")
+}
+
 fn parse_header_line(line: &str) -> Option<(String, String)> {
     let line = line.trim().strip_prefix("# ")?;
     let parts: Vec<&str> = line.split(" | ").collect();

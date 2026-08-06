@@ -131,60 +131,45 @@ fn project_window_ids(store_key: &str) -> Vec<String> {
     ids
 }
 
-/// Open (or focus) a tmux pane running `claude -r <session_id>` in the project's
-/// window, started in `cwd`.
+/// Run `cmd` in a pane of the project's window, started in `cwd`, and focus it.
 ///
-/// The directory is not a free choice and is not the project's working tree:
-/// claude files a session under the directory it was had in, and started
-/// anywhere else it reports the session as missing and exits, leaving a pane
-/// that looks like a resume that did nothing. The caller knows which directory
-/// that is; this only obeys.
+/// What the command is, and which directory it has to be run in, are the
+/// caller's business: a program that files its state by directory can only be
+/// picked up where it was left, and this has no way of knowing that. It obeys.
 ///
-/// A pane where the session is still running is focused. A pane tagged with the
-/// session where claude has since exited is reused: the tag outlives the
-/// process, and focusing a dead pane is the same silent nothing. With `fork`,
-/// the session is branched instead of continued, leaving the original as it was.
-pub fn resume_claude_session(project: &Project, session_id: &str, cwd: &str, fork: bool) {
+/// `tag` names what the pane is for, so a second request for the same thing
+/// finds it again. A tagged pane with something still running in it is focused
+/// rather than disturbed; one sitting at a prompt is reused, since the tag
+/// outlives the process and focusing a finished pane is a silent nothing.
+pub fn run_in_pane(project: &Project, cwd: &str, cmd: &str, tag: &str) {
     let _ = open(project);
     let window = match get_window(&project.store_key().to_string()) {
         Some(w) => w,
         None => return,
     };
-    let tagged = find_session_pane(&window.id, session_id);
+    let tagged = find_tagged_pane(&window.id, tag);
     if let Some(pane_id) = &tagged {
-        if pane_running_claude(pane_id) {
+        if pane_is_busy(pane_id) {
             tmux(["select-window", "-t", &window.id]);
             tmux(["select-pane", "-t", pane_id]);
             return;
         }
     }
-    let (pane_id, stale) = match tagged {
+    let (pane_id, reused) = match tagged {
         Some(pane_id) => (pane_id, true),
         None => match split_pane(&window.id, cwd) {
             Some(pane_id) => (pane_id, false),
             None => return,
         },
     };
-    tmux([
-        "set-option",
-        "-p",
-        "-t",
-        &pane_id,
-        SESSION_PANE_OPTION,
-        session_id,
-    ]);
+    tmux(["set-option", "-p", "-t", &pane_id, PANE_TAG_OPTION, tag]);
     // A pane split for this lands in `cwd` already; one left over from before
     // is wherever it was, which is what has to be corrected.
-    let cd = match stale {
+    let cd = match reused {
         true => format!("cd {} && ", crate::batch::shell_escape(cwd)),
         false => String::new(),
     };
-    let branch = match fork {
-        true => " --fork-session",
-        false => "",
-    };
-    let cmd = format!("{cd}claude -r {session_id}{branch}");
-    tmux(["send-keys", "-t", &pane_id, cmd.as_str(), "Enter"]);
+    tmux(["send-keys", "-t", &pane_id, &format!("{cd}{cmd}"), "Enter"]);
     tmux(["select-window", "-t", &window.id]);
     tmux(["select-pane", "-t", &pane_id]);
 }
@@ -204,30 +189,34 @@ fn split_pane(window_id: &str, cwd: &str) -> Option<String> {
     (!pane_id.is_empty()).then(|| pane_id.to_string())
 }
 
-/// Whether claude is still running in a pane, by its tty rather than by
-/// `pane_current_command`, which reports the shell wrapper and not what it runs.
-fn pane_running_claude(pane_id: &str) -> bool {
-    let tty = tmux(["display-message", "-p", "-t", pane_id, "#{pane_tty}"]);
-    let tty = tty.trim().trim_start_matches("/dev/");
-    if tty.is_empty() {
+/// Whether something is still running in a pane, as against it sitting at a
+/// prompt.
+///
+/// Not `pane_current_command`, which reports the shell wrapper and not what it
+/// runs. The pane's own shell is named by `#{pane_pid}`; anything else in the
+/// foreground on its tty — `+` in the process state — is a program that has
+/// not finished.
+fn pane_is_busy(pane_id: &str) -> bool {
+    let fmt = "#{pane_tty} #{pane_pid}";
+    let info = tmux(["display-message", "-p", "-t", pane_id, fmt]);
+    let mut fields = info.split_whitespace();
+    let (Some(tty), Some(shell_pid)) = (fields.next(), fields.next()) else {
         return false;
-    }
+    };
+    let tty = tty.trim_start_matches("/dev/");
     let Ok(output) = Command::new("ps")
-        .args(["-t", tty, "-o", "command="])
+        .args(["-t", tty, "-o", "stat=,pid="])
         .output()
     else {
         return false;
     };
-    String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .any(|line| line.split_whitespace().next().is_some_and(is_claude))
-}
-
-fn is_claude(command: &str) -> bool {
-    command
-        .rsplit('/')
-        .next()
-        .is_some_and(|name| name == "claude")
+    String::from_utf8_lossy(&output.stdout).lines().any(|line| {
+        let mut fields = line.split_whitespace();
+        let (Some(state), Some(pid)) = (fields.next(), fields.next()) else {
+            return false;
+        };
+        state.contains('+') && pid != shell_pid
+    })
 }
 
 /// Focus the pane a process is running in. Returns false when it is not in one.
@@ -265,15 +254,15 @@ fn tty_of(pid: u32) -> Option<String> {
     (!tty.is_empty() && tty != "??").then_some(tty)
 }
 
-const SESSION_PANE_OPTION: &str = "@wormhole_claude_session";
+const PANE_TAG_OPTION: &str = "@wormhole_pane_tag";
 
-fn find_session_pane(window_id: &str, session_id: &str) -> Option<String> {
-    let fmt = format!("#{{pane_id}} #{{{SESSION_PANE_OPTION}}}");
+fn find_tagged_pane(window_id: &str, tag: &str) -> Option<String> {
+    let fmt = format!("#{{pane_id}} #{{{PANE_TAG_OPTION}}}");
     tmux(["list-panes", "-t", window_id, "-F", fmt.as_str()])
         .lines()
         .find_map(|line| {
-            let (pane, sess) = line.split_once(' ')?;
-            (sess == session_id).then(|| pane.to_string())
+            let (pane, pane_tag) = line.split_once(' ')?;
+            (pane_tag == tag).then(|| pane.to_string())
         })
 }
 

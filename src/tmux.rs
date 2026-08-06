@@ -140,14 +140,18 @@ fn project_window_ids(store_key: &str) -> Vec<String> {
 /// `tag` names what the pane is for, so a second request for the same thing
 /// finds it again. A tagged pane with something still running in it is focused
 /// rather than disturbed; one sitting at a prompt is reused, since the tag
-/// outlives the process and focusing a finished pane is a silent nothing.
+/// outlives the process and focusing a finished pane is a silent nothing. An
+/// empty tag names nothing and so matches nothing: a pane of its own, rather
+/// than the first untagged pane somebody happened to be working in.
 pub fn run_in_pane(project: &Project, cwd: &str, cmd: &str, tag: &str) {
     let _ = open(project);
     let window = match get_window(&project.store_key().to_string()) {
         Some(w) => w,
         None => return,
     };
-    let tagged = find_tagged_pane(&window.id, tag);
+    let tagged = (!tag.is_empty())
+        .then(|| find_tagged_pane(&window.id, tag))
+        .flatten();
     if let Some(pane_id) = &tagged {
         if pane_is_busy(pane_id) {
             tmux(["select-window", "-t", &window.id]);

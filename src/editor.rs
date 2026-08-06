@@ -128,10 +128,9 @@ impl Editor {
         }
     }
 
+    /// Publish regardless of the configured editor: an extension may be
+    /// connected as a message consumer whatever `WORMHOLE_EDITOR` says.
     pub fn close(&self, project: &Project) {
-        if self.is_none() {
-            return;
-        }
         let key = project.store_key().to_string();
         messages::lock().publish(
             &key,

@@ -927,6 +927,45 @@ detached
         assert!(git_config_opt(&worktree_path, "branch.feat-x.remote").is_none());
     }
 
+    /// The server has no tty, so an ssh that waits for input (a key passphrase
+    /// prompt) blocks the request thread forever.
+    #[test]
+    fn test_fetch_branch_does_not_wait_for_ssh_input() {
+        use std::fs;
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        let temp = tempfile::tempdir().unwrap();
+        let repo = temp.path().join("repo");
+
+        fs::create_dir_all(&repo).unwrap();
+        Command::new("git")
+            .args(["init"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["remote", "add", "origin", "git@example.invalid:o/r.git"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["config", "core.sshCommand", "sh -c 'sleep 300'"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            fetch_branch(&repo, "feat-x");
+            let _ = tx.send(());
+        });
+        assert!(
+            rx.recv_timeout(Duration::from_secs(30)).is_ok(),
+            "fetch_branch is waiting on ssh input"
+        );
+    }
+
     fn git_config(path: &Path, key: &str) -> String {
         git_config_opt(path, key).unwrap_or_else(|| panic!("{} not set", key))
     }

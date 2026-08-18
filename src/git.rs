@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::Duration;
 
 /// Returns the common git directory shared by all worktrees.
 /// Uses `git rev-parse --git-common-dir` which handles regular repos,
@@ -376,14 +377,24 @@ fn fetch_branch(repo_path: &Path, branch_name: &str) {
     let Some(remote) = default_remote(repo_path) else {
         return;
     };
-    let _ = Command::new("git")
-        .args([
-            "fetch",
-            &remote,
-            &format!("refs/heads/{0}:refs/remotes/{1}/{0}", branch_name, remote),
-        ])
-        .current_dir(repo_path)
-        .output();
+    let mut cmd = Command::new("git");
+    cmd.args([
+        "fetch",
+        &remote,
+        &format!("refs/heads/{0}:refs/remotes/{1}/{0}", branch_name, remote),
+    ])
+    .current_dir(repo_path)
+    .env("GIT_TERMINAL_PROMPT", "0")
+    .env("GIT_SSH_COMMAND", non_interactive_ssh_command());
+    let _ = crate::util::output_with_timeout(&mut cmd, Duration::from_secs(20), "git fetch");
+}
+
+/// The wormhole server has no tty and nulls stdin, so an interactive SSH
+/// passphrase prompt would block invisibly until the timeout. BatchMode makes
+/// ssh fail fast instead, preserving any user-configured ssh command.
+pub fn non_interactive_ssh_command() -> String {
+    let base = std::env::var("GIT_SSH_COMMAND").unwrap_or_else(|_| "ssh".to_string());
+    format!("{base} -o BatchMode=yes -o ConnectTimeout=8")
 }
 
 /// The remote (preferring `origin`) that has a remote-tracking branch for

@@ -4,7 +4,10 @@ use std::{
     ffi::OsStr,
     fmt::{Debug, Display},
     path::Path,
-    process::{Command, Output},
+    process::{Command, Output, Stdio},
+    sync::mpsc,
+    thread,
+    time::Duration,
 };
 
 use crate::ps;
@@ -77,6 +80,70 @@ pub fn to_kebab_case(s: &str) -> String {
         .join("-")
 }
 
+/// Run `cmd` with no stdin, killing it (and anything it spawned) if it has not
+/// finished within `timeout`.
+pub fn output_with_timeout(
+    cmd: &mut Command,
+    timeout: Duration,
+    what: &str,
+) -> Result<Output, String> {
+    use std::os::unix::process::CommandExt;
+
+    cmd.stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    unsafe {
+        cmd.pre_exec(|| {
+            if libc::setpgid(0, 0) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+
+    let child = cmd.spawn().map_err(|e| format!("{what} failed: {e}"))?;
+    let pid = child.id() as i32;
+    let (tx, rx) = mpsc::channel();
+    let handle = thread::spawn(move || {
+        let result = child.wait_with_output();
+        let _ = tx.send(result);
+    });
+
+    let result = match rx.recv_timeout(timeout) {
+        Ok(result) => result.map_err(|e| format!("{what} failed: {e}")),
+        Err(mpsc::RecvTimeoutError::Timeout) => {
+            kill_process(pid, libc::SIGTERM);
+            kill_process_group(pid, libc::SIGTERM);
+            if matches!(
+                rx.recv_timeout(Duration::from_millis(200)),
+                Err(mpsc::RecvTimeoutError::Timeout)
+            ) {
+                kill_process(pid, libc::SIGKILL);
+                kill_process_group(pid, libc::SIGKILL);
+            }
+            let _ = handle.join();
+            return Err(format!("{what} timed out after {}s", timeout.as_secs()));
+        }
+        Err(mpsc::RecvTimeoutError::Disconnected) => {
+            return Err(format!("{what} failed: process watcher disconnected"));
+        }
+    };
+    let _ = handle.join();
+    result
+}
+
+fn kill_process(pid: i32, signal: i32) {
+    unsafe {
+        libc::kill(pid, signal);
+    }
+}
+
+fn kill_process_group(pid: i32, signal: i32) {
+    unsafe {
+        libc::kill(-pid, signal);
+    }
+}
+
 pub fn get_stdout<S>(program: S, output: Output) -> Result<String, String>
 where
     S: AsRef<OsStr>,
@@ -94,4 +161,31 @@ where
         ));
     }
     Ok(stdout)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Instant;
+
+    #[test]
+    fn output_with_timeout_returns_output() {
+        let mut cmd = Command::new("sh");
+        cmd.args(["-c", "printf ok"]);
+        let output = output_with_timeout(&mut cmd, Duration::from_secs(1), "test").unwrap();
+        assert_eq!(String::from_utf8(output.stdout).unwrap(), "ok");
+    }
+
+    #[test]
+    fn output_with_timeout_times_out() {
+        let start = Instant::now();
+        let mut cmd = Command::new("sh");
+        cmd.args(["-c", "sleep 30"]);
+        let err = output_with_timeout(&mut cmd, Duration::from_millis(100), "test").unwrap_err();
+        assert!(err.contains("timed out"), "unexpected error: {err}");
+        assert!(
+            start.elapsed() < Duration::from_secs(2),
+            "timed-out subprocess should be reaped promptly"
+        );
+    }
 }

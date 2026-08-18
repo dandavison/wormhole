@@ -2,9 +2,7 @@ use regex::Regex;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::Path;
-use std::process::{Command, Output, Stdio};
-use std::sync::mpsc;
-use std::thread;
+use std::process::Command;
 use std::time::Duration;
 
 #[derive(Clone, Debug, Deserialize, serde::Serialize)]
@@ -196,21 +194,14 @@ pub fn pr_checkout(
     ])
     .current_dir(worktree_path)
     .env("GIT_TERMINAL_PROMPT", "0")
-    .env("GIT_SSH_COMMAND", non_interactive_ssh_command());
-    let output = output_with_timeout(&mut cmd, Duration::from_secs(30), "gh pr checkout")?;
+    .env("GIT_SSH_COMMAND", crate::git::non_interactive_ssh_command());
+    let output =
+        crate::util::output_with_timeout(&mut cmd, Duration::from_secs(30), "gh pr checkout")?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(checkout_error_hint(stderr.trim()));
     }
     Ok(())
-}
-
-/// The wormhole server has no tty and nulls stdin, so an interactive SSH
-/// passphrase prompt would block invisibly until the timeout. BatchMode makes
-/// ssh fail fast instead, preserving any user-configured ssh command.
-fn non_interactive_ssh_command() -> String {
-    let base = std::env::var("GIT_SSH_COMMAND").unwrap_or_else(|_| "ssh".to_string());
-    format!("{base} -o BatchMode=yes -o ConnectTimeout=8")
 }
 
 fn checkout_error_hint(stderr: &str) -> String {
@@ -226,64 +217,6 @@ fn checkout_error_hint(stderr: &str) -> String {
         )
     } else {
         format!("gh pr checkout failed: {stderr}")
-    }
-}
-
-fn output_with_timeout(cmd: &mut Command, timeout: Duration, what: &str) -> Result<Output, String> {
-    use std::os::unix::process::CommandExt;
-
-    cmd.stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    unsafe {
-        cmd.pre_exec(|| {
-            if libc::setpgid(0, 0) != 0 {
-                return Err(std::io::Error::last_os_error());
-            }
-            Ok(())
-        });
-    }
-
-    let child = cmd.spawn().map_err(|e| format!("{what} failed: {e}"))?;
-    let pid = child.id() as i32;
-    let (tx, rx) = mpsc::channel();
-    let handle = thread::spawn(move || {
-        let result = child.wait_with_output();
-        let _ = tx.send(result);
-    });
-
-    let result = match rx.recv_timeout(timeout) {
-        Ok(result) => result.map_err(|e| format!("{what} failed: {e}")),
-        Err(mpsc::RecvTimeoutError::Timeout) => {
-            kill_process(pid, libc::SIGTERM);
-            kill_process_group(pid, libc::SIGTERM);
-            if matches!(
-                rx.recv_timeout(Duration::from_millis(200)),
-                Err(mpsc::RecvTimeoutError::Timeout)
-            ) {
-                kill_process(pid, libc::SIGKILL);
-                kill_process_group(pid, libc::SIGKILL);
-            }
-            let _ = handle.join();
-            return Err(format!("{what} timed out after {}s", timeout.as_secs()));
-        }
-        Err(mpsc::RecvTimeoutError::Disconnected) => {
-            return Err(format!("{what} failed: process watcher disconnected"));
-        }
-    };
-    let _ = handle.join();
-    result
-}
-
-fn kill_process(pid: i32, signal: i32) {
-    unsafe {
-        libc::kill(pid, signal);
-    }
-}
-
-fn kill_process_group(pid: i32, signal: i32) {
-    unsafe {
-        libc::kill(-pid, signal);
     }
 }
 
@@ -525,7 +458,6 @@ fn fetch_repo_name(project_path: &Path) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::{Duration, Instant};
 
     #[test]
     fn parse_github_ref_pr_url() {
@@ -574,14 +506,6 @@ mod tests {
     }
 
     #[test]
-    fn output_with_timeout_returns_output() {
-        let mut cmd = Command::new("sh");
-        cmd.args(["-c", "printf ok"]);
-        let output = output_with_timeout(&mut cmd, Duration::from_secs(1), "test").unwrap();
-        assert_eq!(String::from_utf8(output.stdout).unwrap(), "ok");
-    }
-
-    #[test]
     fn checkout_error_hint_flags_ssh_auth_failure() {
         let hint = checkout_error_hint("git@github.com: Permission denied (publickey).");
         assert!(hint.contains("ssh-add"), "unexpected hint: {hint}");
@@ -591,18 +515,5 @@ mod tests {
     fn checkout_error_hint_passes_through_other_errors() {
         let hint = checkout_error_hint("some other failure");
         assert_eq!(hint, "gh pr checkout failed: some other failure");
-    }
-
-    #[test]
-    fn output_with_timeout_times_out() {
-        let start = Instant::now();
-        let mut cmd = Command::new("sh");
-        cmd.args(["-c", "sleep 30"]);
-        let err = output_with_timeout(&mut cmd, Duration::from_millis(100), "test").unwrap_err();
-        assert!(err.contains("timed out"), "unexpected error: {err}");
-        assert!(
-            start.elapsed() < Duration::from_secs(2),
-            "timed-out subprocess should be reaped promptly"
-        );
     }
 }

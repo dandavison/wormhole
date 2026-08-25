@@ -219,7 +219,7 @@ function M.focusDashboard()
             for (const win of windows) {
                 const tabs = win.tabs();
                 for (let i = 0; i < tabs.length; i++) {
-                    if (tabs[i].url().includes("localhost:7117")) {
+                    if (tabs[i].url().includes("localhost:7118")) {
                         win.activeTabIndex = i + 1;
                         return true;
                     }

@@ -87,6 +87,52 @@ fn test_task_remove_deletes_kv_file() {
     );
 }
 
+/// `project close` (without --remove) leaves the task's worktree on disk, so the
+/// task must remain offered by the picker: out of `current`, but in `available`.
+#[test]
+fn test_closed_task_remains_available() {
+    let test = harness::WormholeTest::new(18926);
+
+    let home_proj = format!("{}closed-available", harness::TEST_PREFIX);
+    let home_dir = format!("/tmp/{}", home_proj);
+    let branch = format!("{}reopen-me", harness::TEST_PREFIX);
+
+    init_git_repo(&home_dir);
+    test.create_project(&home_dir, &home_proj);
+    test.create_task(&branch, &home_proj);
+
+    let store_key = test.task_store_key(&branch, &home_proj);
+    assert!(
+        test.task_in_list(&home_proj, &branch),
+        "Task should be in 'current' before close"
+    );
+
+    test.cli(&format!("wormhole project close '{}'", store_key))
+        .unwrap();
+
+    assert!(
+        test.wait_until(|| !test.task_in_list(&home_proj, &branch), 10),
+        "Closed task should leave 'current'"
+    );
+
+    let available = |body: &str| -> Vec<String> {
+        let json: Value = serde_json::from_str(body).expect("Should be valid JSON");
+        json["available"]
+            .as_array()
+            .expect("Should have 'available' array")
+            .iter()
+            .filter_map(|v| v.as_str().map(String::from))
+            .collect()
+    };
+    let body = test.http_get("/project/list").unwrap();
+    assert!(
+        available(&body).contains(&store_key),
+        "Closed task '{}' should be in 'available', got: {}",
+        store_key,
+        body
+    );
+}
+
 #[test]
 fn test_poll_current_json_structure() {
     let test = harness::WormholeTest::new(18913);

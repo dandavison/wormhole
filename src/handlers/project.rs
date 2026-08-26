@@ -57,8 +57,17 @@ pub fn list_projects(active_only: bool, tasks_only: bool, with_editor: bool) -> 
         })
         .collect();
 
-    let available = config::available_projects();
-    let available: Vec<&str> = available.keys().map(|s| s.as_str()).collect();
+    let mut available: Vec<String> = config::available_projects()
+        .keys()
+        .map(|name| name.to_string())
+        .collect();
+    available.extend(
+        projects::lock()
+            .closed_tasks()
+            .into_iter()
+            .map(|p| p.store_key().to_string()),
+    );
+    available.sort();
 
     let json = serde_json::json!({
         "current": current,

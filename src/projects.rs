@@ -116,6 +116,17 @@ impl<'a> Projects<'a> {
             .collect()
     }
 
+    /// Tasks that have been closed: no longer in the ring, but still known
+    /// because their worktree exists, hence still selectable.
+    pub fn closed_tasks(&self) -> Vec<&Project> {
+        self.0
+            .all
+            .iter()
+            .filter(|(key, project)| project.is_task() && !self.0.ring.contains(key))
+            .map(|(_, project)| project)
+            .collect()
+    }
+
     pub fn add(&mut self, path: &Path, name: CanonicalName) -> Result<(), String> {
         let path = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
         if Some(path.as_path()) == dirs::home_dir().as_deref() {

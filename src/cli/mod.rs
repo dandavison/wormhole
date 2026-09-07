@@ -10,8 +10,8 @@ use crate::config;
 use crate::tty::TerminalHyperlink;
 
 mod doctor;
-mod hint;
 mod jira;
+mod open;
 pub mod project;
 mod task;
 mod util;
@@ -282,13 +282,11 @@ pub enum Command {
         /// For a PR/issue/JIRA reference, show what would be created without creating it
         #[arg(long)]
         dry_run: bool,
-    },
-
-    /// Open a fragment of terminal text (a terminal hint match). Resolves file
-    /// paths, pdb/traceback frames, and task identifiers; never creates anything
-    Hint {
-        /// Text matched in the terminal, e.g. `src/main.rs:91` or `wormhole:dan/hints`
-        text: String,
+        /// Only open what already exists; never create a task or worktree.
+        /// For callers passing text the user did not type, such as a terminal
+        /// click target
+        #[arg(long)]
+        no_create: bool,
     },
 
     /// Key-value storage operations
@@ -694,43 +692,8 @@ pub fn run(command: Command) -> Result<(), String> {
             land_in,
             home_project,
             dry_run,
-        } => {
-            if task::is_create_ref(&target) {
-                return task::task_create(&client, &target, home_project, land_in, dry_run);
-            }
-            let (path_str, line) = parse_path_and_line(&target);
-            let target_path = std::path::Path::new(&path_str);
-
-            if target_path.is_file() && is_conversation_file(target_path) {
-                let abs_path = std::fs::canonicalize(target_path)
-                    .map(|p| p.to_string_lossy().to_string())
-                    .unwrap_or(path_str);
-                client.post(&format!("/conversations/resume/{}", abs_path))?;
-            } else if target_path.is_file() {
-                let abs_path = std::fs::canonicalize(target_path)
-                    .map(|p| p.to_string_lossy().to_string())
-                    .unwrap_or(path_str);
-                let query = build_query(&Some("editor".to_string()), &line);
-                let url_path = format!("/file/{}{}", abs_path, query);
-                client.get(&url_path)?;
-            } else if target_path.is_dir() {
-                // Directory - switch to project
-                let abs_path = std::fs::canonicalize(target_path)
-                    .map(|p| p.to_string_lossy().to_string())
-                    .unwrap_or(path_str);
-                let query = build_switch_query(&land_in, &None, &None, &None);
-                let path = format!("/project/switch/{}{}", abs_path, query);
-                client.get(&path)?;
-            } else {
-                // Project name or task identifier - respects land-in KV
-                let query = build_switch_query(&land_in, &None, &None, &None);
-                let path = format!("/project/switch/{}{}", target, query);
-                client.get(&path)?;
-            }
-            Ok(())
-        }
-
-        Command::Hint { text } => hint::open(&client, &text),
+            no_create,
+        } => open::run(&client, &target, land_in, home_project, dry_run, no_create),
 
         Command::Kv { command } => match command {
             KvCommand::Get {

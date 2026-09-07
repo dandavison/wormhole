@@ -209,18 +209,6 @@ pub(super) fn get_available_projects(client: &Client) -> Result<Vec<String>, Str
         .unwrap_or_default())
 }
 
-pub(super) fn parse_path_and_line(target: &str) -> (String, Option<usize>) {
-    if let Some(idx) = target.rfind(':') {
-        let (path, rest) = target.split_at(idx);
-        if let Ok(line) = rest[1..].parse::<usize>() {
-            if std::path::Path::new(path).exists() {
-                return (path.to_string(), Some(line));
-            }
-        }
-    }
-    (target.to_string(), None)
-}
-
 pub(super) fn build_query(land_in: &Option<String>, line: &Option<usize>) -> String {
     let mut params = vec![];
     if let Some(app) = land_in {

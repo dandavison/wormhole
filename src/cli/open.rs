@@ -1,27 +1,45 @@
-//! Resolve a fragment of terminal text (an Alacritty hint match) to a wormhole
-//! target. Unlike `wormhole open`, this never creates anything: text that does
-//! not name an existing file, directory, or project is an error.
+//! Resolve a target to something wormhole can open. The target is usually typed
+//! by hand, but may be a fragment of text clicked in the terminal, hence the
+//! tolerance for the shapes debuggers and compilers print.
+//!
+//! `no_create` is for the latter case: it suppresses everything that would
+//! bring a task into existence, so that text naming nothing that already exists
+//! is an error rather than a new worktree.
 
 use std::path::{Path, PathBuf};
 
 use super::util::*;
+use super::{is_conversation_file, task};
 
-pub(super) fn open(client: &Client, text: &str) -> Result<(), String> {
+pub(super) fn run(
+    client: &Client,
+    target: &str,
+    land_in: Option<String>,
+    home_project: Option<String>,
+    dry_run: bool,
+    no_create: bool,
+) -> Result<(), String> {
+    if task::is_create_ref(target) && !no_create {
+        return task::task_create(client, target, home_project, land_in, dry_run);
+    }
     let cwd = std::env::current_dir().map_err(|e| format!("Failed to read cwd: {}", e))?;
-    match parse(text, &cwd).ok_or_else(|| format!("No wormhole target in {:?}", text))? {
+    match parse(target, &cwd).ok_or_else(|| format!("No wormhole target in {:?}", target))? {
+        Target::Conversation(path) => {
+            client.post(&format!("/conversations/resume/{}", path.display()))?;
+        }
         Target::File { path, line } => {
             let query = build_query(&Some("editor".to_string()), &line);
             client.get(&format!("/file/{}{}", path.display(), query))?;
         }
         Target::Directory(path) => {
-            let query = build_switch_query(&None, &None, &None, &None);
+            let query = build_switch_query(&land_in, &None, &None, &None);
             client.get(&format!("/project/switch/{}{}", path.display(), query))?;
         }
         Target::Project(name) => {
-            if !is_known_project(client, &name)? {
+            if no_create && !is_known_project(client, &name)? {
                 return Err(format!("Unknown project '{}'", name));
             }
-            let query = build_switch_query(&None, &None, &None, &None);
+            let query = build_switch_query(&land_in, &None, &None, &None);
             client.get(&format!("/project/switch/{}{}", name, query))?;
         }
     }
@@ -30,6 +48,7 @@ pub(super) fn open(client: &Client, text: &str) -> Result<(), String> {
 
 #[derive(Debug, PartialEq)]
 enum Target {
+    Conversation(PathBuf),
     File { path: PathBuf, line: Option<usize> },
     Directory(PathBuf),
     Project(String),
@@ -41,7 +60,10 @@ fn parse(text: &str, cwd: &Path) -> Option<Target> {
         let resolved = resolve(cwd, path);
         if resolved.is_file() {
             let path = resolved.canonicalize().unwrap_or(resolved);
-            return Some(Target::File { path, line });
+            return Some(match is_conversation_file(&path) {
+                true => Target::Conversation(path),
+                false => Target::File { path, line },
+            });
         }
         if line.is_none() && resolved.is_dir() {
             return Some(Target::Directory(
@@ -93,15 +115,21 @@ fn resolve(cwd: &Path, path: &str) -> PathBuf {
     }
 }
 
-/// A project name (`repo`) or task identifier (`repo:branch`). The repo part is
-/// a bare name, which is what distinguishes `repo:branch` from `path:line`.
+/// A project name (`repo`), or a task identifier (`repo:branch`, or `:branch`
+/// to search every repo for the branch). The repo part being a bare name is
+/// what distinguishes `repo:branch` from `path:line`.
 fn is_project_identifier(text: &str) -> bool {
-    let (repo, branch) = text.split_once(':').unwrap_or((text, "x"));
+    let Some((repo, branch)) = text.split_once(':') else {
+        return is_bare_name(text);
+    };
     !branch.is_empty()
         && !branch.contains(char::is_whitespace)
-        && !repo.is_empty()
-        && repo.starts_with(|c: char| c.is_ascii_alphanumeric())
-        && repo
+        && (repo.is_empty() || is_bare_name(repo))
+}
+
+fn is_bare_name(text: &str) -> bool {
+    text.starts_with(|c: char| c.is_ascii_alphanumeric())
+        && text
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || "._-".contains(c))
 }
@@ -220,8 +248,26 @@ mod tests {
     fn task_identifier() {
         let fixture = Fixture::new();
         assert_eq!(
-            fixture.parse("wormhole:dan/hints"),
-            Some(Target::Project("wormhole:dan/hints".to_string()))
+            fixture.parse("wormhole:dan/branch"),
+            Some(Target::Project("wormhole:dan/branch".to_string()))
+        );
+    }
+
+    #[test]
+    fn branch_only_task_identifier() {
+        let fixture = Fixture::new();
+        assert_eq!(
+            fixture.parse(":dan/branch"),
+            Some(Target::Project(":dan/branch".to_string()))
+        );
+    }
+
+    #[test]
+    fn bare_project_name() {
+        let fixture = Fixture::new();
+        assert_eq!(
+            fixture.parse("wormhole"),
+            Some(Target::Project("wormhole".to_string()))
         );
     }
 

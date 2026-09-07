@@ -1,15 +1,16 @@
-//! Resolve a target to something wormhole can open. The target is usually typed
-//! by hand, but may be a fragment of text clicked in the terminal, hence the
-//! tolerance for the shapes debuggers and compilers print.
+//! Open what a piece of text names, and answer whether it names anything.
 //!
-//! `no_create` is for the latter case: it suppresses everything that would
-//! bring a task into existence, so that text naming nothing that already exists
-//! is an error rather than a new worktree.
+//! `no_create` is for text the user did not type, such as a terminal click
+//! target: it suppresses everything that would bring a task into existence, so
+//! that text naming nothing that already exists is an error rather than a new
+//! worktree. `openable` answers the same question the click does, ahead of the
+//! click, so that a terminal can underline only what a click would open.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
+use super::task;
 use super::util::*;
-use super::{is_conversation_file, task};
+use crate::target::{self, Target};
 
 pub(super) fn run(
     client: &Client,
@@ -22,8 +23,9 @@ pub(super) fn run(
     if task::is_create_ref(target) && !no_create {
         return task::task_create(client, target, home_project, land_in, dry_run);
     }
-    let cwd = std::env::current_dir().map_err(|e| format!("Failed to read cwd: {}", e))?;
-    match parse(target, &cwd).ok_or_else(|| format!("No wormhole target in {:?}", target))? {
+    let parsed = target::parse(target, &directories(client))
+        .ok_or_else(|| format!("No wormhole target in {:?}", target))?;
+    match parsed {
         Target::Conversation(path) => {
             client.post(&format!("/conversations/resume/{}", path.display()))?;
         }
@@ -46,98 +48,38 @@ pub(super) fn run(
     Ok(())
 }
 
-#[derive(Debug, PartialEq)]
-enum Target {
-    Conversation(PathBuf),
-    File { path: PathBuf, line: Option<usize> },
-    Directory(PathBuf),
-    Project(String),
-}
-
-fn parse(text: &str, cwd: &Path) -> Option<Target> {
-    let text = text.trim();
-    for (path, line) in path_candidates(text) {
-        let resolved = resolve(cwd, path);
-        if resolved.is_file() {
-            let path = resolved.canonicalize().unwrap_or(resolved);
-            return Some(match is_conversation_file(&path) {
-                true => Target::Conversation(path),
-                false => Target::File { path, line },
-            });
-        }
-        if line.is_none() && resolved.is_dir() {
-            return Some(Target::Directory(
-                resolved.canonicalize().unwrap_or(resolved),
-            ));
+/// Print those of `targets` which `open --no-create` would open, one per line.
+pub(super) fn openable(client: &Client, targets: &[String]) -> Result<(), String> {
+    let directories = directories(client);
+    for text in targets {
+        let opens = match target::parse(text, &directories) {
+            Some(Target::Project(name)) => is_known_project(client, &name)?,
+            Some(_) => true,
+            None => false,
+        };
+        if opens {
+            println!("{}", text);
         }
     }
-    is_project_identifier(text).then(|| Target::Project(text.to_string()))
+    Ok(())
 }
 
-/// Ways the text might denote a path, longest path first. Covers `path`,
-/// `path:line`, `path:line:column`, `path:line-line`, `path(line)` (pdb) and
-/// `File "path", line N` (Python traceback).
-fn path_candidates(text: &str) -> Vec<(&str, Option<usize>)> {
-    if let Some(candidate) = python_traceback(text).or_else(|| parenthesized_line(text)) {
-        return vec![candidate];
+/// Directories a relative path in `target` may be relative to: this process's,
+/// for text typed here, then those of the terminal panes in view, for text
+/// read off the screen. Wormhole's own window knows the latter; a click arrives
+/// with the terminal's directory, which is no relation to what was clicked.
+fn directories(client: &Client) -> Vec<PathBuf> {
+    let mut directories: Vec<PathBuf> = std::env::current_dir().into_iter().collect();
+    if let Ok(response) = client.get("/terminal/pane-directories") {
+        directories.extend(
+            response
+                .lines()
+                .filter(|line| !line.is_empty())
+                .map(PathBuf::from),
+        );
     }
-    let mut candidates = vec![(text, None)];
-    if let Some((head, trailing)) = numeric_suffix(text) {
-        candidates.push((head, Some(trailing)));
-        if let Some((head, line)) = numeric_suffix(head) {
-            candidates.push((head, Some(line))); // `trailing` was a column
-        }
-    }
-    candidates
-}
-
-fn python_traceback(text: &str) -> Option<(&str, Option<usize>)> {
-    let rest = text.strip_prefix("File \"")?;
-    let (path, rest) = rest.split_once('"')?;
-    let line = rest.strip_prefix(", line ")?.parse().ok()?;
-    Some((path, Some(line)))
-}
-
-fn parenthesized_line(text: &str) -> Option<(&str, Option<usize>)> {
-    let (path, line) = text.strip_suffix(')')?.rsplit_once('(')?;
-    Some((path, Some(line.parse().ok()?)))
-}
-
-/// Split off a trailing `:line`, or `:line-line` as a line range is written,
-/// which is opened at its first line.
-fn numeric_suffix(text: &str) -> Option<(&str, usize)> {
-    let (head, tail) = text.rsplit_once(':')?;
-    let start = match tail.split_once('-') {
-        Some((start, end)) => end.parse::<usize>().ok().map(|_| start)?,
-        None => tail,
-    };
-    Some((head, start.parse().ok()?))
-}
-
-fn resolve(cwd: &Path, path: &str) -> PathBuf {
-    match path.strip_prefix("~/") {
-        Some(rest) => PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(rest),
-        None => cwd.join(path),
-    }
-}
-
-/// A project name (`repo`), or a task identifier (`repo:branch`, or `:branch`
-/// to search every repo for the branch). The repo part being a bare name is
-/// what distinguishes `repo:branch` from `path:line`.
-fn is_project_identifier(text: &str) -> bool {
-    let Some((repo, branch)) = text.split_once(':') else {
-        return is_bare_name(text);
-    };
-    !branch.is_empty()
-        && !branch.contains(char::is_whitespace)
-        && (repo.is_empty() || is_bare_name(repo))
-}
-
-fn is_bare_name(text: &str) -> bool {
-    text.starts_with(|c: char| c.is_ascii_alphanumeric())
-        && text
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || "._-".contains(c))
+    directories.dedup();
+    directories
 }
 
 fn is_known_project(client: &Client, name: &str) -> Result<bool, String> {
@@ -153,148 +95,4 @@ fn is_known_project(client: &Client, name: &str) -> Result<bool, String> {
         .flatten()
         .any(|value| value.as_str() == Some(name))
     }))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    struct Fixture {
-        dir: tempfile::TempDir,
-    }
-
-    impl Fixture {
-        fn new() -> Self {
-            let dir = tempfile::tempdir().unwrap();
-            std::fs::create_dir_all(dir.path().join("src")).unwrap();
-            std::fs::write(dir.path().join("src/main.rs"), "").unwrap();
-            std::fs::write(dir.path().join("app.py"), "").unwrap();
-            Self { dir }
-        }
-
-        fn parse(&self, text: &str) -> Option<Target> {
-            super::parse(text, self.dir.path())
-        }
-
-        fn file(&self, relative_path: &str, line: Option<usize>) -> Option<Target> {
-            Some(Target::File {
-                path: self.dir.path().join(relative_path).canonicalize().unwrap(),
-                line,
-            })
-        }
-    }
-
-    #[test]
-    fn relative_path_with_line() {
-        let fixture = Fixture::new();
-        assert_eq!(
-            fixture.parse("src/main.rs:91"),
-            fixture.file("src/main.rs", Some(91))
-        );
-    }
-
-    #[test]
-    fn relative_path_without_line() {
-        let fixture = Fixture::new();
-        assert_eq!(
-            fixture.parse("src/main.rs"),
-            fixture.file("src/main.rs", None)
-        );
-    }
-
-    #[test]
-    fn path_with_line_and_column() {
-        let fixture = Fixture::new();
-        assert_eq!(
-            fixture.parse("src/main.rs:91:5"),
-            fixture.file("src/main.rs", Some(91))
-        );
-    }
-
-    #[test]
-    fn path_with_line_range() {
-        let fixture = Fixture::new();
-        assert_eq!(
-            fixture.parse("src/main.rs:91-95"),
-            fixture.file("src/main.rs", Some(91))
-        );
-    }
-
-    #[test]
-    fn absolute_path() {
-        let fixture = Fixture::new();
-        let absolute = fixture.dir.path().join("app.py");
-        assert_eq!(
-            fixture.parse(&format!("{}:3", absolute.display())),
-            fixture.file("app.py", Some(3))
-        );
-    }
-
-    #[test]
-    fn python_traceback_frame() {
-        let fixture = Fixture::new();
-        assert_eq!(
-            fixture.parse("File \"app.py\", line 42"),
-            fixture.file("app.py", Some(42))
-        );
-    }
-
-    #[test]
-    fn pdb_frame() {
-        let fixture = Fixture::new();
-        assert_eq!(
-            fixture.parse("app.py(42)"),
-            fixture.file("app.py", Some(42))
-        );
-    }
-
-    #[test]
-    fn directory() {
-        let fixture = Fixture::new();
-        assert_eq!(
-            fixture.parse("src"),
-            Some(Target::Directory(
-                fixture.dir.path().join("src").canonicalize().unwrap()
-            ))
-        );
-    }
-
-    #[test]
-    fn task_identifier() {
-        let fixture = Fixture::new();
-        assert_eq!(
-            fixture.parse("wormhole:dan/branch"),
-            Some(Target::Project("wormhole:dan/branch".to_string()))
-        );
-    }
-
-    #[test]
-    fn branch_only_task_identifier() {
-        let fixture = Fixture::new();
-        assert_eq!(
-            fixture.parse(":dan/branch"),
-            Some(Target::Project(":dan/branch".to_string()))
-        );
-    }
-
-    #[test]
-    fn bare_project_name() {
-        let fixture = Fixture::new();
-        assert_eq!(
-            fixture.parse("wormhole"),
-            Some(Target::Project("wormhole".to_string()))
-        );
-    }
-
-    #[test]
-    fn nonexistent_path_is_not_a_project() {
-        let fixture = Fixture::new();
-        assert_eq!(fixture.parse("src/nope.rs:1"), None);
-    }
-
-    #[test]
-    fn prose_is_not_a_target() {
-        let fixture = Fixture::new();
-        assert_eq!(fixture.parse("see the docs"), None);
-    }
 }

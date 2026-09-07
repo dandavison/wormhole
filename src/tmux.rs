@@ -47,6 +47,23 @@ pub fn project_directories() -> Vec<String> {
         .collect()
 }
 
+/// Directories of the panes of the window in view, the focused pane's first.
+///
+/// This is what relative paths printed in a pane are relative to. The focused
+/// pane leads because that is the one being read.
+pub fn visible_pane_directories() -> Vec<String> {
+    let mut panes: Vec<(bool, String)> =
+        tmux(["list-panes", "-F", "#{pane_active} #{pane_current_path}"])
+            .lines()
+            .filter_map(|line| {
+                let (active, directory) = line.split_once(' ')?;
+                Some((active == "1", directory.to_string()))
+            })
+            .collect();
+    panes.sort_by_key(|(active, _)| !active);
+    panes.into_iter().map(|(_, directory)| directory).collect()
+}
+
 pub fn window_names() -> Vec<String> {
     list_windows().into_iter().map(|w| w.name).collect()
 }

@@ -15,6 +15,7 @@ mod project_path;
 mod projects;
 mod serve_web;
 mod status;
+mod target;
 mod task;
 mod terminal;
 mod tmux;

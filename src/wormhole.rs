@@ -224,6 +224,9 @@ async fn route(
         "/favicon.png" => handlers::favicon(),
         "/shell" => project::shell_env(params.pwd.as_deref()),
         "/kv" => crate::kv::list_all_kv_fresh(),
+        "/terminal/pane-directories" => Response::new(Body::from(
+            crate::tmux::visible_pane_directories().join("\n"),
+        )),
         "/terminal/run" => require_post(method, || {
             run_in_terminal(
                 params.project.as_deref(),

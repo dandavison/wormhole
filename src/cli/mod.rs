@@ -289,6 +289,13 @@ pub enum Command {
         no_create: bool,
     },
 
+    /// Print those of TARGETS that `open --no-create` would open, one per line.
+    /// For a terminal deciding which text to offer as a click target
+    Openable {
+        #[arg(value_name = "TARGET", required = true)]
+        targets: Vec<String>,
+    },
+
     /// Key-value storage operations
     Kv {
         #[command(subcommand)]
@@ -432,13 +439,6 @@ pub enum KvCommand {
         #[arg(short, long, default_value = "text")]
         output: String,
     },
-}
-
-fn is_conversation_file(path: &std::path::Path) -> bool {
-    let conversations_dir = std::fs::canonicalize(crate::conversations::conversations_dir())
-        .unwrap_or_else(|_| crate::conversations::conversations_dir());
-    let abs_path = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    abs_path.starts_with(&conversations_dir)
 }
 
 pub fn run(command: Command) -> Result<(), String> {
@@ -694,6 +694,8 @@ pub fn run(command: Command) -> Result<(), String> {
             dry_run,
             no_create,
         } => open::run(&client, &target, land_in, home_project, dry_run, no_create),
+
+        Command::Openable { targets } => open::openable(&client, &targets),
 
         Command::Kv { command } => match command {
             KvCommand::Get {

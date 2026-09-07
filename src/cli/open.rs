@@ -75,8 +75,8 @@ fn parse(text: &str, cwd: &Path) -> Option<Target> {
 }
 
 /// Ways the text might denote a path, longest path first. Covers `path`,
-/// `path:line`, `path:line:column`, `path(line)` (pdb) and `File "path", line
-/// N` (Python traceback).
+/// `path:line`, `path:line:column`, `path:line-line`, `path(line)` (pdb) and
+/// `File "path", line N` (Python traceback).
 fn path_candidates(text: &str) -> Vec<(&str, Option<usize>)> {
     if let Some(candidate) = python_traceback(text).or_else(|| parenthesized_line(text)) {
         return vec![candidate];
@@ -103,9 +103,15 @@ fn parenthesized_line(text: &str) -> Option<(&str, Option<usize>)> {
     Some((path, Some(line.parse().ok()?)))
 }
 
+/// Split off a trailing `:line`, or `:line-line` as a line range is written,
+/// which is opened at its first line.
 fn numeric_suffix(text: &str) -> Option<(&str, usize)> {
     let (head, tail) = text.rsplit_once(':')?;
-    Some((head, tail.parse().ok()?))
+    let start = match tail.split_once('-') {
+        Some((start, end)) => end.parse::<usize>().ok().map(|_| start)?,
+        None => tail,
+    };
+    Some((head, start.parse().ok()?))
 }
 
 fn resolve(cwd: &Path, path: &str) -> PathBuf {
@@ -201,6 +207,15 @@ mod tests {
         let fixture = Fixture::new();
         assert_eq!(
             fixture.parse("src/main.rs:91:5"),
+            fixture.file("src/main.rs", Some(91))
+        );
+    }
+
+    #[test]
+    fn path_with_line_range() {
+        let fixture = Fixture::new();
+        assert_eq!(
+            fixture.parse("src/main.rs:91-95"),
             fixture.file("src/main.rs", Some(91))
         );
     }

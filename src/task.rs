@@ -11,9 +11,55 @@ pub fn get_task(key: &ProjectKey) -> Option<Project> {
     projects.by_key(key).filter(|p| p.is_task())
 }
 
-/// Get a task by repo and branch
+/// The task in `repo` that `branch` belongs to: the task named by the branch
+/// itself, else the one a branch rule links it to.
 pub fn get_task_by_branch(repo: &str, branch: &str) -> Option<Project> {
-    get_task(&ProjectKey::task(repo, branch))
+    get_task(&ProjectKey::task(repo, branch)).or_else(|| linked_task(repo, branch))
+}
+
+/// The task, if any, that branch rules link `branch` to within `repo`.
+fn linked_task(repo: &str, branch: &str) -> Option<Project> {
+    let rules = config::branch_rules();
+    if rules.is_empty() {
+        return None;
+    }
+    let tasks: Vec<Project> = projects::tasks()
+        .into_values()
+        .filter(|t| t.repo_name.as_str() == repo)
+        .collect();
+    let owner = rules.owning_task_branch(
+        tasks
+            .iter()
+            .filter_map(|t| t.branch.as_ref().map(|b| b.as_str())),
+        branch,
+    )?;
+    tasks
+        .iter()
+        .find(|t| t.branch.as_ref().is_some_and(|b| b.as_str() == owner))
+        .cloned()
+}
+
+/// Across every repo, the tasks that `branch` belongs to: the open tasks named
+/// by the branch itself if any exist, else (only with branch rules configured)
+/// one task per repo where a rule links it.
+pub fn tasks_for_branch(branch: &str) -> Vec<ProjectKey> {
+    let exact: Vec<ProjectKey> = projects::lock()
+        .keys()
+        .into_iter()
+        .filter(|key| key.branch.as_ref().is_some_and(|b| b.as_str() == branch))
+        .collect();
+    if !exact.is_empty() || config::branch_rules().is_empty() {
+        return exact;
+    }
+    let repos: std::collections::BTreeSet<String> = projects::tasks()
+        .into_values()
+        .map(|t| t.repo_name.to_string())
+        .collect();
+    repos
+        .iter()
+        .filter_map(|repo| linked_task(repo, branch))
+        .map(|t| t.store_key())
+        .collect()
 }
 
 /// Create a task. The branch name is the task identity.
@@ -32,7 +78,10 @@ fn create_task_inner(repo: &str, branch: &str, detached: bool) -> Result<Project
     let worktree_path = git::task_worktree_path(config::worktree_dir(), repo, branch);
 
     if let Some(task) = get_task_by_branch(repo, branch) {
-        if worktree_path.join(".git").exists() {
+        let linked = task.branch.as_ref().is_some_and(|b| b.as_str() != branch);
+        if linked || worktree_path.join(".git").exists() {
+            // A linked branch belongs to an existing task: never a worktree of
+            // its own. (`checked_working_tree` reports a missing one.)
             return Ok(task);
         }
         // Task is in memory but worktree is broken/missing; recreate it.
@@ -199,6 +248,13 @@ pub fn create_review_tasks(dry_run: bool) -> Result<ReviewTaskResult, String> {
         let task_key = format!("{}:{}", home, branch);
         let already_exists = existing_tasks.contains(&task_key);
 
+        if let Some(owner) = linked_task(home.as_str(), &branch) {
+            result
+                .skipped
+                .push(format!("{} covered by {}", task_key, owner.store_key()));
+            continue;
+        }
+
         if dry_run {
             let label = if already_exists { "update" } else { "create" };
             result
@@ -288,6 +344,21 @@ pub fn create_github_ref_task(
     };
 
     let task_key_str = format!("{}:{}", home, branch);
+
+    // Phrased so the browser extension's parser (`split(' (')[0]`) yields the
+    // task to switch to.
+    if let Some(owner) = linked_task(&home, &branch) {
+        return Ok(GithubTaskResult {
+            created: None,
+            skipped: Some(format!(
+                "{} (already covers branch {})",
+                owner.store_key(),
+                branch
+            )),
+            error: None,
+        });
+    }
+
     let existing = git::task_worktree_path(config::worktree_dir(), &home, &branch)
         .join(".git")
         .exists();

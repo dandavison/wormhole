@@ -305,7 +305,37 @@ editors = [
     { glob = "mathematics", editor = "emacs" },
     { glob = "*-docs", editor = "code" },
 ]
+
+# Rules linking further branches to a task (see "Branch rules" below). Each is a
+# regex tested against a branch name; `{task}` stands for the task's branch.
+branch_rules = [
+    "^{task}[-/.]",
+]
 ```
+
+### Branch rules
+
+A task is identified by one branch (`repo:branch`), and its worktree lives at a path derived
+from that branch. Work on a task often spans several branches: a stack of PRs, a follow-up, a
+rebased copy. `branch_rules` lets such branches belong to the existing task instead of becoming
+tasks of their own. A branch belongs to a task when any rule, with `{task}` replaced by the
+task's (regex-escaped) branch name, matches it. With the rule above, `feature-x-2` and
+`feature-x/fixup` both belong to `repo:feature-x`. When several tasks qualify (say `feature` and
+`feature-x` both exist), the longest prefix match wins: `feature-x-2` goes to `feature-x`.
+
+Concretely, with a linking rule in place:
+
+- Checking out a linked branch inside a task's worktree leaves the task's identity, worktree, tmux
+  window and editor workspace alone, even once the original branch has been merged and deleted:
+  the worktree directory name carries the identity. (Without a rule, the task is renamed after the
+  checked-out branch and `wormhole doctor conform` relocates the worktree to match.)
+- `wormhole open repo:feature-x-2`, `wormhole open :feature-x-2`, and opening a PR or issue whose
+  branch is linked all land in the existing task; no second worktree is created.
+- The browser extension's buttons on a PR page link to the task whose branch the PR's head branch
+  is, or is linked to, even when the worktree currently has a different branch checked out.
+
+Rules are re-read by `wormhole refresh`. Rules never link a branch to itself, and a branch that
+already has a task of its own is that task regardless of the rules.
 
 `~` is expanded to `$HOME` at load time.
 
@@ -323,6 +353,7 @@ compatibility._
 | `WORMHOLE_SEARCH_PATHS`   | Colon-separated directories to search for projects                 |
 | `WORMHOLE_WORKTREE_DIR`   | Where project worktrees are created (default: `~/worktrees`)       |
 | `WORMHOLE_DEFAULT_PROJECT` | Project used for a new branch project opened as `:branch`         |
+| `WORMHOLE_BRANCH_RULES`   | Whitespace-separated branch rules, overriding `branch_rules`       |
 | `WORMHOLE_PORT`           | HTTP API port (default: 7117)                                      |
 | `WORMHOLE_EDITOR`         | Editor to use (`cursor`, `code`, `code-insiders`, `emacs`, `none`) |
 | `JIRA_INSTANCE`           | JIRA instance name (e.g., `mycompany` for mycompany.atlassian.net) |

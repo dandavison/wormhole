@@ -1,4 +1,5 @@
 mod batch;
+mod branch_rules;
 mod cli;
 mod config;
 mod conversations;

@@ -75,6 +75,7 @@ pub fn conform(dry_run: bool) -> Response<Body> {
     let repo_paths: Vec<_> = available.into_iter().collect();
 
     let worktree_dir = config::worktree_dir();
+    let rules = config::branch_rules();
     let results: Vec<ConformTaskResult> = repo_paths
         .par_iter()
         .filter(|(_, path)| git::is_git_repo(path))
@@ -83,7 +84,7 @@ pub fn conform(dry_run: bool) -> Response<Body> {
             git::list_worktrees(path)
                 .into_iter()
                 .filter(|wt| wt.path.starts_with(&worktree_base))
-                .filter_map(|wt| conform_worktree(&wt, path, name.as_str(), dry_run))
+                .filter_map(|wt| conform_worktree(&wt, path, name.as_str(), &rules, dry_run))
                 .collect::<Vec<_>>()
         })
         .collect();
@@ -117,17 +118,21 @@ pub fn conform(dry_run: bool) -> Response<Body> {
     json_response(&result)
 }
 
-/// Relocate the worktree if its directory doesn't encode the branch it holds
-/// (e.g. the branch was renamed in place) — every lookup derives the path from
-/// (repo, branch), so such a worktree is unreachable — then conform its
-/// contents.
+/// Relocate the worktree if its directory doesn't encode the branch that
+/// identifies its task — every lookup derives the path from (repo, branch), so
+/// such a worktree is unreachable — then conform its contents. A checked-out
+/// branch that a branch rule links to the directory's branch is not a
+/// mismatch: the task keeps its identity and the worktree stays put.
 fn conform_worktree(
     wt: &git::Worktree,
     repo_path: &std::path::Path,
     repo: &str,
+    rules: &crate::branch_rules::BranchRules,
     dry_run: bool,
 ) -> Option<ConformTaskResult> {
-    let branch = wt.branch.as_deref()?;
+    let checked_out = wt.branch.as_deref()?;
+    let branch =
+        &rules.task_branch_for_worktree(&wt.path, checked_out, || git::list_branches(repo_path));
     let task = format!("{}:{}", repo, branch);
     let mut actions = Vec::new();
     let mut path = wt.path.clone();

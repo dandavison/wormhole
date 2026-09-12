@@ -1,3 +1,4 @@
+use crate::branch_rules::BranchRules;
 use crate::editor::Editor;
 use crate::terminal::Terminal;
 use glob::Pattern;
@@ -105,6 +106,32 @@ pub fn reload_editor() {
     }
 }
 
+static BRANCH_RULES: OnceLock<RwLock<BranchRules>> = OnceLock::new();
+
+fn branch_rules_cell() -> &'static RwLock<BranchRules> {
+    BRANCH_RULES.get_or_init(|| RwLock::new(load_branch_rules()))
+}
+
+/// `WORMHOLE_BRANCH_RULES` (whitespace-separated; branch names contain none)
+/// overrides the `branch_rules` list in `wormhole.toml`.
+fn load_branch_rules() -> BranchRules {
+    let patterns: Vec<String> = match std::env::var("WORMHOLE_BRANCH_RULES") {
+        Ok(env_val) => env_val.split_whitespace().map(str::to_string).collect(),
+        Err(_) => load_config_file().branch_rules,
+    };
+    BranchRules::new(patterns)
+}
+
+/// Rules linking further branches to a task; see [`crate::branch_rules`].
+pub fn branch_rules() -> BranchRules {
+    branch_rules_cell().read().unwrap().clone()
+}
+
+/// Re-read `branch_rules` from the config file. Invoked by `wormhole refresh`.
+pub fn reload_branch_rules() {
+    *branch_rules_cell().write().unwrap() = load_branch_rules();
+}
+
 static PORT: OnceLock<u16> = OnceLock::new();
 
 pub fn wormhole_port() -> u16 {
@@ -125,6 +152,8 @@ struct ConfigFile {
     worktree_dir: Option<String>,
     #[serde(default)]
     card_commands: Vec<String>,
+    #[serde(default)]
+    branch_rules: Vec<String>,
     editor: Option<String>,
     #[serde(default)]
     editors: Vec<EditorOverrideEntry>,
@@ -656,6 +685,24 @@ editors = [
         assert_eq!(matched("mathematics"), Some(Editor::Emacs));
         assert_eq!(matched("wormhole-docs"), Some(Editor::VSCode));
         assert_eq!(matched("wormhole"), None);
+    }
+
+    #[test]
+    fn test_config_file_branch_rules() {
+        let toml_str = r#"
+branch_rules = ["^{task}[-/.]", "^{task}-v[0-9]+$"]
+"#;
+        let config: ConfigFile = toml::from_str(toml_str).unwrap();
+        assert_eq!(
+            config.branch_rules,
+            vec!["^{task}[-/.]", "^{task}-v[0-9]+$"]
+        );
+        let rules = BranchRules::new(config.branch_rules);
+        assert!(rules.links("feature-x", "feature-x-2"));
+        assert!(!rules.links("feature-x", "feature-xy"));
+
+        let config: ConfigFile = toml::from_str("").unwrap();
+        assert!(config.branch_rules.is_empty());
     }
 
     #[test]

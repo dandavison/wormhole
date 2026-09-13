@@ -1431,17 +1431,18 @@ fn urlencode(value: &str) -> String {
 }
 
 #[test]
-fn test_branch_rules_link_branches_to_an_existing_task() {
-    // With `branch_rules = ["^{task}-"]`, checking out `feature-2` inside the
-    // worktree of task `repo:feature` leaves the task's identity alone, and
-    // opening `repo:feature-2` lands in that same worktree rather than
-    // creating a second one.
-    let test = harness::WormholeTest::new_with_env(18927, &[("WORMHOLE_BRANCH_RULES", "^{task}-")]);
+fn test_member_branches_belong_to_an_existing_task() {
+    // With `project_branches = { "*" = ["{project}-*"] }`, checking out
+    // `feature-2` inside the worktree of task `repo:feature` leaves the task's
+    // identity alone, and opening `repo:feature-2` lands in that same worktree
+    // rather than creating a second one.
+    let test =
+        harness::WormholeTest::new_with_env(18927, &[("WORMHOLE_PROJECT_BRANCHES", "{project}-*")]);
 
-    let home_proj = format!("{}branch-rules", TEST_PREFIX);
+    let home_proj = format!("{}member-branches", TEST_PREFIX);
     let home_dir = format!("/tmp/{}", home_proj);
     let task_branch = format!("{}feature", TEST_PREFIX);
-    let linked_branch = format!("{}-2", task_branch);
+    let member_branch = format!("{}-2", task_branch);
 
     init_git_repo(&home_dir);
     test.create_project(&home_dir, &home_proj);
@@ -1449,7 +1450,7 @@ fn test_branch_rules_link_branches_to_an_existing_task() {
     let worktree = test.task_worktree_path(&home_proj, &task_branch);
 
     let checkout = std::process::Command::new("git")
-        .args(["checkout", "-b", &linked_branch])
+        .args(["checkout", "-b", &member_branch])
         .current_dir(&worktree)
         .output()
         .unwrap();
@@ -1463,24 +1464,24 @@ fn test_branch_rules_link_branches_to_an_existing_task() {
     std::thread::sleep(std::time::Duration::from_millis(300));
     assert!(
         test.task_in_list(&home_proj, &task_branch),
-        "task should keep its identity after checking out a linked branch"
+        "task should keep its identity after checking out a member branch"
     );
     assert!(
-        !test.task_in_list(&home_proj, &linked_branch),
-        "the linked branch must not become a task of its own"
+        !test.task_in_list(&home_proj, &member_branch),
+        "the member branch must not become a task of its own"
     );
 
-    test.cli(&format!("wormhole open '{}:{}'", home_proj, linked_branch))
+    test.cli(&format!("wormhole open '{}:{}'", home_proj, member_branch))
         .unwrap();
     test.assert_tmux_cwd(&worktree);
     assert!(
-        !std::path::Path::new(&test.task_worktree_path(&home_proj, &linked_branch)).exists(),
-        "no worktree should be created for a branch linked to an existing task"
+        !std::path::Path::new(&test.task_worktree_path(&home_proj, &member_branch)).exists(),
+        "no worktree should be created for a member branch of an existing task"
     );
 
-    // The bare `:branch` form resolves through the rules too.
+    // The bare `:branch` form resolves through `project_branches` too.
     let resolved = test
-        .http_get(&format!("/project/switch/:{}?sync=1", linked_branch))
+        .http_get(&format!("/project/switch/:{}?sync=1", member_branch))
         .unwrap();
     assert!(resolved.contains("ok"), "unexpected response: {}", resolved);
     test.assert_tmux_cwd(&worktree);

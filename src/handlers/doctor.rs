@@ -75,7 +75,7 @@ pub fn conform(dry_run: bool) -> Response<Body> {
     let repo_paths: Vec<_> = available.into_iter().collect();
 
     let worktree_dir = config::worktree_dir();
-    let rules = config::branch_rules();
+    let project_branches = config::project_branches();
     let results: Vec<ConformTaskResult> = repo_paths
         .par_iter()
         .filter(|(_, path)| git::is_git_repo(path))
@@ -84,7 +84,9 @@ pub fn conform(dry_run: bool) -> Response<Body> {
             git::list_worktrees(path)
                 .into_iter()
                 .filter(|wt| wt.path.starts_with(&worktree_base))
-                .filter_map(|wt| conform_worktree(&wt, path, name.as_str(), &rules, dry_run))
+                .filter_map(|wt| {
+                    conform_worktree(&wt, path, name.as_str(), &project_branches, dry_run)
+                })
                 .collect::<Vec<_>>()
         })
         .collect();
@@ -121,18 +123,30 @@ pub fn conform(dry_run: bool) -> Response<Body> {
 /// Relocate the worktree if its directory doesn't encode the branch that
 /// identifies its task — every lookup derives the path from (repo, branch), so
 /// such a worktree is unreachable — then conform its contents. A checked-out
-/// branch that a branch rule links to the directory's branch is not a
+/// branch that is a member branch of the directory's branch is not a
 /// mismatch: the task keeps its identity and the worktree stays put.
 fn conform_worktree(
     wt: &git::Worktree,
     repo_path: &std::path::Path,
     repo: &str,
-    rules: &crate::branch_rules::BranchRules,
+    project_branches: &crate::project_branches::ProjectBranches,
     dry_run: bool,
 ) -> Option<ConformTaskResult> {
     let checked_out = wt.branch.as_deref()?;
     let branch =
-        &rules.task_branch_for_worktree(&wt.path, checked_out, || git::list_branches(repo_path));
+        match project_branches.project_branch_for_worktree(repo, &wt.path, checked_out, || {
+            git::list_branches(repo_path)
+        }) {
+            Ok(branch) => branch,
+            Err(e) => {
+                return Some(ConformTaskResult {
+                    task: format!("{}:{}", repo, checked_out),
+                    actions: Vec::new(),
+                    error: Some(e),
+                })
+            }
+        };
+    let branch = branch.as_str();
     let task = format!("{}:{}", repo, branch);
     let mut actions = Vec::new();
     let mut path = wt.path.clone();

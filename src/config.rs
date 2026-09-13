@@ -1,5 +1,5 @@
-use crate::branch_rules::BranchRules;
 use crate::editor::Editor;
+use crate::project_branches::ProjectBranches;
 use crate::terminal::Terminal;
 use glob::Pattern;
 use serde::Deserialize;
@@ -106,30 +106,33 @@ pub fn reload_editor() {
     }
 }
 
-static BRANCH_RULES: OnceLock<RwLock<BranchRules>> = OnceLock::new();
+static PROJECT_BRANCHES: OnceLock<RwLock<ProjectBranches>> = OnceLock::new();
 
-fn branch_rules_cell() -> &'static RwLock<BranchRules> {
-    BRANCH_RULES.get_or_init(|| RwLock::new(load_branch_rules()))
+fn project_branches_cell() -> &'static RwLock<ProjectBranches> {
+    PROJECT_BRANCHES.get_or_init(|| RwLock::new(load_project_branches()))
 }
 
-/// `WORMHOLE_BRANCH_RULES` (whitespace-separated; branch names contain none)
-/// overrides the `branch_rules` list in `wormhole.toml`.
-fn load_branch_rules() -> BranchRules {
-    let patterns: Vec<String> = match std::env::var("WORMHOLE_BRANCH_RULES") {
-        Ok(env_val) => env_val.split_whitespace().map(str::to_string).collect(),
-        Err(_) => load_config_file().branch_rules,
-    };
-    BranchRules::new(patterns)
+/// `WORMHOLE_PROJECT_BRANCHES` (whitespace-separated patterns; branch names
+/// contain none) overrides the `project_branches` table in `wormhole.toml`
+/// with a single entry applying to every project.
+fn load_project_branches() -> ProjectBranches {
+    match std::env::var("WORMHOLE_PROJECT_BRANCHES") {
+        Ok(env_val) => ProjectBranches::new([(
+            "*".to_string(),
+            env_val.split_whitespace().map(str::to_string).collect(),
+        )]),
+        Err(_) => ProjectBranches::new(load_config_file().project_branches),
+    }
 }
 
-/// Rules linking further branches to a task; see [`crate::branch_rules`].
-pub fn branch_rules() -> BranchRules {
-    branch_rules_cell().read().unwrap().clone()
+/// The member branches of each project; see [`crate::project_branches`].
+pub fn project_branches() -> ProjectBranches {
+    project_branches_cell().read().unwrap().clone()
 }
 
-/// Re-read `branch_rules` from the config file. Invoked by `wormhole refresh`.
-pub fn reload_branch_rules() {
-    *branch_rules_cell().write().unwrap() = load_branch_rules();
+/// Re-read `project_branches` from the config file. Invoked by `wormhole refresh`.
+pub fn reload_project_branches() {
+    *project_branches_cell().write().unwrap() = load_project_branches();
 }
 
 static PORT: OnceLock<u16> = OnceLock::new();
@@ -153,7 +156,7 @@ struct ConfigFile {
     #[serde(default)]
     card_commands: Vec<String>,
     #[serde(default)]
-    branch_rules: Vec<String>,
+    project_branches: std::collections::BTreeMap<String, Vec<String>>,
     editor: Option<String>,
     #[serde(default)]
     editors: Vec<EditorOverrideEntry>,
@@ -688,21 +691,22 @@ editors = [
     }
 
     #[test]
-    fn test_config_file_branch_rules() {
+    fn test_config_file_project_branches() {
         let toml_str = r#"
-branch_rules = ["^{task}[-/.]", "^{task}-v[0-9]+$"]
+[project_branches]
+"*" = ["{project}-*"]
+"wormhole:feature-x" = ["mbt/*", "/^stack-[0-9]+$/"]
 "#;
         let config: ConfigFile = toml::from_str(toml_str).unwrap();
-        assert_eq!(
-            config.branch_rules,
-            vec!["^{task}[-/.]", "^{task}-v[0-9]+$"]
-        );
-        let rules = BranchRules::new(config.branch_rules);
-        assert!(rules.links("feature-x", "feature-x-2"));
-        assert!(!rules.links("feature-x", "feature-xy"));
+        assert_eq!(config.project_branches.len(), 2);
+        let branches = ProjectBranches::new(config.project_branches);
+        assert!(branches.links("wormhole", "feature-x", "feature-x-2"));
+        assert!(branches.links("wormhole", "feature-x", "stack-2"));
+        assert!(!branches.links("temporal", "feature-x", "stack-2"));
+        assert!(!branches.links("wormhole", "feature-x", "feature-xy"));
 
         let config: ConfigFile = toml::from_str("").unwrap();
-        assert!(config.branch_rules.is_empty());
+        assert!(config.project_branches.is_empty());
     }
 
     #[test]

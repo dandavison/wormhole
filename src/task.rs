@@ -12,44 +12,50 @@ pub fn get_task(key: &ProjectKey) -> Option<Project> {
 }
 
 /// The task in `repo` that `branch` belongs to: the task named by the branch
-/// itself, else the one a branch rule links it to.
-pub fn get_task_by_branch(repo: &str, branch: &str) -> Option<Project> {
-    get_task(&ProjectKey::task(repo, branch)).or_else(|| linked_task(repo, branch))
+/// itself, else the one whose member branches include it.
+pub fn get_task_by_branch(repo: &str, branch: &str) -> Result<Option<Project>, String> {
+    match get_task(&ProjectKey::task(repo, branch)) {
+        Some(task) => Ok(Some(task)),
+        None => owning_task(repo, branch),
+    }
 }
 
-/// The task, if any, that branch rules link `branch` to within `repo`.
-fn linked_task(repo: &str, branch: &str) -> Option<Project> {
-    let rules = config::branch_rules();
-    if rules.is_empty() {
-        return None;
+/// The task in `repo`, if any, whose member branches include `branch`.
+fn owning_task(repo: &str, branch: &str) -> Result<Option<Project>, String> {
+    let project_branches = config::project_branches();
+    if project_branches.is_empty() {
+        return Ok(None);
     }
     let tasks: Vec<Project> = projects::tasks()
         .into_values()
         .filter(|t| t.repo_name.as_str() == repo)
         .collect();
-    let owner = rules.owning_task_branch(
+    let owner = project_branches.owning_project_branch(
         tasks
             .iter()
             .filter_map(|t| t.branch.as_ref().map(|b| b.as_str())),
+        repo,
         branch,
     )?;
-    tasks
-        .iter()
-        .find(|t| t.branch.as_ref().is_some_and(|b| b.as_str() == owner))
-        .cloned()
+    Ok(owner.and_then(|owner| {
+        tasks
+            .iter()
+            .find(|t| t.branch.as_ref().is_some_and(|b| b.as_str() == owner))
+            .cloned()
+    }))
 }
 
 /// Across every repo, the tasks that `branch` belongs to: the open tasks named
-/// by the branch itself if any exist, else (only with branch rules configured)
-/// one task per repo where a rule links it.
-pub fn tasks_for_branch(branch: &str) -> Vec<ProjectKey> {
+/// by the branch itself if any exist, else the ones whose member branches
+/// include it.
+pub fn tasks_for_branch(branch: &str) -> Result<Vec<ProjectKey>, String> {
     let exact: Vec<ProjectKey> = projects::lock()
         .keys()
         .into_iter()
         .filter(|key| key.branch.as_ref().is_some_and(|b| b.as_str() == branch))
         .collect();
-    if !exact.is_empty() || config::branch_rules().is_empty() {
-        return exact;
+    if !exact.is_empty() || config::project_branches().is_empty() {
+        return Ok(exact);
     }
     let repos: std::collections::BTreeSet<String> = projects::tasks()
         .into_values()
@@ -57,8 +63,8 @@ pub fn tasks_for_branch(branch: &str) -> Vec<ProjectKey> {
         .collect();
     repos
         .iter()
-        .filter_map(|repo| linked_task(repo, branch))
-        .map(|t| t.store_key())
+        .filter_map(|repo| owning_task(repo, branch).transpose())
+        .map(|task| task.map(|t| t.store_key()))
         .collect()
 }
 
@@ -77,10 +83,10 @@ pub fn create_task_detached(repo: &str, branch: &str) -> Result<Project, String>
 fn create_task_inner(repo: &str, branch: &str, detached: bool) -> Result<Project, String> {
     let worktree_path = git::task_worktree_path(config::worktree_dir(), repo, branch);
 
-    if let Some(task) = get_task_by_branch(repo, branch) {
-        let linked = task.branch.as_ref().is_some_and(|b| b.as_str() != branch);
-        if linked || worktree_path.join(".git").exists() {
-            // A linked branch belongs to an existing task: never a worktree of
+    if let Some(task) = get_task_by_branch(repo, branch)? {
+        let is_member = task.branch.as_ref().is_some_and(|b| b.as_str() != branch);
+        if is_member || worktree_path.join(".git").exists() {
+            // A member branch belongs to an existing task: never a worktree of
             // its own. (`checked_working_tree` reports a missing one.)
             return Ok(task);
         }
@@ -120,10 +126,9 @@ fn create_task_inner(repo: &str, branch: &str, detached: bool) -> Result<Project
 }
 
 pub fn open_task(repo: &str, branch: &str, land_in: Option<LandIn>) -> Result<(), String> {
-    let project = if let Some(task) = get_task_by_branch(repo, branch) {
-        task
-    } else {
-        create_task(repo, branch)?
+    let project = match get_task_by_branch(repo, branch)? {
+        Some(task) => task,
+        None => create_task(repo, branch)?,
     };
 
     project.checked_working_tree()?;
@@ -248,11 +253,18 @@ pub fn create_review_tasks(dry_run: bool) -> Result<ReviewTaskResult, String> {
         let task_key = format!("{}:{}", home, branch);
         let already_exists = existing_tasks.contains(&task_key);
 
-        if let Some(owner) = linked_task(home.as_str(), &branch) {
-            result
-                .skipped
-                .push(format!("{} covered by {}", task_key, owner.store_key()));
-            continue;
+        match owning_task(home.as_str(), &branch) {
+            Ok(Some(existing)) => {
+                result
+                    .skipped
+                    .push(format!("{} covered by {}", task_key, existing.store_key()));
+                continue;
+            }
+            Ok(None) => {}
+            Err(e) => {
+                result.errors.push(format!("{}: {}", task_key, e));
+                continue;
+            }
         }
 
         if dry_run {
@@ -347,12 +359,12 @@ pub fn create_github_ref_task(
 
     // Phrased so the browser extension's parser (`split(' (')[0]`) yields the
     // task to switch to.
-    if let Some(owner) = linked_task(&home, &branch) {
+    if let Some(existing) = owning_task(&home, &branch)? {
         return Ok(GithubTaskResult {
             created: None,
             skipped: Some(format!(
                 "{} (already covers branch {})",
-                owner.store_key(),
+                existing.store_key(),
                 branch
             )),
             error: None,

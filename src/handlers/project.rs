@@ -195,7 +195,7 @@ fn close_all_projects(remove: bool) {
 pub fn refresh_all() {
     // Re-read the active editor from wormhole.toml
     crate::config::reload_editor();
-    crate::config::reload_branch_rules();
+    crate::config::reload_project_branches();
 
     // Rescan repo remotes (available projects may have changed)
     crate::task::invalidate_github_repo_map();
@@ -541,7 +541,7 @@ fn resolve_project_key(name: &str) -> Result<ProjectKey, String> {
         return Err("Branch name cannot be empty".to_string());
     }
 
-    let mut matches = crate::task::tasks_for_branch(branch);
+    let mut matches = crate::task::tasks_for_branch(branch)?;
     match matches.len() {
         0 => config::default_project()
             .map(|repo| ProjectKey::task(repo, branch))

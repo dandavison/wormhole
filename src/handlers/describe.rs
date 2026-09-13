@@ -126,18 +126,22 @@ fn describe_github(gh: &GitHubUrl) -> DescribeResponse {
 
     let pr_branch = rx.recv().ok().flatten();
 
-    // With branch rules configured, a PR whose head branch is, or is linked
-    // to, a task's branch belongs to that task even when the worktree
-    // currently has some other branch checked out.
-    let task_match = task_match.or_else(|| {
-        if crate::config::branch_rules().is_empty() {
-            return None;
+    // A PR whose head branch is, or is a member branch of, a task's branch
+    // belongs to that task even when the worktree currently has some other
+    // branch checked out.
+    let task_match = match (task_match, pr_branch.as_deref()) {
+        (None, Some(branch)) if !crate::config::project_branches().is_empty() => {
+            let expected_repo = format!("{}/{}", gh.owner, gh.repo);
+            match find_task_by_branch(&expected_repo, branch) {
+                Ok(task_match) => task_match,
+                Err(e) => {
+                    crate::util::error(&e);
+                    None
+                }
+            }
         }
-        let expected_repo = format!("{}/{}", gh.owner, gh.repo);
-        pr_branch
-            .as_deref()
-            .and_then(|branch| find_task_by_branch(&expected_repo, branch))
-    });
+        (task_match, _) => task_match,
+    };
 
     match task_match {
         Some(task) => {
@@ -307,18 +311,18 @@ fn find_task_by_pr(owner: &str, repo: &str, pr_number: u64) -> Option<TaskMatch>
 }
 
 /// The task in a local clone of `expected_repo` that `branch` belongs to, by
-/// name or by branch rule. Candidates are found without network I/O; only they
-/// are checked (in parallel) against the GitHub repo name.
-fn find_task_by_branch(expected_repo: &str, branch: &str) -> Option<TaskMatch> {
+/// name or as a member branch. Candidates are found without network I/O; only
+/// they are checked (in parallel) against the GitHub repo name.
+fn find_task_by_branch(expected_repo: &str, branch: &str) -> Result<Option<TaskMatch>, String> {
     let repos: std::collections::BTreeSet<String> = projects::tasks()
         .into_values()
         .map(|t| t.repo_name.to_string())
         .collect();
     let candidates: Vec<crate::project::Project> = repos
         .iter()
-        .filter_map(|repo| crate::task::get_task_by_branch(repo, branch))
-        .collect();
-    candidates.par_iter().find_map_any(|project| {
+        .filter_map(|repo| crate::task::get_task_by_branch(repo, branch).transpose())
+        .collect::<Result<_, _>>()?;
+    Ok(candidates.par_iter().find_map_any(|project| {
         github::get_repo_name(project)
             .is_some_and(|r| r == expected_repo)
             .then(|| TaskMatch {
@@ -327,7 +331,7 @@ fn find_task_by_branch(expected_repo: &str, branch: &str) -> Option<TaskMatch> {
                 jira_key: project.kv.get("jira_key").cloned(),
                 task_type: project.kv.get("task_type").cloned(),
             })
-    })
+    }))
 }
 
 /// Check whether a task's PR matches the expected repo and PR number.

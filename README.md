@@ -306,36 +306,45 @@ editors = [
     { glob = "*-docs", editor = "code" },
 ]
 
-# Rules linking further branches to a task (see "Branch rules" below). Each is a
-# regex tested against a branch name; `{task}` stands for the task's branch.
-branch_rules = [
-    "^{task}[-/.]",
-]
+# The member branches of each project (see "Project branches" below). The key is
+# a glob over project keys; the values are globs, or /regexes/, over branch
+# names, in which `{project}` stands for the project's own branch.
+[project_branches]
+"*" = ["{project}-*", "{project}/*"]
+"wormhole:multi-branch-tasks" = ["mbt-fixups", "mbt/*", "/^stack-[0-9]+$/"]
 ```
 
-### Branch rules
+### Project branches
 
-A task is identified by one branch (`repo:branch`), and its worktree lives at a path derived
-from that branch. Work on a task often spans several branches: a stack of PRs, a follow-up, a
-rebased copy. `branch_rules` lets such branches belong to the existing task instead of becoming
-tasks of their own. A branch belongs to a task when any rule, with `{task}` replaced by the
-task's (regex-escaped) branch name, matches it. With the rule above, `feature-x-2` and
-`feature-x/fixup` both belong to `repo:feature-x`. When several tasks qualify (say `feature` and
-`feature-x` both exist), the longest prefix match wins: `feature-x-2` goes to `feature-x`.
+A project is identified by one branch (`repo:branch`), and its worktree lives at a path derived
+from that branch. Work on a project often spans several branches: a stack of PRs, a follow-up, a
+rebased copy. The `project_branches` table declares which further branches — the project's
+_member branches_ — belong to the existing project instead of becoming projects of their own.
 
-Concretely, with a linking rule in place:
+A project's patterns are the union of those of every entry whose key glob matches its
+`repo:branch` key, with `{project}` replaced by its branch. A pattern is a glob unless delimited
+by `/`, in which case the text between the delimiters is a regex; both must match the whole
+branch name. With the entries above, `feature-x-2` and `feature-x/fixup` are member branches of
+`repo:feature-x`, and `mbt-fixups`, `mbt/2` and `stack-3` are member branches of
+`wormhole:multi-branch-tasks` alone.
 
-- Checking out a linked branch inside a task's worktree leaves the task's identity, worktree, tmux
-  window and editor workspace alone, even once the original branch has been merged and deleted:
-  the worktree directory name carries the identity. (Without a rule, the task is renamed after the
-  checked-out branch and `wormhole doctor conform` relocates the worktree to match.)
+Concretely, given a project and its member branches:
+
+- Checking out a member branch inside the project's worktree leaves the project's identity,
+  worktree, tmux window and editor workspace alone, even once the original branch has been merged
+  and deleted: the worktree directory name carries the identity. (Without a match, the project is
+  renamed after the checked-out branch and `wormhole doctor conform` relocates the worktree.)
 - `wormhole open repo:feature-x-2`, `wormhole open :feature-x-2`, and opening a PR or issue whose
-  branch is linked all land in the existing task; no second worktree is created.
-- The browser extension's buttons on a PR page link to the task whose branch the PR's head branch
-  is, or is linked to, even when the worktree currently has a different branch checked out.
+  branch is a member branch all land in the existing project; no second worktree is created.
+- The browser extension's buttons on a PR page link to the project whose branch the PR's head
+  branch is, or is a member branch of, even when the worktree currently has a different branch
+  checked out.
 
-Rules are re-read by `wormhole refresh`. Rules never link a branch to itself, and a branch that
-already has a task of its own is that task regardless of the rules.
+Membership is exclusive, and never decided by contest: if two projects claim the same branch (say
+`feature` and `feature-x` both exist, and the global entry above makes `feature-x-2` a member
+branch of each), it belongs to neither and the operation that asked for it fails with an error
+naming both. A branch is never a member branch of itself, and a branch that already has a project
+of its own is that project regardless of the table. The table is re-read by `wormhole refresh`.
 
 `~` is expanded to `$HOME` at load time.
 
@@ -353,7 +362,7 @@ compatibility._
 | `WORMHOLE_SEARCH_PATHS`   | Colon-separated directories to search for projects                 |
 | `WORMHOLE_WORKTREE_DIR`   | Where project worktrees are created (default: `~/worktrees`)       |
 | `WORMHOLE_DEFAULT_PROJECT` | Project used for a new branch project opened as `:branch`         |
-| `WORMHOLE_BRANCH_RULES`   | Whitespace-separated branch rules, overriding `branch_rules`       |
+| `WORMHOLE_PROJECT_BRANCHES` | Whitespace-separated patterns, overriding `project_branches` with one `"*"` entry |
 | `WORMHOLE_PORT`           | HTTP API port (default: 7117)                                      |
 | `WORMHOLE_EDITOR`         | Editor to use (`cursor`, `code`, `code-insiders`, `emacs`, `none`) |
 | `JIRA_INSTANCE`           | JIRA instance name (e.g., `mycompany` for mycompany.atlassian.net) |

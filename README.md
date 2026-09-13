@@ -10,34 +10,34 @@ Wormhole is a tool for working on software projects.
   directories that are located at the top level in one of those directories. These may be submodules,
   or top-level git repos.
 
-- A _task_ is a `(repo, branch)` pair: a branch in some git repository. The branch has a short
-  descriptive name that acts as the name of the task.
+- A _project_ is either a repository itself (a repo-level project with no branch) or a `(repo, branch)`
+  pair (a branch project). A branch project is identified as `repo:branch`.
 
-- Wormhole will ensure that a git worktree for the task exists. The worktree always has `$branch`
-  checked out. You always work on the task in the worktree: never in the main repo dir. Wormhole can
-  thus determine all known tasks by enumerating worktrees of available repos.
+- When opening a branch project, Wormhole ensures that a git worktree exists for it. The worktree
+  always has `$branch` checked out. You always work on a branch project in its worktree: never in the
+  main repo dir. Wormhole can thus determine all known branch projects by enumerating worktrees of
+  available repos.
 
-- Task worktrees are stored at `$worktree_dir/$repo_name/$encoded_branch/$repo_name` (default
+- Project worktrees are stored at `$worktree_dir/$repo_name/$encoded_branch/$repo_name` (default
   `$worktree_dir` is `~/worktrees`, configurable in `wormhole.toml`). Grouped by repo first, with
   the repo name as the leaf so editors display the repo name in the sidebar.
 
-- A _task_ is a type of _project_. Each repo is a non-task _project_. A non-task project has no
-  associated branch. Thus the set of projects is the union of the _available repos_ and the
-  worktrees of those repos. We assume that all repo worktrees are wormhole worktrees.
+- Thus the set of projects is the union of the _available repos_ and the branch worktrees of those
+  repos. We assume that all repo worktrees are wormhole worktrees.
 
-- The point of truth for what projects and tasks exist is this filesystem state. The only data
-  persisted by wormhole itself is associated with the `wormhole kv` interface. It is stored in JSON
-  files named `$gitdir/wormhole/kv/${repo}_${branch}.json` (with branch encoded to handle `/`),
-  where `$gitdir` is as defined above for the submodule and non-submodule cases. For example, if a
-  task has an associated JIRA ticket, then wormhole stores the JIRA identifier in kv. (A task may
-  also have an associated GitHub PR but that does not need to be stored in kv since the `gh` CLI can
-  discover it using the repo remote that is stored by git on disk.)
+- The point of truth for what projects exist is this filesystem state. The only data persisted by
+  wormhole itself is associated with the `wormhole kv` interface. It is stored in JSON files named
+  `$gitdir/wormhole/kv/${repo}_${branch}.json` (with branch encoded to handle `/`), where `$gitdir`
+  is as defined above for the submodule and non-submodule cases. For example, if a project has an
+  associated JIRA ticket, then wormhole stores the JIRA identifier in kv. (A project may also have
+  an associated GitHub PR but that does not need to be stored in kv since the `gh` CLI can discover
+  it using the repo remote that is stored by git on disk.)
 
 - Wormhole is a process exposing an HTTP API, with a CLI client that is a thin wrapper over the HTTP
   API. The CLI API includes `wormhole project list`, `wormhole open`,
   `wormhole project switch`, etc.
 
-- On server start, `wormhole project list` lists all tasks discovered on disk.
+- On server start, `wormhole project list` lists all projects discovered on disk.
 
 - After switching to a project via `wormhole project switch`, wormhole ensures that the following
   things are true: (1) a terminal tmux window for the project exists, (2) an editor workspace for
@@ -46,20 +46,20 @@ Wormhole is a tool for working on software projects.
 
 - Each project gets a generated `.code-workspace` file (stored at
   `$gitdir/wormhole/workspaces/<key>.code-workspace`). This gives each project a distinct VSCode
-  window identity so multiple tasks can be open simultaneously. The file includes `wormhole.port`
+  window identity so multiple projects can be open simultaneously. The file includes `wormhole.port`
   and `wormhole.worktreeDir` settings so the VSCode extension connects to the correct server and
   derives the project key from the worktree path.
 
 - The following sorts of hyperlinks can thus be created:
-  - Go to the terminal tmux window for a specified project or task
-  - Go to the editor worskpace for a specified project or task
-  - Go to the editor worskpace for a specified project or task and open a specified line in a
+  - Go to the terminal tmux window for a specified project
+  - Go to the editor workspace for a specified project
+  - Go to the editor workspace for a specified project and open a specified line in a
     specified file.
 
 - Wormhole has a browser extension. It re-routes GitHub format URLs to wormhole. On JIRA issue pages
-  or GitHub PR pages that match a wormhole task it adds buttons linking to the tmux window and the
+  or GitHub PR pages that match a wormhole project it adds buttons linking to the tmux window and the
   editor workspace. A third button brings up an embedded vscode session in an iframe, on the same
-  task workspace.
+  project workspace.
 
 - Wormhole serves a sprint dashboard with a card for each sprint issue. Each card has buttons linking
   to terminal, editor, and embedded vscode.
@@ -156,25 +156,25 @@ wormhole server attach                  # Attach to running server
 wormhole open myapp                     # Switch to project by name
 wormhole open /path/to/repo             # Open/create project at path
 wormhole open /path/to/file.rs:42       # Open file at line in editor
-wormhole open myrepo:my-branch          # Open task (creates worktree if needed)
-wormhole open :my-branch                # Open an existing task by branch, or use the default project
+wormhole open myrepo:my-branch          # Open branch project (creates worktree if needed)
+wormhole open :my-branch                # Open an existing branch project, or use the default project
 wormhole open https://github.com/o/r/pull/123 # Resolve a PR/issue URL into a worktree, then switch
 wormhole open o/r#123                    # Same, short form (also: bare #123 against cwd remote)
 wormhole open ACT-1234                   # Resolve a JIRA key/URL into a worktree, then switch
 wormhole open ACT-1234 -p myrepo        # Home project for the new worktree; --dry-run to preview
-wormhole project list                   # List projects (includes tasks)
+wormhole project list                   # List projects (current and available)
 wormhole project list --available       # List available projects (from search_paths)
 wormhole project list --active          # List only projects with tmux windows
 wormhole project list --name-only       # Output project keys only (for completion)
 wormhole project previous               # Previous project
 wormhole project next                   # Next project
 wormhole project close myapp            # Close project windows
-wormhole project close myapp --remove   # Close and remove (deletes worktree/KV for tasks)
+wormhole project close myapp --remove   # Close and remove (deletes worktree/KV for branch projects)
 wormhole project close --all -i         # Prompt before closing each (RET = close, n = skip)
 wormhole project pin                    # Pin current (project, app) state
 wormhole project debug                  # Debug info for all projects
-wormhole project show                   # Show task info (JIRA, PR, CLAUDE.md)
-wormhole project show myrepo:ACT-1234   # Show info for specific project/task
+wormhole project show                   # Show project info (JIRA, PR, CLAUDE.md)
+wormhole project show myrepo:ACT-1234   # Show info for specific project
 wormhole project message myapp -m editor/close           # Send intent to project
 wormhole project message myapp -m editor/toggleZenMode   # Toggle zen mode
 wormhole project message --all -m gopls/stop             # Send intent to all open projects
@@ -194,7 +194,7 @@ wormhole jira sprint show               # Show detailed sprint status
 wormhole refresh                        # Refresh in-memory data from disk/APIs
 wormhole kill                           # Kill tmux session and clean up
 wormhole doctor persisted-data          # Report on worktrees and KV files
-wormhole doctor conform                 # Conform task worktrees
+wormhole doctor conform                 # Conform project worktrees
 wormhole doctor list-editor-windows     # List editor windows (flags stranded ones)
 wormhole doctor close-editor-windows myrepo:branch  # Close a window by key (no need to focus it)
 wormhole doctor close-editor-windows --stranded     # Close all stranded windows
@@ -205,10 +205,10 @@ wormhole completion bash                # Generate shell completions
 
 | Method | Endpoint                      | Description                       |
 |--------|-------------------------------|-----------------------------------|
-| GET    | `/project/list`               | List projects (JSON, includes tasks) |
+| GET    | `/project/list`               | List projects (JSON)              |
 | GET    | `/project/neighbors`          | Project ring for navigation UI    |
-| GET    | `/project/switch/<name>`      | Switch/create project or task     |
-| GET    | `/project/create/<branch>`    | Create task with branch name      |
+| GET    | `/project/switch/<name>`      | Switch/create project             |
+| GET    | `/project/create/<branch>`    | Create branch project with branch name |
 | GET    | `/project/previous`           | Previous project                  |
 | GET    | `/project/next`               | Next project                      |
 | POST   | `/project/close/<name>`       | Close project windows (?remove=true to delete) |
@@ -218,14 +218,14 @@ wormhole completion bash                # Generate shell completions
 | GET    | `/project/current/terminal`   | Focus the current project's terminal |
 | GET    | `/project/debug`              | Debug info                        |
 | GET    | `/project/worktrees`          | Every project's working tree (for path attribution) |
-| GET    | `/project/show[/<name>]`      | Task info (JIRA, PR, CLAUDE.md)   |
+| GET    | `/project/show[/<name>]`      | Project info (JIRA, PR, CLAUDE.md)|
 | POST   | `/project/describe`           | Describe URL (JIRA/GitHub lookup) |
 | GET    | `/project/vscode/<name>`      | Get embedded VSCode URL           |
 | GET    | `/project/messages/<name>`    | Poll messages                     |
 | POST   | `/project/messages/<name>`    | Publish messages                  |
 | POST   | `/project/refresh`            | Refresh all in-memory data        |
 | POST   | `/project/refresh/<name>`     | Refresh single project            |
-| POST   | `/project/refresh-tasks`      | Refresh task worktrees            |
+| POST   | `/project/refresh-tasks`      | Refresh project worktrees         |
 | POST   | `/project/create-from-review-requests` | Create projects from PR review requests |
 | POST   | `/project/create-from-github-ref` | Create project from a GitHub PR/issue ref |
 | POST   | `/batch`                      | Start a new batch                 |
@@ -239,7 +239,7 @@ wormhole completion bash                # Generate shell completions
 | GET    | `/<github_blob_path>?line=N`  | Open GitHub file locally          |
 | GET    | `/asset/<path>`               | Serve static assets               |
 | GET    | `/doctor/persisted-data`      | Report on worktrees and KV files  |
-| POST   | `/doctor/conform`             | Conform task worktrees            |
+| POST   | `/doctor/conform`             | Conform project worktrees         |
 | GET    | `/doctor/editor-windows`      | List editor windows (with stranded status) |
 | POST   | `/doctor/close-editor-windows`| Close editor windows by key or `--stranded` |
 | GET    | `/jira/sprint/list`           | List JIRA sprint issues           |
@@ -293,7 +293,7 @@ search_paths = [
     { path = "~/src", exclude = ["node_modules", "venv"] },
 ]
 
-# Where task worktrees are created (default: ~/worktrees)
+# Where project worktrees are created (default: ~/worktrees)
 worktree_dir = "~/worktrees"
 
 # Default editor (overridable at runtime; see WORMHOLE_EDITOR for valid names).
@@ -305,7 +305,46 @@ editors = [
     { glob = "mathematics", editor = "emacs" },
     { glob = "*-docs", editor = "code" },
 ]
+
+# The member branches of each project (see "Project branches" below). The key is
+# a glob over project keys; the values are globs, or /regexes/, over branch
+# names, in which `{project}` stands for the project's own branch.
+[project_branches]
+"*" = ["{project}-*", "{project}/*"]
+"wormhole:multi-branch-tasks" = ["mbt-fixups", "mbt/*", "/^stack-[0-9]+$/"]
 ```
+
+### Project branches
+
+A project is identified by one branch (`repo:branch`), and its worktree lives at a path derived
+from that branch. Work on a project often spans several branches: a stack of PRs, a follow-up, a
+rebased copy. The `project_branches` table declares which further branches — the project's
+_member branches_ — belong to the existing project instead of becoming projects of their own.
+
+A project's patterns are the union of those of every entry whose key glob matches its
+`repo:branch` key, with `{project}` replaced by its branch. A pattern is a glob unless delimited
+by `/`, in which case the text between the delimiters is a regex; both must match the whole
+branch name. With the entries above, `feature-x-2` and `feature-x/fixup` are member branches of
+`repo:feature-x`, and `mbt-fixups`, `mbt/2` and `stack-3` are member branches of
+`wormhole:multi-branch-tasks` alone.
+
+Concretely, given a project and its member branches:
+
+- Checking out a member branch inside the project's worktree leaves the project's identity,
+  worktree, tmux window and editor workspace alone, even once the original branch has been merged
+  and deleted: the worktree directory name carries the identity. (Without a match, the project is
+  renamed after the checked-out branch and `wormhole doctor conform` relocates the worktree.)
+- `wormhole open repo:feature-x-2`, `wormhole open :feature-x-2`, and opening a PR or issue whose
+  branch is a member branch all land in the existing project; no second worktree is created.
+- The browser extension's buttons on a PR page link to the project whose branch the PR's head
+  branch is, or is a member branch of, even when the worktree currently has a different branch
+  checked out.
+
+Membership is exclusive, and never decided by contest: if two projects claim the same branch (say
+`feature` and `feature-x` both exist, and the global entry above makes `feature-x-2` a member
+branch of each), it belongs to neither and the operation that asked for it fails with an error
+naming both. A branch is never a member branch of itself, and a branch that already has a project
+of its own is that project regardless of the table. The table is re-read by `wormhole refresh`.
 
 `~` is expanded to `$HOME` at load time.
 
@@ -321,8 +360,9 @@ compatibility._
 | Variable                  | Description                                                        |
 |---------------------------|--------------------------------------------------------------------|
 | `WORMHOLE_SEARCH_PATHS`   | Colon-separated directories to search for projects                 |
-| `WORMHOLE_WORKTREE_DIR`   | Where task worktrees are created (default: `~/worktrees`)          |
-| `WORMHOLE_DEFAULT_PROJECT` | Project used for a new task opened as `:branch`                   |
+| `WORMHOLE_WORKTREE_DIR`   | Where project worktrees are created (default: `~/worktrees`)       |
+| `WORMHOLE_DEFAULT_PROJECT` | Project used for a new branch project opened as `:branch`         |
+| `WORMHOLE_PROJECT_BRANCHES` | Whitespace-separated patterns, overriding `project_branches` with one `"*"` entry |
 | `WORMHOLE_PORT`           | HTTP API port (default: 7117)                                      |
 | `WORMHOLE_EDITOR`         | Editor to use (`cursor`, `code`, `code-insiders`, `emacs`, `none`) |
 | `JIRA_INSTANCE`           | JIRA instance name (e.g., `mycompany` for mycompany.atlassian.net) |
@@ -355,11 +395,11 @@ Tools like [delta](https://dandavison.github.io/delta/) and [ripgrep](https://gi
 ## Shell Integration
 
 When wormhole opens a terminal for a project, it sets environment variables:
-- `WORMHOLE_PROJECT_NAME` - project or task name
+- `WORMHOLE_PROJECT_NAME` - project name
 - `WORMHOLE_PROJECT_DIR` - project root directory
-- `WORMHOLE_JIRA_URL` - JIRA issue URL (if task has JIRA)
+- `WORMHOLE_JIRA_URL` - JIRA issue URL (if project has JIRA)
 - `WORMHOLE_GITHUB_REPO` - GitHub repo (e.g., `owner/repo`)
-- `WORMHOLE_GITHUB_PR_URL` - PR URL (if task has open PR)
+- `WORMHOLE_GITHUB_PR_URL` - PR URL (if project has open PR)
 
 **Zsh prompt** (`shell/zsh/prompt.sh`):
 

@@ -339,6 +339,7 @@ fn discover_tasks(
     }
 
     let worktree_dir = config::worktree_dir();
+    let project_branches = config::project_branches();
     project_paths
         .into_par_iter()
         .flat_map(|(project_name, project_path)| {
@@ -346,15 +347,33 @@ fn discover_tasks(
                 return vec![];
             }
             let worktrees_base = worktree_dir.join(project_name.as_str());
+            // Listed at most once per repo, and only if some worktree has a
+            // branch other than the one it was created for checked out.
+            let local_branches = std::cell::OnceCell::new();
             git::list_worktrees(&project_path)
                 .into_iter()
                 .filter(|wt| wt.path.starts_with(&worktrees_base))
                 .filter_map(|wt| {
-                    let branch = wt.branch.as_ref()?;
+                    let checked_out = wt.branch.as_ref()?;
+                    // A worktree whose identity is ambiguous is no project at
+                    // all; `wormhole doctor conform` reports it.
+                    let branch = project_branches
+                        .project_branch_for_worktree(
+                            project_name.as_str(),
+                            &wt.path,
+                            checked_out,
+                            || {
+                                local_branches
+                                    .get_or_init(|| git::list_branches(&project_path))
+                                    .clone()
+                            },
+                        )
+                        .map_err(|e| crate::util::error(&e))
+                        .ok()?;
                     let task = Project {
                         repo_name: project_name.clone(),
                         repo_path: project_path.clone(),
-                        branch: Some(BranchName::new(branch.clone())),
+                        branch: Some(BranchName::new(branch)),
                         kv: HashMap::new(),
                         cached: Cached::default(),
                     };

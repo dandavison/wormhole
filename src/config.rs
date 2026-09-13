@@ -1,4 +1,5 @@
 use crate::editor::Editor;
+use crate::project_branches::ProjectBranches;
 use crate::terminal::Terminal;
 use glob::Pattern;
 use serde::Deserialize;
@@ -105,6 +106,35 @@ pub fn reload_editor() {
     }
 }
 
+static PROJECT_BRANCHES: OnceLock<RwLock<ProjectBranches>> = OnceLock::new();
+
+fn project_branches_cell() -> &'static RwLock<ProjectBranches> {
+    PROJECT_BRANCHES.get_or_init(|| RwLock::new(load_project_branches()))
+}
+
+/// `WORMHOLE_PROJECT_BRANCHES` (whitespace-separated patterns; branch names
+/// contain none) overrides the `project_branches` table in `wormhole.toml`
+/// with a single entry applying to every project.
+fn load_project_branches() -> ProjectBranches {
+    match std::env::var("WORMHOLE_PROJECT_BRANCHES") {
+        Ok(env_val) => ProjectBranches::new([(
+            "*".to_string(),
+            env_val.split_whitespace().map(str::to_string).collect(),
+        )]),
+        Err(_) => ProjectBranches::new(load_config_file().project_branches),
+    }
+}
+
+/// The member branches of each project; see [`crate::project_branches`].
+pub fn project_branches() -> ProjectBranches {
+    project_branches_cell().read().unwrap().clone()
+}
+
+/// Re-read `project_branches` from the config file. Invoked by `wormhole refresh`.
+pub fn reload_project_branches() {
+    *project_branches_cell().write().unwrap() = load_project_branches();
+}
+
 static PORT: OnceLock<u16> = OnceLock::new();
 
 pub fn wormhole_port() -> u16 {
@@ -125,6 +155,8 @@ struct ConfigFile {
     worktree_dir: Option<String>,
     #[serde(default)]
     card_commands: Vec<String>,
+    #[serde(default)]
+    project_branches: std::collections::BTreeMap<String, Vec<String>>,
     editor: Option<String>,
     #[serde(default)]
     editors: Vec<EditorOverrideEntry>,
@@ -656,6 +688,25 @@ editors = [
         assert_eq!(matched("mathematics"), Some(Editor::Emacs));
         assert_eq!(matched("wormhole-docs"), Some(Editor::VSCode));
         assert_eq!(matched("wormhole"), None);
+    }
+
+    #[test]
+    fn test_config_file_project_branches() {
+        let toml_str = r#"
+[project_branches]
+"*" = ["{project}-*"]
+"wormhole:feature-x" = ["mbt/*", "/^stack-[0-9]+$/"]
+"#;
+        let config: ConfigFile = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.project_branches.len(), 2);
+        let branches = ProjectBranches::new(config.project_branches);
+        assert!(branches.links("wormhole", "feature-x", "feature-x-2"));
+        assert!(branches.links("wormhole", "feature-x", "stack-2"));
+        assert!(!branches.links("temporal", "feature-x", "stack-2"));
+        assert!(!branches.links("wormhole", "feature-x", "feature-xy"));
+
+        let config: ConfigFile = toml::from_str("").unwrap();
+        assert!(config.project_branches.is_empty());
     }
 
     #[test]

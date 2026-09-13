@@ -126,6 +126,23 @@ fn describe_github(gh: &GitHubUrl) -> DescribeResponse {
 
     let pr_branch = rx.recv().ok().flatten();
 
+    // A PR whose head branch is, or is a member branch of, a task's branch
+    // belongs to that task even when the worktree currently has some other
+    // branch checked out.
+    let task_match = match (task_match, pr_branch.as_deref()) {
+        (None, Some(branch)) if !crate::config::project_branches().is_empty() => {
+            let expected_repo = format!("{}/{}", gh.owner, gh.repo);
+            match find_task_by_branch(&expected_repo, branch) {
+                Ok(task_match) => task_match,
+                Err(e) => {
+                    crate::util::error(&e);
+                    None
+                }
+            }
+        }
+        (task_match, _) => task_match,
+    };
+
     match task_match {
         Some(task) => {
             let name = task.store_key.to_string();
@@ -291,6 +308,30 @@ fn find_task_by_pr(owner: &str, repo: &str, pr_number: u64) -> Option<TaskMatch>
             task_type: project.kv.get("task_type").cloned(),
         })
     })
+}
+
+/// The task in a local clone of `expected_repo` that `branch` belongs to, by
+/// name or as a member branch. Candidates are found without network I/O; only
+/// they are checked (in parallel) against the GitHub repo name.
+fn find_task_by_branch(expected_repo: &str, branch: &str) -> Result<Option<TaskMatch>, String> {
+    let repos: std::collections::BTreeSet<String> = projects::tasks()
+        .into_values()
+        .map(|t| t.repo_name.to_string())
+        .collect();
+    let candidates: Vec<crate::project::Project> = repos
+        .iter()
+        .filter_map(|repo| crate::task::get_task_by_branch(repo, branch).transpose())
+        .collect::<Result<_, _>>()?;
+    Ok(candidates.par_iter().find_map_any(|project| {
+        github::get_repo_name(project)
+            .is_some_and(|r| r == expected_repo)
+            .then(|| TaskMatch {
+                store_key: project.store_key(),
+                home: project.repo_name.to_string(),
+                jira_key: project.kv.get("jira_key").cloned(),
+                task_type: project.kv.get("task_type").cloned(),
+            })
+    }))
 }
 
 /// Check whether a task's PR matches the expected repo and PR number.

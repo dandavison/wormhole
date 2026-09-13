@@ -312,6 +312,24 @@ editors = [
 [project_branches]
 "*" = ["{project}-*", "{project}/*"]
 "wormhole:multi-branch-tasks" = ["mbt-fixups", "mbt/*", "/^stack-[0-9]+$/"]
+
+# Panes to add to a project's tmux window when it is first opened. The key is a
+# glob over project keys, as above; a project gets the panes of every entry
+# matching it. The window opens with a shell in the project's working tree; each
+# pane splits off one more pane there and types `command` into its shell (a
+# plain shell if omitted). Each split divides the pane focused at that point.
+#   split: right (default), left, below or above
+#   size:  cells or a percentage, e.g. "80" or "50%" (default: share equally)
+#   focus: whether the new pane takes focus (default: true)
+# This opens a Claude Code session beside the shell in every project, and a
+# server below it in one repo's projects:
+[project_layout]
+"*" = [
+    { split = "right", command = "claude" },
+]
+"myapp:*" = [
+    { split = "below", size = "30%", command = "make serve", focus = false },
+]
 ```
 
 ### Project branches
@@ -346,11 +364,11 @@ branch of each), it belongs to neither and the operation that asked for it fails
 naming both. A branch is never a member branch of itself, and a branch that already has a project
 of its own is that project regardless of the table. The table is re-read by `wormhole refresh`.
 
-`~` is expanded to `$HOME` at load time.
+`~` is expanded to `$HOME` at load time. `WORMHOLE_CONFIG` names a different file to read.
 
 Env var names follow the convention `WORMHOLE_` + SCREAMING_SNAKE of the TOML key. Env vars
-override config file values when set. `WORMHOLE_SEARCH_PATHS` is colon-separated; per-path excludes
-are a config-file-only feature.
+override config file values when set. `WORMHOLE_SEARCH_PATHS` is colon-separated; per-path excludes,
+`editors`, `project_branches` and `project_layout` are config-file-only features.
 
 _Wormhole is pre-1.0. Configuration and environment variable names may change without backward
 compatibility._
@@ -359,6 +377,7 @@ compatibility._
 
 | Variable                  | Description                                                        |
 |---------------------------|--------------------------------------------------------------------|
+| `WORMHOLE_CONFIG`         | Config file to read instead of `~/.wormhole/wormhole.toml`         |
 | `WORMHOLE_SEARCH_PATHS`   | Colon-separated directories to search for projects                 |
 | `WORMHOLE_WORKTREE_DIR`   | Where project worktrees are created (default: `~/worktrees`)       |
 | `WORMHOLE_DEFAULT_PROJECT` | Project used for a new branch project opened as `:branch`         |

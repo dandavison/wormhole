@@ -2,9 +2,10 @@ use core::str;
 use std::collections::HashMap;
 use std::process::Command;
 
+use crate::config::{self, Split};
 use crate::project::Project;
-use crate::terminal::shell_env_vars;
-use crate::util::{get_stdout, panic};
+use crate::terminal::{shell_env_vars, ShellEnvVars};
+use crate::util::{get_stdout, panic, warn};
 
 struct Window {
     id: String,
@@ -77,28 +78,24 @@ pub fn open(project: &Project) -> Result<(), String> {
     if let Some(window) = get_window(&window_name) {
         tmux(["select-window", "-t", &window.id]);
     } else {
-        let cwd = project.checked_working_tree()?;
+        let cwd = project
+            .checked_working_tree()?
+            .to_string_lossy()
+            .to_string();
         let vars = shell_env_vars(project);
-        let window_id = tmux_vec(vec![
+        let mut args = vec![
             "new-window".to_string(),
             "-n".to_string(),
             window_name.clone(),
             "-c".to_string(),
-            cwd.to_string_lossy().to_string(),
+            cwd.clone(),
             "-P".to_string(),
             "-F".to_string(),
             "#{window_id}".to_string(),
-            "-e".to_string(),
-            format!("WORMHOLE_PROJECT_NAME={}", vars.project_name),
-            "-e".to_string(),
-            format!("WORMHOLE_PROJECT_DIR={}", vars.project_dir),
-            "-e".to_string(),
-            format!("WORMHOLE_JIRA_URL={}", vars.jira_url),
-            "-e".to_string(),
-            format!("WORMHOLE_GITHUB_REPO={}", vars.github_repo),
-            "-e".to_string(),
-            format!("WORMHOLE_GITHUB_PR_URL={}", vars.github_pr_url),
-        ]);
+        ];
+        args.extend(env_args(&vars));
+        let window_id = tmux_vec(args);
+        let window_id = window_id.trim();
         // Tag the project window with the generic @project key so auxiliary
         // windows (e.g. tide's browsers) can be associated and reaped together.
         // Target by window id, not name: a task's store_key contains a ':',
@@ -107,12 +104,78 @@ pub fn open(project: &Project) -> Result<(), String> {
             "set-option",
             "-w",
             "-t",
-            window_id.trim(),
+            window_id,
             "@project",
             &window_name,
         ]);
+        add_configured_panes(window_id, &window_name, &cwd, &vars);
     }
     Ok(())
+}
+
+/// `-e VAR=value` for each WORMHOLE_* variable, for new-window and split-window.
+///
+/// new-window's `-e` reaches only the pane it creates, not panes split off the
+/// window later, so every split passes them again.
+fn env_args(vars: &ShellEnvVars) -> Vec<String> {
+    [
+        ("WORMHOLE_PROJECT_NAME", &vars.project_name),
+        ("WORMHOLE_PROJECT_DIR", &vars.project_dir),
+        ("WORMHOLE_JIRA_URL", &vars.jira_url),
+        ("WORMHOLE_GITHUB_REPO", &vars.github_repo),
+        ("WORMHOLE_GITHUB_PR_URL", &vars.github_pr_url),
+    ]
+    .into_iter()
+    .flat_map(|(name, value)| ["-e".to_string(), format!("{name}={value}")])
+    .collect()
+}
+
+/// The panes `[project_layout]` in `wormhole.toml` asks for in the window of
+/// the project keyed `project_key`, split off a freshly opened window in order.
+/// Each split divides the pane focused at that point: the previous pane, unless
+/// it declined focus.
+///
+/// A command is typed into the pane's shell rather than run as the pane's own
+/// process: the shell has the user's PATH and aliases, which the server does
+/// not, and is still there when the command exits.
+fn add_configured_panes(window_id: &str, project_key: &str, cwd: &str, vars: &ShellEnvVars) {
+    for pane in config::project_layout(project_key) {
+        let mut args = vec![
+            "split-window".to_string(),
+            "-t".to_string(),
+            window_id.to_string(),
+            "-c".to_string(),
+            cwd.to_string(),
+            "-P".to_string(),
+            "-F".to_string(),
+            "#{pane_id}".to_string(),
+        ];
+        let direction: &[&str] = match pane.split {
+            Split::Right => &["-h"],
+            Split::Left => &["-h", "-b"],
+            Split::Below => &["-v"],
+            Split::Above => &["-v", "-b"],
+        };
+        args.extend(direction.iter().map(|s| s.to_string()));
+        if let Some(size) = &pane.size {
+            args.push("-l".to_string());
+            args.push(size.clone());
+        }
+        if !pane.focus {
+            args.push("-d".to_string());
+        }
+        args.extend(env_args(vars));
+        let pane_id = match tmux_result(args) {
+            Ok(id) => id.trim().to_string(),
+            Err(e) => {
+                warn(&format!("Could not open configured pane {pane:?}: {e}"));
+                continue;
+            }
+        };
+        if let Some(cmd) = &pane.command {
+            tmux(["send-keys", "-t", &pane_id, cmd, "Enter"]);
+        }
+    }
 }
 
 pub fn close(project: &Project) {
@@ -251,6 +314,12 @@ where
 }
 
 fn tmux_vec(args: Vec<String>) -> String {
+    tmux_result(args).unwrap_or_else(|e| panic(&e))
+}
+
+/// Run tmux, returning its failure to the caller rather than panicking, for
+/// commands built from user configuration.
+fn tmux_result(args: Vec<String>) -> Result<String, String> {
     let socket_path = std::env::var("WORMHOLE_TMUX")
         .or_else(|_| std::env::var("TMUX"))
         .unwrap_or_else(|_| panic("TMUX env var is not set"))
@@ -264,6 +333,6 @@ fn tmux_vec(args: Vec<String>) -> String {
         .args(["-S", &socket_path])
         .args(&args)
         .output()
-        .unwrap_or_else(|_| panic("Failed to execute command"));
-    get_stdout(program, output).unwrap_or_else(|e| panic(&e))
+        .map_err(|e| format!("Failed to execute {program}: {e}"))?;
+    get_stdout(program, output)
 }

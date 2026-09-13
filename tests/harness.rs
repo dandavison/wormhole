@@ -96,11 +96,21 @@ impl WormholeTest {
             .to_string_lossy()
             .into_owned();
 
+        // Isolate the daemon from the developer's own ~/.wormhole/wormhole.toml
+        // too: a `[project_branches]` rule there, say, changes which branches
+        // belong to which project, and tests assume what they configure. A
+        // test wanting a config passes WORMHOLE_CONFIG in `extra_env` instead.
+        let empty_config = format!("/tmp/wh-test-empty-config-{}.toml", port);
+        std::fs::write(&empty_config, "").unwrap();
+
         let mut env_vars: Vec<(&str, &str)> = vec![
             ("WORMHOLE_TMUX", &socket_path),
             ("WORMHOLE_OFFLINE", "1"),
             ("WORMHOLE_WORKTREE_DIR", &worktree_dir),
         ];
+        if !extra_env.iter().any(|(k, _)| *k == "WORMHOLE_CONFIG") {
+            env_vars.push(("WORMHOLE_CONFIG", &empty_config));
+        }
         let wormhole_editor = std::env::var("WORMHOLE_EDITOR").ok();
         if let Some(ref editor) = wormhole_editor {
             env_vars.push(("WORMHOLE_EDITOR", editor));

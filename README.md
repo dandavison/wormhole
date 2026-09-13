@@ -305,13 +305,25 @@ editors = [
     { glob = "mathematics", editor = "emacs" },
     { glob = "*-docs", editor = "code" },
 ]
+
+# Panes to add to a project's tmux window when it is first opened. The window
+# opens with a shell in the project's working tree (the worktree, for a task);
+# each entry splits off one more pane there and types `command` into its shell
+# (a plain shell if omitted). Each split divides the pane focused at that point.
+#   split: right (default), left, below or above
+#   size:  cells or a percentage, e.g. "80" or "50%" (default: share equally)
+#   focus: whether the new pane takes focus (default: true)
+# This one opens a Claude Code session beside the shell:
+panes = [
+    { split = "right", command = "claude" },
+]
 ```
 
-`~` is expanded to `$HOME` at load time.
+`~` is expanded to `$HOME` at load time. `WORMHOLE_CONFIG` names a different file to read.
 
 Env var names follow the convention `WORMHOLE_` + SCREAMING_SNAKE of the TOML key. Env vars
-override config file values when set. `WORMHOLE_SEARCH_PATHS` is colon-separated; per-path excludes
-are a config-file-only feature.
+override config file values when set. `WORMHOLE_SEARCH_PATHS` is colon-separated; per-path excludes,
+`editors` and `panes` are config-file-only features.
 
 _Wormhole is pre-1.0. Configuration and environment variable names may change without backward
 compatibility._
@@ -320,6 +332,7 @@ compatibility._
 
 | Variable                  | Description                                                        |
 |---------------------------|--------------------------------------------------------------------|
+| `WORMHOLE_CONFIG`         | Config file to read instead of `~/.wormhole/wormhole.toml`         |
 | `WORMHOLE_SEARCH_PATHS`   | Colon-separated directories to search for projects                 |
 | `WORMHOLE_WORKTREE_DIR`   | Where task worktrees are created (default: `~/worktrees`)          |
 | `WORMHOLE_DEFAULT_PROJECT` | Project used for a new task opened as `:branch`                   |

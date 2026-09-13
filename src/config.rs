@@ -128,6 +128,80 @@ struct ConfigFile {
     editor: Option<String>,
     #[serde(default)]
     editors: Vec<EditorOverrideEntry>,
+    #[serde(default)]
+    panes: Vec<Pane>,
+}
+
+/// A pane added to a project's tmux window when the window is first opened,
+/// from the `panes` list in `wormhole.toml`. The window opens with a shell in
+/// the project's working tree; each entry splits off one more pane, also in
+/// the working tree, and runs `command` in a shell there.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+pub struct Pane {
+    /// Which side of the currently focused pane the new one goes.
+    #[serde(default)]
+    pub split: Split,
+    /// Typed into the new pane's shell, so it gets the PATH, aliases and
+    /// WORMHOLE_* variables of an interactive shell, and the shell is still
+    /// there when it exits. A plain shell if absent.
+    pub command: Option<String>,
+    /// Width (right/left) or height (below/above) of the new pane, in cells or
+    /// as a percentage: `"80"` or `"50%"`. tmux shares the space equally if absent.
+    pub size: Option<String>,
+    /// Whether the new pane takes focus when it opens, as a split in tmux does.
+    /// The last pane to take focus is the one left focused; if none does, the
+    /// shell keeps it.
+    #[serde(default = "default_true")]
+    pub focus: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum Split {
+    #[default]
+    Right,
+    Left,
+    Below,
+    Above,
+}
+
+impl Pane {
+    /// Whether `size` is something tmux accepts: cells, or a percentage.
+    pub fn size_is_valid(&self) -> bool {
+        match &self.size {
+            None => true,
+            Some(size) => {
+                let digits = size.strip_suffix('%').unwrap_or(size);
+                !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit())
+            }
+        }
+    }
+}
+
+/// The `panes` list from `wormhole.toml`, re-read on each call (as
+/// `card_commands` is) so a layout can be changed without restarting the
+/// server. An entry with a malformed `size` is dropped with an error, since
+/// tmux would reject the split.
+pub fn panes() -> Vec<Pane> {
+    load_config_file()
+        .panes
+        .into_iter()
+        .filter(|pane| {
+            let ok = pane.size_is_valid();
+            if !ok {
+                crate::util::error(&format!(
+                    "Ignoring pane with invalid size {:?} in `panes` config \
+                     (want cells or a percentage, e.g. \"80\" or \"50%\")",
+                    pane.size.as_deref().unwrap_or("")
+                ));
+            }
+            ok
+        })
+        .collect()
 }
 
 #[derive(Debug, Deserialize)]
@@ -257,7 +331,14 @@ pub fn editor_for(project_name: &str) -> Option<Editor> {
         .map(|o| o.editor.clone())
 }
 
+/// `~/.wormhole/wormhole.toml`, or the file named by `WORMHOLE_CONFIG`.
 fn config_file_path() -> Option<PathBuf> {
+    if let Some(path) = std::env::var("WORMHOLE_CONFIG")
+        .ok()
+        .filter(|p| !p.is_empty())
+    {
+        return Some(expand_tilde(&path));
+    }
     dirs::home_dir().map(|home| home.join(".wormhole/wormhole.toml"))
 }
 
@@ -268,7 +349,14 @@ fn load_config_file() -> ConfigFile {
     let Ok(contents) = std::fs::read_to_string(&path) else {
         return ConfigFile::default();
     };
-    toml::from_str(&contents).unwrap_or_default()
+    match toml::from_str(&contents) {
+        Ok(config) => config,
+        Err(e) => {
+            // Say so: one bad key otherwise silently costs every other setting.
+            crate::util::error(&format!("Failed to parse {}: {e}", path.display()));
+            ConfigFile::default()
+        }
+    }
 }
 
 /// Write the `editor` field back to `wormhole.toml`, preserving the rest of the
@@ -656,6 +744,69 @@ editors = [
         assert_eq!(matched("mathematics"), Some(Editor::Emacs));
         assert_eq!(matched("wormhole-docs"), Some(Editor::VSCode));
         assert_eq!(matched("wormhole"), None);
+    }
+
+    #[test]
+    fn test_config_file_panes() {
+        let toml_str = r#"
+panes = [
+    { split = "right", command = "claude" },
+    { split = "below", size = "30%", focus = false },
+    { command = "htop" },
+]
+"#;
+        let config: ConfigFile = toml::from_str(toml_str).unwrap();
+        assert_eq!(
+            config.panes,
+            vec![
+                Pane {
+                    split: Split::Right,
+                    command: Some("claude".into()),
+                    size: None,
+                    focus: true,
+                },
+                Pane {
+                    split: Split::Below,
+                    command: None,
+                    size: Some("30%".into()),
+                    focus: false,
+                },
+                Pane {
+                    split: Split::Right,
+                    command: Some("htop".into()),
+                    size: None,
+                    focus: true,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn test_config_file_panes_absent() {
+        let config: ConfigFile = toml::from_str("").unwrap();
+        assert!(config.panes.is_empty());
+    }
+
+    #[test]
+    fn test_config_file_panes_unknown_split_is_an_error() {
+        assert!(toml::from_str::<ConfigFile>(r#"panes = [{ split = "sideways" }]"#).is_err());
+    }
+
+    #[test]
+    fn test_pane_size_validation() {
+        let pane = |size: &str| Pane {
+            split: Split::Right,
+            command: None,
+            size: Some(size.to_string()),
+            focus: true,
+        };
+        assert!(pane("80").size_is_valid());
+        assert!(pane("50%").size_is_valid());
+        assert!(!pane("").size_is_valid());
+        assert!(!pane("%").size_is_valid());
+        assert!(!pane("half").size_is_valid());
+        assert!(!pane("50%%").size_is_valid());
+        assert!(!pane("-5").size_is_valid());
     }
 
     #[test]

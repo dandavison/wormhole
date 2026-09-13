@@ -1354,6 +1354,61 @@ fn test_worktree_whose_dir_does_not_match_its_branch() {
 }
 
 #[test]
+fn test_configured_panes_open_with_project_window() {
+    // `panes` in wormhole.toml: a new project window is split as configured,
+    // each command reaches a shell that has the WORMHOLE_* variables, and focus
+    // lands where the config says. Opening the project again finds the window
+    // as it is and adds nothing.
+    let port = 18927;
+    let config = format!("/tmp/wh-test-config-{}.toml", port);
+    std::fs::write(
+        &config,
+        r#"
+panes = [
+    { split = "right", command = "printf PANE:%s\\n \"$WORMHOLE_PROJECT_NAME\"; sleep 300" },
+    { split = "below", size = "5", focus = false },
+]
+"#,
+    )
+    .unwrap();
+    let test = harness::WormholeTest::new_with_env(port, &[("WORMHOLE_CONFIG", &config)]);
+
+    let proj = format!("{}panes", TEST_PREFIX);
+    let dir = format!("/tmp/{}", proj);
+    init_git_repo(&dir);
+    let panes_before = test.pane_count();
+    test.create_project(&dir, &proj);
+
+    let expected = format!("PANE:{}", proj);
+    assert!(
+        test.wait_until(|| test.pane_showing(&expected).is_some(), 10),
+        "expected {:?} on screen in some pane of {}",
+        expected,
+        test.pane_listing()
+    );
+    let command_pane = test.pane_showing(&expected).unwrap();
+    assert_eq!(
+        test.pane_count(),
+        panes_before + 3,
+        "the shell plus two configured panes, in {}",
+        test.pane_listing()
+    );
+    assert_eq!(
+        test.focused_pane(),
+        command_pane,
+        "a pane that declines focus leaves it with the pane before it"
+    );
+
+    test.cli(&format!("wormhole open {}", proj)).unwrap();
+    assert_eq!(
+        test.pane_count(),
+        panes_before + 3,
+        "reopening an open project must not add panes: {}",
+        test.pane_listing()
+    );
+}
+
+#[test]
 fn test_run_in_terminal() {
     // A command run in a project's terminal, in a directory of the caller's
     // choosing. The pane existing proves nothing — what is asserted is that the

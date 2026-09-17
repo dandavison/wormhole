@@ -147,6 +147,10 @@ eval "$(wormhole completion zsh)"
 wormhole completion fish | source
 ```
 
+Completions are computed by the running binary, so they include live project
+and task names as well as paths. The zsh script uses `compdef`, so it must be
+sourced after `compinit`.
+
 ## CLI
 
 ```bash

@@ -1,9 +1,10 @@
 use clap::builder::ValueHint;
-use clap::{CommandFactory, Parser, Subcommand};
+use clap::{Parser, Subcommand};
 use clap_complete::engine::{
     ArgValueCompleter, CompletionCandidate, PathCompleter, ValueCompleter,
 };
-use clap_complete::{generate, Shell};
+use clap_complete::env::Shells;
+use clap_complete::Shell;
 use std::io;
 
 use crate::config;
@@ -775,10 +776,7 @@ pub fn run(command: Command) -> Result<(), String> {
             },
         },
 
-        Command::Completion { shell } => {
-            generate(shell, &mut Cli::command(), "wormhole", &mut io::stdout());
-            Ok(())
-        }
+        Command::Completion { shell } => print_completion(shell),
 
         Command::Kill => {
             let _ = std::fs::remove_file("/tmp/wormhole.env");
@@ -866,6 +864,49 @@ pub fn run(command: Command) -> Result<(), String> {
         }
     }
 }
+
+/// The registration script for the dynamic completer, which is also what
+/// `COMPLETE=<shell> wormhole` prints, plus wormhole's own zsh additions. The
+/// completer is invoked as `wormhole`, so the script keeps working when the
+/// binary is rebuilt or moved, unlike the `current_exe()` path clap uses.
+fn print_completion(shell: Shell) -> Result<(), String> {
+    let name = shell.to_string();
+    let shells = Shells::builtins();
+    let completer = shells
+        .completer(&name)
+        .ok_or_else(|| format!("no dynamic completer for {}", name))?;
+    completer
+        .write_registration(
+            "COMPLETE",
+            "wormhole",
+            "wormhole",
+            "wormhole",
+            &mut io::stdout(),
+        )
+        .map_err(|e| e.to_string())?;
+    if shell == Shell::Zsh {
+        print!("{}", ZSH_ADDITIONS);
+    }
+    Ok(())
+}
+
+/// Sourced after the clap-generated completer, so that this `compdef` wins.
+/// Aliases (`w`, `wo`) need no `compdef` of their own: zsh expands the alias
+/// and dispatches on the expansion.
+const ZSH_ADDITIONS: &str = r#"
+# Expand a leading ~ before the binary sees it. Without this, PathCompleter
+# gets the literal "~", which matches no path, and the absolute-path candidates
+# it returns for "~/foo" do not prefix-match the word the user typed.
+function _wormhole_complete() {
+    if [[ $words[$CURRENT] == \~ || $words[$CURRENT] == \~/* ]]; then
+        words[$CURRENT]=${words[$CURRENT]/#\~/$HOME}
+        PREFIX=${PREFIX/#\~/$HOME}
+    fi
+    _clap_dynamic_completer_wormhole "$@"
+}
+
+compdef _wormhole_complete wormhole
+"#;
 
 fn resolve_name(name: Option<String>) -> String {
     name.unwrap_or_else(|| {

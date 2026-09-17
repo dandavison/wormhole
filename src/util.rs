@@ -35,10 +35,11 @@ pub fn panic(msg: &str) -> ! {
 }
 
 pub fn desktop_notification(msg: &str) {
-    let _ = Command::new("terminal-notifier")
+    let status = Command::new("terminal-notifier")
         .args(["-message", msg, "-title", "wormhole"])
-        .spawn()
-        .map(|mut child| child.wait());
+        .status()
+        .unwrap_or_else(|e| panic!("cannot run terminal-notifier: {e}"));
+    assert!(status.success(), "terminal-notifier failed: {status}");
 }
 
 pub fn execute_command<S, I, P>(program: S, args: I, current_dir: P) -> Result<String, String>

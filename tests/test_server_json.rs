@@ -2,6 +2,7 @@ mod harness;
 
 use harness::init_git_repo;
 use serde_json::Value;
+use std::process::Command;
 
 /// Tests for server JSON responses.
 /// These use the existing test harness which handles tmux setup.
@@ -129,6 +130,56 @@ fn test_closed_task_remains_available() {
         available(&body).contains(&store_key),
         "Closed task '{}' should be in 'available', got: {}",
         store_key,
+        body
+    );
+}
+
+#[test]
+fn test_worktrees_are_reported_where_git_has_them() {
+    // A worktree's directory encodes the branch it was created for, and every
+    // lookup derives the path back from that branch. Work moves on: the
+    // worktree can come to hold another branch, and then the derived path is a
+    // directory that does not exist while the worktree itself is reported by
+    // nothing. Anything mapping a path to a project — `agent-sessions`
+    // resuming a session in the directory it was had in, say — then attributes
+    // the worktree to the bare repo and lands in the wrong pane.
+    let test = harness::WormholeTest::new(18928);
+
+    let home_proj = format!("{}worktree-path", harness::TEST_PREFIX);
+    let home_dir = format!("/tmp/{}", home_proj);
+    let created_for = format!("{}created-for", harness::TEST_PREFIX);
+    let now_holds = format!("{}now-holds", harness::TEST_PREFIX);
+
+    init_git_repo(&home_dir);
+    test.create_project(&home_dir, &home_proj);
+    let worktree_path = test.create_worktree_directly(&home_dir, &home_proj, &created_for);
+
+    let switched = Command::new("git")
+        .args(["switch", "-c", &now_holds])
+        .current_dir(&worktree_path)
+        .output()
+        .unwrap();
+    assert!(
+        switched.status.success(),
+        "Failed to switch branch: {}",
+        String::from_utf8_lossy(&switched.stderr)
+    );
+
+    test.cli("wormhole refresh").unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+
+    let body = test.http_get("/project/worktrees").unwrap();
+    let json: Value = serde_json::from_str(&body).expect("Should be valid JSON");
+    let reported: Vec<&str> = json
+        .as_array()
+        .expect("Should be an array")
+        .iter()
+        .filter_map(|w| w["working_tree"].as_str())
+        .collect();
+    assert!(
+        reported.contains(&worktree_path.as_str()),
+        "Worktree '{}' should be reported at the path git has it at, got: {}",
+        worktree_path,
         body
     );
 }

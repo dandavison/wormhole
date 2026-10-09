@@ -56,7 +56,7 @@ local function render()
                 if branch then
                     local nameColor = isCurrent and { white = 0.7, alpha = 1 } or { white = 0.4, alpha = 0.7 }
                     local branchColor = isCurrent and brightColor or dimColor
-                    local nameFont = { size = 12 }
+                    local nameFont = isCurrent and { size = 14, name = "Menlo-Bold" } or { size = 12 }
                     local branchFont = isCurrent and { size = 14, name = "Menlo-Bold" } or { size = 12 }
 
                     styledText = styledText .. hs.styledtext.new(name, { font = nameFont, color = nameColor })

@@ -97,7 +97,7 @@ final class ProjectsModel: ObservableObject {
 
     private func formatAligned(_ projects: [ProjectInfo], allProjects: [ProjectInfo]) -> [Project<String>] {
         let allTasks = allProjects.filter { $0.isTask }
-        let repoWidth = min(allTasks.map { $0.repo.count }.max() ?? 0, 16)
+        let repoWidth = min(allTasks.map { $0.repo.count }.max() ?? 0, 32)
         let branchWidth = 60
 
         return projects.map { p in

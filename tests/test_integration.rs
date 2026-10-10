@@ -1546,3 +1546,43 @@ fn test_member_branches_belong_to_an_existing_task() {
     assert!(resolved.contains("ok"), "unexpected response: {}", resolved);
     test.assert_tmux_cwd(&worktree);
 }
+
+#[test]
+fn test_switcher_highlights_shown_project_after_closing_current() {
+    let test = harness::WormholeTest::new(18928);
+
+    let [proj_a, proj_b, proj_c] = ["a", "b", "c"].map(|s| format!("{}hl-{}", TEST_PREFIX, s));
+    for proj in [&proj_a, &proj_b, &proj_c] {
+        let dir = format!("/tmp/{}", proj);
+        init_git_repo(&dir);
+        test.create_project(&dir, proj);
+        test.cli(&format!("wormhole open {}", proj)).unwrap();
+        test.assert_focus(Editor(proj));
+    }
+    test.cli("wormhole project previous").unwrap();
+    test.assert_focus(Editor(&proj_b));
+
+    test.cli(&format!("wormhole project close {}", proj_b))
+        .unwrap();
+    assert!(
+        test.wait_until(|| !test.tmux_window_exists(&proj_b), 5),
+        "{} window should be closed",
+        proj_b
+    );
+
+    let highlighted = || {
+        let neighbors: Value =
+            serde_json::from_str(&test.http_get("/project/neighbors?active=true").unwrap())
+                .unwrap();
+        neighbors["ring"][0]["project_key"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string()
+    };
+    assert!(
+        test.wait_until(|| highlighted() == test.get_tmux_window_name(), 5),
+        "switcher highlights {} but tmux shows {}",
+        highlighted(),
+        test.get_tmux_window_name()
+    );
+}

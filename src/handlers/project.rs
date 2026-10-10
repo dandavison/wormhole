@@ -3,10 +3,11 @@
 // All data should come from in-memory caches populated by refresh_* functions.
 
 use hyper::{Body, Request, Response, StatusCode};
+use std::collections::HashSet;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::project::ProjectKey;
+use crate::project::{Project, ProjectKey};
 use crate::project_path::ProjectPath;
 use crate::projects::Mutation;
 use crate::wormhole::QueryParams;
@@ -144,12 +145,8 @@ pub fn debug_projects() -> Response<Body> {
 }
 
 fn close_project(name: &str, remove: bool) {
-    let key = ProjectKey::parse(name);
     let mut projects = projects::lock();
-    if let Some(p) = projects
-        .by_key(&key)
-        .or_else(|| projects.by_path(std::path::Path::new(name)))
-    {
+    if let Some(p) = resolve(&projects, name) {
         config::TERMINAL.close(&p);
         config::editor().close(&p);
         if remove {
@@ -171,10 +168,46 @@ fn close_project(name: &str, remove: bool) {
 }
 
 fn close_projects(keys: &[String], remove: bool) {
+    let successor = rotate_past_current_if_closing(keys);
     for key in keys {
         close_project(key, remove);
         thread::sleep(Duration::from_millis(200));
     }
+    if let Some(project_path) = successor {
+        project_path.open_with_options(Mutation::None, None);
+    }
+}
+
+/// When the current project is being closed, make the ring's next active
+/// project current and return it so that the caller can show it. Otherwise
+/// tmux shows its last-selected window, which is in general not the ring's
+/// current project, and the switcher highlights the wrong project.
+fn rotate_past_current_if_closing(names: &[String]) -> Option<ProjectPath> {
+    let (closing, current): (HashSet<String>, _) = {
+        let projects = projects::lock();
+        (
+            names
+                .iter()
+                .filter_map(|name| resolve(&projects, name))
+                .map(|p| p.store_key().to_string())
+                .collect(),
+            projects.current().map(|p| p.store_key().to_string()),
+        )
+    };
+    if !current.is_some_and(|key| closing.contains(&key)) {
+        return None;
+    }
+    let remaining = crate::tmux::window_names()
+        .into_iter()
+        .filter(|w| !closing.contains(w))
+        .collect();
+    rotate_to(Direction::Previous, Some(remaining))
+}
+
+fn resolve(projects: &projects::Projects, name: &str) -> Option<Project> {
+    projects
+        .by_key(&ProjectKey::parse(name))
+        .or_else(|| projects.by_path(std::path::Path::new(name)))
 }
 
 fn close_all_projects(remove: bool) {
@@ -268,45 +301,45 @@ pub fn shell_env(pwd: Option<&str>) -> Response<Body> {
 }
 
 pub fn navigate(direction: Direction, params: &QueryParams) {
-    let active_keys: Option<std::collections::HashSet<String>> = if params.active {
+    let active_keys = if params.active {
         Some(crate::tmux::window_names().into_iter().collect())
     } else {
         None
     };
-
-    let p = {
-        let mut projects = projects::lock();
-        let ring_len = projects.keys().len();
-        let mutation = match direction {
-            Direction::Previous => Mutation::RotateLeft,
-            Direction::Next => Mutation::RotateRight,
-        };
-
-        let mut result = None;
-        for _ in 0..ring_len {
-            let candidate = match direction {
-                Direction::Previous => projects.previous(),
-                Direction::Next => projects.next(),
-            };
-            if let Some(ref p) = candidate {
-                projects.apply(mutation.clone(), &p.store_key());
-                let excluded = active_keys
-                    .as_ref()
-                    .is_some_and(|active| !active.contains(&p.store_key().to_string()));
-                if !excluded {
-                    result = Some(p.as_project_path());
-                    break;
-                }
-            } else {
-                break;
-            }
-        }
-        result
-    };
-    if let Some(project_path) = p {
+    if let Some(project_path) = rotate_to(direction, active_keys) {
         let land_in = params.land_in.clone();
         thread::spawn(move || project_path.open_with_options(Mutation::None, land_in));
     }
+}
+
+fn rotate_to(direction: Direction, active_keys: Option<HashSet<String>>) -> Option<ProjectPath> {
+    let mut projects = projects::lock();
+    let ring_len = projects.keys().len();
+    let mutation = match direction {
+        Direction::Previous => Mutation::RotateLeft,
+        Direction::Next => Mutation::RotateRight,
+    };
+
+    let mut result = None;
+    for _ in 0..ring_len {
+        let candidate = match direction {
+            Direction::Previous => projects.previous(),
+            Direction::Next => projects.next(),
+        };
+        if let Some(ref p) = candidate {
+            projects.apply(mutation.clone(), &p.store_key());
+            let excluded = active_keys
+                .as_ref()
+                .is_some_and(|active| !active.contains(&p.store_key().to_string()));
+            if !excluded {
+                result = Some(p.as_project_path());
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+    result
 }
 
 /// Focus (or open) the current project's editor — the grid's upper-row cell for
@@ -335,8 +368,8 @@ pub enum Direction {
 }
 
 pub fn close(name: &str, remove: bool) {
-    let name = name.trim().to_string();
-    thread::spawn(move || close_project(&name, remove));
+    let names = [name.trim().to_string()];
+    thread::spawn(move || close_projects(&names, remove));
 }
 
 pub async fn close_many(req: Request<Body>, remove: bool) -> Response<Body> {

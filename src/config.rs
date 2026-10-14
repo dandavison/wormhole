@@ -152,6 +152,8 @@ pub fn wormhole_port() -> u16 {
 struct ConfigFile {
     #[serde(default)]
     search_paths: Vec<SearchPathEntry>,
+    #[serde(default)]
+    projects: Vec<String>,
     worktree_dir: Option<String>,
     #[serde(default)]
     card_commands: Vec<String>,
@@ -290,6 +292,7 @@ impl SearchPathEntry {
 
 struct ResolvedConfig {
     search_paths: Vec<ResolvedSearchPath>,
+    projects: Vec<PathBuf>,
     worktree_dir: PathBuf,
     default_project: Option<String>,
     editor_overrides: Vec<EditorOverride>,
@@ -333,6 +336,8 @@ fn load_config() -> ResolvedConfig {
             .collect()
     };
 
+    let projects = file.projects.iter().map(|s| expand_tilde(s)).collect();
+
     let worktree_dir = std::env::var("WORMHOLE_WORKTREE_DIR")
         .ok()
         .map(|s| expand_tilde(&s))
@@ -366,6 +371,7 @@ fn load_config() -> ResolvedConfig {
 
     ResolvedConfig {
         search_paths,
+        projects,
         worktree_dir,
         default_project,
         editor_overrides,
@@ -478,7 +484,33 @@ pub fn is_excluded(name: &str, search_dir: &Path) -> bool {
 
 pub fn available_projects() -> std::collections::BTreeMap<CanonicalName, PathBuf> {
     let paths: Vec<PathBuf> = search_paths().iter().map(|sp| sp.path.clone()).collect();
-    available_projects_from_paths(&paths)
+    available_projects_from(&paths, &config().projects)
+}
+
+/// Projects in `search_paths`, plus the individually configured `projects`. An
+/// individual project whose name clashes gets its parent directory's name as a
+/// prefix, as for a clash between search paths.
+fn available_projects_from(
+    search_paths: &[PathBuf],
+    projects: &[PathBuf],
+) -> std::collections::BTreeMap<CanonicalName, PathBuf> {
+    let mut result = available_projects_from_paths(search_paths);
+    for path in projects.iter().filter(|p| p.is_dir()) {
+        let name_of = |p: &Path| p.file_name().and_then(|n| n.to_str()).map(String::from);
+        let (Some(dir_name), Some(parent_name)) = (name_of(path), path.parent().and_then(name_of))
+        else {
+            continue;
+        };
+        let name = if result.contains_key(dir_name.as_str()) {
+            format!("{parent_name}-{dir_name}")
+        } else {
+            dir_name
+        };
+        result
+            .entry(CanonicalName::new(name))
+            .or_insert(path.clone());
+    }
+    result
 }
 
 fn available_projects_from_paths(
@@ -724,11 +756,12 @@ mod tests {
         std::fs::create_dir_all(temp.path().join("3p").join("other")).unwrap();
         std::fs::create_dir_all(&explicit).unwrap();
 
-        let projects = available_projects_from(&[dir.clone()], &[explicit.clone()]);
+        let projects =
+            available_projects_from(std::slice::from_ref(&dir), std::slice::from_ref(&explicit));
 
         assert_eq!(projects.get("temporal"), Some(&dir.join("temporal")));
         assert_eq!(projects.get("ai"), Some(&explicit));
-        assert!(projects.get("other").is_none());
+        assert!(!projects.contains_key("other"));
     }
 
     #[test]
@@ -739,7 +772,8 @@ mod tests {
         std::fs::create_dir_all(dir.join("ai")).unwrap();
         std::fs::create_dir_all(&explicit).unwrap();
 
-        let projects = available_projects_from(&[dir.clone()], &[explicit.clone()]);
+        let projects =
+            available_projects_from(std::slice::from_ref(&dir), std::slice::from_ref(&explicit));
 
         assert_eq!(projects.get("ai"), Some(&dir.join("ai")));
         assert_eq!(projects.get("3p-ai"), Some(&explicit));

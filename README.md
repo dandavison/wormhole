@@ -297,6 +297,10 @@ search_paths = [
     { path = "~/src", exclude = ["node_modules", "venv"] },
 ]
 
+# Individual projects outside the search paths. A name that clashes with an
+# earlier project is prefixed with its parent directory's name.
+projects = ["~/tmp/3p/ai"]
+
 # Where project worktrees are created (default: ~/worktrees)
 worktree_dir = "~/worktrees"
 

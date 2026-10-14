@@ -716,6 +716,36 @@ mod tests {
     }
 
     #[test]
+    fn test_explicit_project_included() {
+        let temp = TempDir::new().unwrap();
+        let dir = temp.path().join("repos");
+        let explicit = temp.path().join("3p").join("ai");
+        std::fs::create_dir_all(dir.join("temporal")).unwrap();
+        std::fs::create_dir_all(temp.path().join("3p").join("other")).unwrap();
+        std::fs::create_dir_all(&explicit).unwrap();
+
+        let projects = available_projects_from(&[dir.clone()], &[explicit.clone()]);
+
+        assert_eq!(projects.get("temporal"), Some(&dir.join("temporal")));
+        assert_eq!(projects.get("ai"), Some(&explicit));
+        assert!(projects.get("other").is_none());
+    }
+
+    #[test]
+    fn test_explicit_project_clash_gets_prefixed_name() {
+        let temp = TempDir::new().unwrap();
+        let dir = temp.path().join("repos");
+        let explicit = temp.path().join("3p").join("ai");
+        std::fs::create_dir_all(dir.join("ai")).unwrap();
+        std::fs::create_dir_all(&explicit).unwrap();
+
+        let projects = available_projects_from(&[dir.clone()], &[explicit.clone()]);
+
+        assert_eq!(projects.get("ai"), Some(&dir.join("ai")));
+        assert_eq!(projects.get("3p-ai"), Some(&explicit));
+    }
+
+    #[test]
     fn test_expand_tilde() {
         let expanded = expand_tilde("~/foo/bar");
         assert!(
@@ -742,9 +772,11 @@ search_paths = [
     "~/src/repos",
     { path = "~/src", exclude = ["node_modules", "venv"] },
 ]
+projects = ["~/tmp/3p/ai"]
 worktree_dir = "~/worktrees"
 "#;
         let config: ConfigFile = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.projects, vec!["~/tmp/3p/ai"]);
         assert_eq!(config.search_paths.len(), 2);
         assert_eq!(config.search_paths[0].path(), "~/src/repos");
         assert!(config.search_paths[0].exclude().is_empty());

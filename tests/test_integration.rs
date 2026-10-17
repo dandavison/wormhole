@@ -61,6 +61,40 @@ fn test_open_project() {
 }
 
 #[test]
+fn test_open_land_in_none_keeps_tmux_window() {
+    let test = harness::WormholeTest::new(8969);
+
+    let proj_a = format!("{}bg-a", TEST_PREFIX);
+    let proj_b = format!("{}bg-b", TEST_PREFIX);
+    let dir_a = format!("/tmp/{}", proj_a);
+    let dir_b = format!("/tmp/{}", proj_b);
+
+    init_git_repo(&dir_a);
+    init_git_repo(&dir_b);
+
+    test.create_project(&dir_a, &proj_a);
+    test.create_project(&dir_b, &proj_b);
+
+    test.cli(&format!("wormhole open {}", proj_a)).unwrap();
+    test.assert_tmux_window(&proj_a);
+
+    // Window does not yet exist: it is created, but not selected.
+    test.cli(&format!("wormhole open {} --land-in none", proj_b))
+        .unwrap();
+    assert!(test.wait_until(|| test.tmux_window_exists(&proj_b), 5));
+    std::thread::sleep(Duration::from_millis(500));
+    assert_eq!(test.get_tmux_window_name(), proj_a);
+
+    // Window already exists: it is not selected.
+    test.cli(&format!("wormhole open {}", proj_b)).unwrap();
+    test.assert_tmux_window(&proj_b);
+    test.cli(&format!("wormhole open {} --land-in none", proj_a))
+        .unwrap();
+    std::thread::sleep(Duration::from_millis(500));
+    assert_eq!(test.get_tmux_window_name(), proj_b);
+}
+
+#[test]
 fn test_previous_project_and_next_project() {
     let test = harness::WormholeTest::new(8936);
 

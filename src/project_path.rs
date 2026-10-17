@@ -57,13 +57,16 @@ impl ProjectPath {
             projects.print();
         }
         drop(projects);
+        let select = !matches!(land_in, Some(LandIn::Background));
         let open_terminal = move || {
-            config::TERMINAL.open(&project).unwrap_or_else(|err| {
-                warn(&format!(
-                    "Error opening {} in terminal: {}",
-                    &project.repo_name, err
-                ))
-            })
+            config::TERMINAL
+                .open(&project, select)
+                .unwrap_or_else(|err| {
+                    warn(&format!(
+                        "Error opening {} in terminal: {}",
+                        &project.repo_name, err
+                    ))
+                })
         };
 
         if skip_editor {

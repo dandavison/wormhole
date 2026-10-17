@@ -37,18 +37,20 @@ struct Pane {
     tty_name: Option<String>,
 }
 
-pub fn open(project: &Project) -> Result<(), String> {
+pub fn open(project: &Project, select: bool) -> Result<(), String> {
     let pane = Pane::get_first_by_tab_title(project.repo_name.as_str()).unwrap_or_else(|| {
         new_tab(
             project.repo_name.as_str(),
             project.repo_path.to_str().unwrap(),
         )
     });
-    execute_command(
-        "wezterm",
-        ["cli", "activate-tab", "--tab-id", &pane.tab_id.to_string()],
-        &project.repo_path,
-    )?;
+    if select {
+        execute_command(
+            "wezterm",
+            ["cli", "activate-tab", "--tab-id", &pane.tab_id.to_string()],
+            &project.repo_path,
+        )?;
+    }
     Ok(())
 }
 

@@ -73,10 +73,12 @@ pub fn exists(project: &Project) -> bool {
     get_window(&project.store_key().to_string()).is_some()
 }
 
-pub fn open(project: &Project) -> Result<(), String> {
+pub fn open(project: &Project, select: bool) -> Result<(), String> {
     let window_name = project.store_key().to_string();
     if let Some(window) = get_window(&window_name) {
-        tmux(["select-window", "-t", &window.id]);
+        if select {
+            tmux(["select-window", "-t", &window.id]);
+        }
     } else {
         let cwd = project
             .checked_working_tree()?
@@ -93,6 +95,9 @@ pub fn open(project: &Project) -> Result<(), String> {
             "-F".to_string(),
             "#{window_id}".to_string(),
         ];
+        if !select {
+            args.push("-d".to_string());
+        }
         args.extend(env_args(&vars));
         let window_id = tmux_vec(args);
         let window_id = window_id.trim();
@@ -226,7 +231,7 @@ fn project_window_ids(store_key: &str) -> Vec<String> {
 /// already running is known to the caller, who says so with a pid, and that
 /// pane is focused instead of this being called at all.
 pub fn run_in_pane(project: &Project, cwd: &str, cmd: &str) {
-    let _ = open(project);
+    let _ = open(project, true);
     let window = match get_window(&project.store_key().to_string()) {
         Some(w) => w,
         None => return,

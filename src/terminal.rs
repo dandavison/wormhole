@@ -31,10 +31,11 @@ impl Terminal {
         }
     }
 
-    pub fn open(&self, project: &Project) -> Result<(), String> {
+    /// Open the project's window, and make it the one in view if `select`.
+    pub fn open(&self, project: &Project, select: bool) -> Result<(), String> {
         match self {
-            Wezterm => wezterm::open(project),
-            Alacritty { tmux: true } => tmux::open(project),
+            Wezterm => wezterm::open(project, select),
+            Alacritty { tmux: true } => tmux::open(project, select),
             _ => unimplemented!(),
         }
     }

@@ -139,15 +139,23 @@ pub fn open_task(repo: &str, branch: &str, land_in: Option<LandIn>) -> Result<()
         projects.apply(projects::Mutation::Insert, &project.store_key());
     }
 
+    // Editor is the opt-in upper row of the grid; default to a pure tmux spawn.
+    let land_in = land_in
+        .or_else(|| crate::wormhole::parse_land_in(project.kv.get("land-in")))
+        .or(Some(LandIn::TerminalOnly));
+
     let open_terminal = {
         let project = project.clone();
+        let select = !matches!(land_in, Some(LandIn::Background));
         move || {
-            config::TERMINAL.open(&project).unwrap_or_else(|err| {
-                warn(&format!(
-                    "Error opening {} in terminal: {}",
-                    &project.repo_name, err
-                ))
-            })
+            config::TERMINAL
+                .open(&project, select)
+                .unwrap_or_else(|err| {
+                    warn(&format!(
+                        "Error opening {} in terminal: {}",
+                        &project.repo_name, err
+                    ))
+                })
         }
     };
 
@@ -158,10 +166,6 @@ pub fn open_task(repo: &str, branch: &str, land_in: Option<LandIn>) -> Result<()
         }
     };
 
-    // Editor is the opt-in upper row of the grid; default to a pure tmux spawn.
-    let land_in = land_in
-        .or_else(|| crate::wormhole::parse_land_in(project.kv.get("land-in")))
-        .or(Some(LandIn::TerminalOnly));
     match land_in {
         Some(LandIn::TerminalOnly) => {
             open_terminal();

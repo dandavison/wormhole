@@ -1586,3 +1586,46 @@ fn test_switcher_highlights_shown_project_after_closing_current() {
         test.get_tmux_window_name()
     );
 }
+
+#[test]
+fn test_task_creates_configured_worktree_links() {
+    // A repo under a directory in `[worktree_links]` gets the configured
+    // symlinks in the directory holding its task worktrees, so that agents
+    // started in any of those worktrees find them in a parent directory.
+    let port = 18929;
+    let target = format!("/tmp/wh-test-link-target-{}.md", port);
+    std::fs::write(&target, "instructions").unwrap();
+    let config = format!("/tmp/wh-test-config-{}.toml", port);
+    std::fs::write(
+        &config,
+        format!(
+            r#"
+[worktree_links."/tmp"]
+"AGENTS.md" = "{target}"
+"#
+        ),
+    )
+    .unwrap();
+    let test = harness::WormholeTest::new_with_env(port, &[("WORMHOLE_CONFIG", &config)]);
+
+    let proj = format!("{}links", TEST_PREFIX);
+    let dir = format!("/tmp/{}", proj);
+    init_git_repo(&dir);
+    test.create_project(&dir, &proj);
+    let branch = format!("{}LINKS", TEST_PREFIX);
+    test.create_task(&branch, &proj);
+
+    let worktree = std::path::PathBuf::from(test.task_worktree_path(&proj, &branch));
+    let link = worktree
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("AGENTS.md");
+    assert_eq!(
+        std::fs::read_link(&link).ok(),
+        Some(std::path::PathBuf::from(&target)),
+        "{} should be a symlink to {target}",
+        link.display()
+    );
+}

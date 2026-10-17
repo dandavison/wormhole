@@ -338,6 +338,14 @@ editors = [
 "myapp:*" = [
     { split = "below", size = "30%", command = "make serve", focus = false },
 ]
+
+# Symlinks (name = target) created in ~/worktrees/<repo>/, the directory holding
+# a repo's worktrees, for every repo under the key directory. Created when a
+# worktree is created, and by `wormhole doctor conform`. This gives agents started
+# in any worktree of these repos an instructions file in a parent directory:
+["worktree_links"."~/src/work"]
+"AGENTS.md" = "~/work-agents.md"
+"CLAUDE.md" = "~/work-agents.md"
 ```
 
 ### Project branches
@@ -376,7 +384,7 @@ of its own is that project regardless of the table. The table is re-read by `wor
 
 Env var names follow the convention `WORMHOLE_` + SCREAMING_SNAKE of the TOML key. Env vars
 override config file values when set. `WORMHOLE_SEARCH_PATHS` is colon-separated; per-path excludes,
-`editors`, `project_branches` and `project_layout` are config-file-only features.
+`editors`, `project_branches`, `project_layout` and `worktree_links` are config-file-only features.
 
 _Wormhole is pre-1.0. Configuration and environment variable names may change without backward
 compatibility._

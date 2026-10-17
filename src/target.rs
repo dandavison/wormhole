@@ -36,6 +36,12 @@ pub fn parse(text: &str, dirs: &[PathBuf]) -> Option<Target> {
     is_project_identifier(text).then(|| Target::Project(text.to_string()))
 }
 
+/// Like `parse`, but for text known to be a project or task identifier, so that
+/// it is never taken to be a path.
+pub fn parse_project(text: &str) -> Option<Target> {
+    unimplemented!("{text}")
+}
+
 /// Ways the text might denote a path, longest path first. Covers `path`,
 /// `path:line`, `path:line:column`, `path:line-line`, `path(line)` (pdb) and
 /// `File "path", line N` (Python traceback).
@@ -299,5 +305,23 @@ mod tests {
     fn prose_is_not_a_target() {
         let fixture = Fixture::new();
         assert_eq!(fixture.parse("the quick brown fox"), None);
+    }
+
+    #[test]
+    fn project_name_that_is_also_a_directory() {
+        assert!(matches!(
+            Fixture::new().parse("src"),
+            Some(Target::Directory(_))
+        ));
+        assert_eq!(
+            parse_project("src"),
+            Some(Target::Project("src".to_string()))
+        );
+    }
+
+    #[test]
+    fn path_is_not_a_project_identifier() {
+        assert_eq!(parse_project("app.py"), None);
+        assert_eq!(parse_project("/tmp"), None);
     }
 }

@@ -33,13 +33,13 @@ pub fn parse(text: &str, dirs: &[PathBuf]) -> Option<Target> {
             }
         }
     }
-    is_project_identifier(text).then(|| Target::Project(text.to_string()))
+    parse_project(text)
 }
 
 /// Like `parse`, but for text known to be a project or task identifier, so that
 /// it is never taken to be a path.
 pub fn parse_project(text: &str) -> Option<Target> {
-    unimplemented!("{text}")
+    is_project_identifier(text).then(|| Target::Project(text.to_string()))
 }
 
 /// Ways the text might denote a path, longest path first. Covers `path`,

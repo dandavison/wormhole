@@ -288,6 +288,10 @@ pub enum Command {
         /// click target
         #[arg(long)]
         no_create: bool,
+        /// Take TARGET to be a project or task name, never a path. For callers
+        /// passing a name that may coincide with a relative path
+        #[arg(long)]
+        project: bool,
     },
 
     /// Print those of TARGETS that `open --no-create` would open, one per line.
@@ -694,7 +698,16 @@ pub fn run(command: Command) -> Result<(), String> {
             home_project,
             dry_run,
             no_create,
-        } => open::run(&client, &target, land_in, home_project, dry_run, no_create),
+            project,
+        } => open::run(
+            &client,
+            &target,
+            land_in,
+            home_project,
+            dry_run,
+            no_create,
+            project,
+        ),
 
         Command::Openable { targets } => open::openable(&client, &targets),
 

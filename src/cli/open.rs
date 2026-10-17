@@ -19,12 +19,16 @@ pub(super) fn run(
     home_project: Option<String>,
     dry_run: bool,
     no_create: bool,
+    project: bool,
 ) -> Result<(), String> {
     if task::is_create_ref(target) && !no_create {
         return task::task_create(client, target, home_project, land_in, dry_run);
     }
-    let parsed = target::parse(target, &directories(client))
-        .ok_or_else(|| format!("No wormhole target in {:?}", target))?;
+    let parsed = match project {
+        true => target::parse_project(target),
+        false => target::parse(target, &directories(client)),
+    }
+    .ok_or_else(|| format!("No wormhole target in {:?}", target))?;
     match parsed {
         Target::Conversation(path) => {
             client.post(&format!("/conversations/resume/{}", path.display()))?;

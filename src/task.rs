@@ -527,6 +527,13 @@ pub fn conform_task_worktree(
         actions.push(action);
     }
 
+    let links_dir = config::worktree_dir().join(repo);
+    for (name, target) in config::worktree_links(repo_path) {
+        if let Some(action) = check_link(&links_dir.join(name), target, dry_run)? {
+            actions.push(action);
+        }
+    }
+
     if let Some(remote_branch) =
         crate::git::ensure_upstream_tracking(worktree_path, branch, !dry_run)
     {
@@ -561,6 +568,24 @@ fn check_agent_symlink(
     if !dry_run {
         std::os::unix::fs::symlink(target, &link_path)
             .map_err(|e| format!("Failed to create {} symlink: {}", filename, e))?;
+    }
+    Ok(Some(action))
+}
+
+/// Returns Some(action) if the symlink needed creating/fixing, None if already correct.
+/// Replaces an existing symlink but not a regular file.
+fn check_link(link_path: &Path, target: &Path, dry_run: bool) -> Result<Option<String>, String> {
+    if link_path.read_link().ok().as_deref() == Some(target) {
+        return Ok(None);
+    }
+    let action = format!("symlink {} -> {}", link_path.display(), target.display());
+    if !dry_run {
+        if link_path.is_symlink() {
+            fs::remove_file(link_path)
+                .map_err(|e| format!("Failed to remove {}: {}", link_path.display(), e))?;
+        }
+        std::os::unix::fs::symlink(target, link_path)
+            .map_err(|e| format!("Failed to create {}: {}", link_path.display(), e))?;
     }
     Ok(Some(action))
 }

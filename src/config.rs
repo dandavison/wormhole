@@ -164,6 +164,8 @@ struct ConfigFile {
     editors: Vec<EditorOverrideEntry>,
     #[serde(default)]
     project_layout: std::collections::BTreeMap<String, Vec<Pane>>,
+    #[serde(default)]
+    worktree_links: std::collections::BTreeMap<String, std::collections::BTreeMap<String, String>>,
 }
 
 /// A pane added to a project's tmux window when the window is first opened,
@@ -296,6 +298,7 @@ struct ResolvedConfig {
     worktree_dir: PathBuf,
     default_project: Option<String>,
     editor_overrides: Vec<EditorOverride>,
+    worktree_links: Vec<(PathBuf, Vec<(String, PathBuf)>)>,
 }
 
 struct EditorOverride {
@@ -369,12 +372,25 @@ fn load_config() -> ResolvedConfig {
         )
         .collect();
 
+    let worktree_links = file
+        .worktree_links
+        .iter()
+        .map(|(dir, links)| {
+            let links = links
+                .iter()
+                .map(|(name, target)| (name.clone(), expand_tilde(target)))
+                .collect();
+            (canonicalize(&expand_tilde(dir)), links)
+        })
+        .collect();
+
     ResolvedConfig {
         search_paths,
         projects,
         worktree_dir,
         default_project,
         editor_overrides,
+        worktree_links,
     }
 }
 
@@ -458,6 +474,23 @@ pub fn search_paths() -> Vec<&'static ResolvedSearchPath> {
 
 pub fn worktree_dir() -> &'static Path {
     &config().worktree_dir
+}
+
+/// The `[worktree_links]` symlinks (name, target) for a repo: those configured for
+/// any directory containing it. They belong in the directory holding the repo's
+/// task worktrees.
+pub fn worktree_links(repo_path: &Path) -> Vec<&'static (String, PathBuf)> {
+    let repo_path = canonicalize(repo_path);
+    config()
+        .worktree_links
+        .iter()
+        .filter(|(dir, _)| repo_path.starts_with(dir))
+        .flat_map(|(_, links)| links)
+        .collect()
+}
+
+fn canonicalize(path: &Path) -> PathBuf {
+    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
 pub fn default_project() -> Option<&'static str> {

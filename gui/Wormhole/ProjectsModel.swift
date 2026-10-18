@@ -33,6 +33,11 @@ struct ProjectsResponse: Codable {
             .filter { seen.insert($0.project_key).inserted }
             .sorted { $0.project_key < $1.project_key }
     }
+
+    /// `current` is most recently used first, starting with the current project.
+    func currentProjectLast() -> [ProjectInfo] {
+        current
+    }
 }
 
 enum SelectorMode: Int, CaseIterable {

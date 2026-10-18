@@ -44,4 +44,20 @@ final class WormholeTests: XCTestCase {
             ["temporal", "temporal:feature-branch", "wormhole"]
         )
     }
+
+    func testPickerListsCurrentProjectLast() {
+        let response = ProjectsResponse(
+            current: [
+                ProjectInfo(project_key: "wormhole"),
+                ProjectInfo(project_key: "temporal:feature-branch"),
+                ProjectInfo(project_key: "tide"),
+            ],
+            available: []
+        )
+
+        XCTAssertEqual(
+            response.currentProjectLast().map(\.project_key),
+            ["temporal:feature-branch", "tide", "wormhole"]
+        )
+    }
 }

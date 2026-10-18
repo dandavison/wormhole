@@ -213,8 +213,9 @@ wormhole completion bash                # Generate shell completions
 | GET    | `/project/neighbors`          | Project ring for navigation UI    |
 | GET    | `/project/switch/<name>`      | Switch/create project             |
 | GET    | `/project/create/<branch>`    | Create branch project with branch name |
-| GET    | `/project/previous`           | Previous project                  |
-| GET    | `/project/next`               | Next project                      |
+| GET    | `/project/previous`           | Step to less recently used project |
+| GET    | `/project/next`               | Step to more recently used project |
+| GET    | `/project/release`            | End a previous/next walk          |
 | POST   | `/project/close/<name>`       | Close project windows (?remove=true to delete) |
 | POST   | `/project/pin`                | Pin current (project, app) state  |
 | GET    | `/project/current/poll`       | Poll for current project changes  |

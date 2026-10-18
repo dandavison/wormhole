@@ -1,10 +1,11 @@
 use crate::config::CanonicalName;
 use crate::project::{BranchName, Cached, Project, ProjectKey};
+use crate::ring::{Direction, Ring};
 use crate::util::execute_command;
 use crate::{config, git, ps};
 use lazy_static::lazy_static;
 use rayon::prelude::*;
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
 use std::thread;
@@ -12,26 +13,20 @@ use std::time::Duration;
 use tokio::sync::watch;
 
 /*
-    - Projects are held in a ring for navigation (previous/current/next).
     - All known projects (including tasks) are stored in a HashMap.
-    - The ring contains keys that reference the HashMap.
-
-    - The currently active project is at ring index 0.
-    - When adding a new project, we insert it to the right of current (index 1).
-    - When jumping to a project, we move it to the right of current.
-    - When switching to previous, we rotate right.
-    - When switching to next, we rotate left.
+    - The ring (see ring.rs) holds keys that reference the HashMap, in
+      most-recently-used order: the current project is at index 0.
 */
 
 struct ProjectsStore {
     all: HashMap<ProjectKey, Project>,
-    ring: VecDeque<ProjectKey>,
+    ring: Ring,
 }
 
 lazy_static! {
     static ref PROJECTS_STORE: Mutex<ProjectsStore> = Mutex::new(ProjectsStore {
         all: HashMap::new(),
-        ring: VecDeque::new(),
+        ring: Ring::default(),
     });
     static ref STATE_VERSION: (watch::Sender<u64>, watch::Receiver<u64>) = watch::channel(0);
 }
@@ -55,8 +50,6 @@ pub fn lock<'a>() -> Projects<'a> {
 #[derive(Debug, Clone, Copy)]
 pub enum Mutation {
     None,
-    RotateLeft,
-    RotateRight,
     Insert,
 }
 
@@ -92,14 +85,24 @@ impl<'a> Projects<'a> {
     pub fn apply(&mut self, mutation: Mutation, key: &ProjectKey) {
         match mutation {
             Mutation::None => return,
-            Mutation::Insert => {
-                self.move_to_back(key);
-                self.0.ring.rotate_right(1);
-            }
-            Mutation::RotateLeft => self.0.ring.rotate_left(1),
-            Mutation::RotateRight => self.0.ring.rotate_right(1),
+            Mutation::Insert => self.0.ring.bring_to_front(key),
         };
         notify_state_change();
+    }
+
+    /// See `Ring::step`.
+    pub fn step(
+        &mut self,
+        direction: Direction,
+        is_eligible: impl Fn(&ProjectKey) -> bool,
+    ) -> Option<Project> {
+        let key = self.0.ring.step(direction, is_eligible)?;
+        notify_state_change();
+        self.0.all.get(&key).cloned()
+    }
+
+    pub fn release(&mut self) {
+        self.0.ring.release();
     }
 
     pub fn open(&self) -> Vec<Project> {
@@ -190,14 +193,6 @@ impl<'a> Projects<'a> {
         if let Some(i) = self.ring_index(key) {
             self.0.ring.remove(i);
             notify_state_change();
-        }
-    }
-
-    pub fn move_to_back(&mut self, key: &ProjectKey) {
-        if let Some(i) = self.ring_index(key) {
-            if let Some(k) = self.0.ring.remove(i) {
-                self.0.ring.push_back(k);
-            }
         }
     }
 

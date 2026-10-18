@@ -129,7 +129,11 @@ async fn route(
         "/project/list" => project::list_projects(params.active, params.tasks, params.with_editor),
         "/project/neighbors" => project::neighbors(params.active),
         "/project/next" => {
-            project::navigate(project::Direction::Next, params);
+            project::navigate(crate::ring::Direction::Next, params);
+            Response::new(Body::from(""))
+        }
+        "/project/release" => {
+            crate::projects::lock().release();
             Response::new(Body::from(""))
         }
         "/project/pin" => require_post(method, || {
@@ -137,7 +141,7 @@ async fn route(
             Response::new(Body::from("Pinning current state..."))
         }),
         "/project/previous" => {
-            project::navigate(project::Direction::Previous, params);
+            project::navigate(crate::ring::Direction::Previous, params);
             Response::new(Body::from(""))
         }
         "/project/close" => {

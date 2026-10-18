@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 use crate::project::{Project, ProjectKey};
 use crate::project_path::ProjectPath;
 use crate::projects::Mutation;
+use crate::ring::Direction;
 use crate::wormhole::QueryParams;
 use crate::{config, hammerspoon, projects, util::debug};
 
@@ -197,11 +198,16 @@ fn rotate_past_current_if_closing(names: &[String]) -> Option<ProjectPath> {
     if !current.is_some_and(|key| closing.contains(&key)) {
         return None;
     }
-    let remaining = crate::tmux::window_names()
+    let remaining: HashSet<String> = crate::tmux::window_names()
         .into_iter()
         .filter(|w| !closing.contains(w))
         .collect();
-    rotate_to(Direction::Previous, Some(remaining))
+    let mut projects = projects::lock();
+    let project = projects.step(Direction::Previous, |key| {
+        remaining.contains(&key.to_string())
+    });
+    projects.release();
+    project.map(|p| p.as_project_path())
 }
 
 fn resolve(projects: &projects::Projects, name: &str) -> Option<Project> {
@@ -301,45 +307,19 @@ pub fn shell_env(pwd: Option<&str>) -> Response<Body> {
 }
 
 pub fn navigate(direction: Direction, params: &QueryParams) {
-    let active_keys = if params.active {
-        Some(crate::tmux::window_names().into_iter().collect())
-    } else {
-        None
+    let active_keys: Option<HashSet<String>> = params
+        .active
+        .then(|| crate::tmux::window_names().into_iter().collect());
+    let is_eligible = |key: &ProjectKey| {
+        active_keys
+            .as_ref()
+            .is_none_or(|a| a.contains(&key.to_string()))
     };
-    if let Some(project_path) = rotate_to(direction, active_keys) {
+    let project = projects::lock().step(direction, is_eligible);
+    if let Some(project_path) = project.map(|p| p.as_project_path()) {
         let land_in = params.land_in.clone();
         thread::spawn(move || project_path.open_with_options(Mutation::None, land_in));
     }
-}
-
-fn rotate_to(direction: Direction, active_keys: Option<HashSet<String>>) -> Option<ProjectPath> {
-    let mut projects = projects::lock();
-    let ring_len = projects.keys().len();
-    let mutation = match direction {
-        Direction::Previous => Mutation::RotateLeft,
-        Direction::Next => Mutation::RotateRight,
-    };
-
-    let mut result = None;
-    for _ in 0..ring_len {
-        let candidate = match direction {
-            Direction::Previous => projects.previous(),
-            Direction::Next => projects.next(),
-        };
-        if let Some(ref p) = candidate {
-            projects.apply(mutation.clone(), &p.store_key());
-            let excluded = active_keys
-                .as_ref()
-                .is_some_and(|active| !active.contains(&p.store_key().to_string()));
-            if !excluded {
-                result = Some(p.as_project_path());
-                break;
-            }
-        } else {
-            break;
-        }
-    }
-    result
 }
 
 /// Focus (or open) the current project's editor — the grid's upper-row cell for
@@ -360,11 +340,6 @@ fn focus_current(land_in: crate::wormhole::LandIn) -> Response<Body> {
         thread::spawn(move || pp.open_with_options(Mutation::None, Some(land_in)));
     }
     Response::new(Body::from(""))
-}
-
-pub enum Direction {
-    Previous,
-    Next,
 }
 
 pub fn close(name: &str, remove: bool) {

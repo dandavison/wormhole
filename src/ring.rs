@@ -20,7 +20,6 @@ pub struct Ring {
     walk: Option<Walk>,
 }
 
-#[allow(dead_code)]
 struct Walk {
     snapshot: Vec<ProjectKey>,
     index: usize,
@@ -36,7 +35,9 @@ pub enum Direction {
 
 impl Ring {
     pub fn bring_to_front(&mut self, key: &ProjectKey) {
-        unimplemented!("{key}")
+        self.walk = None;
+        self.keys.retain(|k| k != key);
+        self.keys.push_front(key.clone());
     }
 
     /// Step to the nearest eligible project in `direction`, bring it to the
@@ -46,12 +47,39 @@ impl Ring {
         direction: Direction,
         is_eligible: impl Fn(&ProjectKey) -> bool,
     ) -> Option<ProjectKey> {
-        let _ = (direction, is_eligible);
-        unimplemented!()
+        let Walk {
+            snapshot,
+            mut index,
+        } = self.walk.take().unwrap_or_else(|| Walk {
+            snapshot: self.keys.iter().cloned().collect(),
+            index: 0,
+        });
+        let n = snapshot.len();
+        let reached = (0..n).find_map(|_| {
+            index = match direction {
+                Direction::Previous => (index + 1) % n,
+                Direction::Next => (index + n - 1) % n,
+            };
+            let key = &snapshot[index];
+            (self.keys.contains(key) && is_eligible(key)).then(|| key.clone())
+        })?;
+        self.keys = self.reordered(&snapshot, &reached);
+        self.walk = Some(Walk { snapshot, index });
+        Some(reached)
     }
 
     pub fn release(&mut self) {
-        unimplemented!()
+        self.walk = None;
+    }
+
+    /// `front`, then the snapshot's order, then projects added since the
+    /// snapshot; projects removed since the snapshot are dropped.
+    fn reordered(&self, snapshot: &[ProjectKey], front: &ProjectKey) -> VecDeque<ProjectKey> {
+        let rest = snapshot
+            .iter()
+            .chain(self.keys.iter().filter(|k| !snapshot.contains(k)))
+            .filter(|k| *k != front && self.keys.contains(k));
+        std::iter::once(front).chain(rest).cloned().collect()
     }
 }
 

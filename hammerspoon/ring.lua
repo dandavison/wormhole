@@ -92,7 +92,27 @@ local function show()
     render()
 end
 
+-- Steps and the release that ends them must reach the server in order: a
+-- release overtaking the last step would leave that step's walk unreleased.
+local queue = {}
+
+local function sendNext()
+    local path = queue[1]
+    if not path then return end
+    hs.http.asyncGet(M.host .. path, nil, function()
+        table.remove(queue, 1)
+        if overlayActive then render() end
+        sendNext()
+    end)
+end
+
+local function send(path)
+    table.insert(queue, path)
+    if #queue == 1 then sendNext() end
+end
+
 local function hide()
+    if overlayActive then send("/project/release") end
     overlayActive = false
     displayOrder = nil
     if alertId then
@@ -102,15 +122,11 @@ local function hide()
 end
 
 function M.previous()
-    hs.http.asyncGet(M.host .. "/project/previous?active=true", nil, function()
-        if overlayActive then render() end
-    end)
+    send("/project/previous?active=true")
 end
 
 function M.next()
-    hs.http.asyncGet(M.host .. "/project/next?active=true", nil, function()
-        if overlayActive then render() end
-    end)
+    send("/project/next?active=true")
 end
 
 -- Grid: up moves to the current column's editor (upper) cell.

@@ -6,6 +6,7 @@ local ring = require("ring")
 M.host = "http://localhost:7117"
 M.dashboardApp = nil -- nil => system default browser
 M.guiAppPath = "/Applications/Wormhole.app"
+M.selectRepeatDelay = 0.3     -- seconds held before cycling starts
 M.selectRepeatInterval = 0.08 -- seconds between cycles when holding key
 M.selectDebounce = 0.02       -- minimum seconds between down arrows
 
@@ -40,18 +41,25 @@ local function startSelect(reverse)
     end
     selectActive = true
     selectReverse = reverse
+    -- As with cmd+tab: the press that opens the GUI leaves its first entry (the
+    -- previous project) selected; each further press moves one entry.
     local frontApp = hs.application.frontmostApplication()
-    if not (frontApp and frontApp:name() == "Wormhole") then
+    if frontApp and frontApp:name() == "Wormhole" then
+        sendMove()
+    else
         hs.application.launchOrFocus(M.guiAppPath)
     end
-    selectTimer = hs.timer.doEvery(M.selectRepeatInterval, function()
-        if not selectTimer or not selectActive then return end
-        local frontApp = hs.application.frontmostApplication()
-        if frontApp and frontApp:name() == "Wormhole" then
-            sendMove()
-        else
-            stopSelect()
-        end
+    selectTimer = hs.timer.doAfter(M.selectRepeatDelay, function()
+        if not selectActive then return end
+        selectTimer = hs.timer.doEvery(M.selectRepeatInterval, function()
+            if not selectTimer or not selectActive then return end
+            local frontApp = hs.application.frontmostApplication()
+            if frontApp and frontApp:name() == "Wormhole" then
+                sendMove()
+            else
+                stopSelect()
+            end
+        end)
     end)
 end
 

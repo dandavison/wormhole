@@ -36,7 +36,7 @@ struct ProjectsResponse: Codable {
 
     /// `current` is most recently used first, starting with the current project.
     func currentProjectLast() -> [ProjectInfo] {
-        current
+        Array(current.dropFirst() + current.prefix(1))
     }
 }
 
@@ -139,7 +139,7 @@ final class ProjectsModel: ObservableObject {
                 let (active, allProjects) = try await (activeResponse, allProjectsList)
 
                 await MainActor.run {
-                    self.activeProjects = active.current
+                    self.activeProjects = active.currentProjectLast()
                     self.allProjects = allProjects
                     self.updateProjectsList()
                 }

@@ -126,7 +126,7 @@ wormhole server start
 
 # GUI (optional)
 (cd gui && make dist)
-ln -fs $PWD/gui/dist/Wormhole/Wormhole.app /Applications/
+cp -r $PWD/gui/dist/Wormhole/Wormhole.app /Applications/
 
 # Chrome extension (optional)
 # Load chrome-extension as unpacked extension

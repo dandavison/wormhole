@@ -14,6 +14,7 @@ mod project;
 mod project_branches;
 mod project_path;
 mod projects;
+mod ring;
 mod serve_web;
 mod status;
 mod target;

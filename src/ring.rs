@@ -1,89 +1,77 @@
-//! Projects in most-recently-used order: index 0 is the current project and
-//! index 1 the one before it, so a picker that lists index 1 first toggles
-//! between two projects with a bare Enter.
+//! Projects in two orders, both with the current project at index 0.
 //!
-//! Stepping (ctrl+cmd+left/right in the Hammerspoon switcher) walks through a
-//! snapshot of the order taken when the walk began, bringing each project
-//! reached to the front. The walk lasts until `release` (the Hammerspoon
-//! switcher's modifiers going up) or an explicit switch; after it the project
-//! reached is current and the one the walk began from is second, as with macOS
-//! cmd+tab.
+//! The ring order is what the Hammerspoon switcher (ctrl+cmd+left/right) moves
+//! around: stepping rotates it, so repeated steps visit every project in turn.
+//! An explicit switch moves the target to the front with the project left at
+//! index 1, so a single previous step returns to it.
+//!
+//! The recency order is most-recently-used, for pickers: index 1 is always the
+//! project left, however it was left.
 
 use std::collections::VecDeque;
-use std::ops::{Deref, DerefMut};
+use std::ops::Deref;
 
 use crate::project::ProjectKey;
 
 #[derive(Default)]
 pub struct Ring {
     keys: VecDeque<ProjectKey>,
-    walk: Option<Walk>,
-}
-
-struct Walk {
-    snapshot: Vec<ProjectKey>,
-    index: usize,
+    recent: VecDeque<ProjectKey>,
 }
 
 #[derive(Clone, Copy)]
 pub enum Direction {
-    /// Toward less recently used projects.
     Previous,
-    /// Toward more recently used projects, wrapping to the least recent.
     Next,
 }
 
 impl Ring {
     pub fn bring_to_front(&mut self, key: &ProjectKey) {
-        self.walk = None;
         self.keys.retain(|k| k != key);
-        self.keys.push_front(key.clone());
+        self.keys.push_back(key.clone());
+        self.keys.rotate_right(1);
+        self.make_most_recent(key);
     }
 
-    /// Step to the nearest eligible project in `direction`, bring it to the
-    /// front, and return it.
+    /// Rotate to the nearest eligible project in `direction` and return it.
     pub fn step(
         &mut self,
         direction: Direction,
         is_eligible: impl Fn(&ProjectKey) -> bool,
     ) -> Option<ProjectKey> {
-        let Walk {
-            snapshot,
-            mut index,
-        } = self.walk.take().unwrap_or_else(|| Walk {
-            snapshot: self.keys.iter().cloned().collect(),
-            index: 0,
-        });
-        let n = snapshot.len();
-        let reached = (0..n).find_map(|_| {
-            index = match direction {
-                Direction::Previous => (index + 1) % n,
-                Direction::Next => (index + n - 1) % n,
-            };
-            let key = &snapshot[index];
-            (self.keys.contains(key) && is_eligible(key)).then(|| key.clone())
+        let reached = (0..self.keys.len()).find_map(|_| {
+            match direction {
+                Direction::Previous => self.keys.rotate_left(1),
+                Direction::Next => self.keys.rotate_right(1),
+            }
+            self.keys.front().filter(|k| is_eligible(k)).cloned()
         })?;
-        self.keys = self.reordered(&snapshot, &reached);
-        self.walk = Some(Walk { snapshot, index });
+        self.make_most_recent(&reached);
         Some(reached)
     }
 
     pub fn recent(&self) -> impl Iterator<Item = &ProjectKey> {
-        self.keys.iter()
+        self.recent.iter()
     }
 
-    pub fn release(&mut self) {
-        self.walk = None;
+    pub fn push_front(&mut self, key: ProjectKey) {
+        self.keys.push_front(key.clone());
+        self.recent.push_front(key);
     }
 
-    /// `front`, then the snapshot's order, then projects added since the
-    /// snapshot; projects removed since the snapshot are dropped.
-    fn reordered(&self, snapshot: &[ProjectKey], front: &ProjectKey) -> VecDeque<ProjectKey> {
-        let rest = snapshot
-            .iter()
-            .chain(self.keys.iter().filter(|k| !snapshot.contains(k)))
-            .filter(|k| *k != front && self.keys.contains(k));
-        std::iter::once(front).chain(rest).cloned().collect()
+    pub fn push_back(&mut self, key: ProjectKey) {
+        self.keys.push_back(key.clone());
+        self.recent.push_back(key);
+    }
+
+    pub fn retain(&mut self, f: impl Fn(&ProjectKey) -> bool) {
+        self.keys.retain(&f);
+        self.recent.retain(&f);
+    }
+
+    fn make_most_recent(&mut self, key: &ProjectKey) {
+        self.recent.retain(|k| k != key);
+        self.recent.push_front(key.clone());
     }
 }
 
@@ -91,12 +79,6 @@ impl Deref for Ring {
     type Target = VecDeque<ProjectKey>;
     fn deref(&self) -> &Self::Target {
         &self.keys
-    }
-}
-
-impl DerefMut for Ring {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.keys
     }
 }
 

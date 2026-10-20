@@ -14,8 +14,8 @@ use tokio::sync::watch;
 
 /*
     - All known projects (including tasks) are stored in a HashMap.
-    - The ring (see ring.rs) holds keys that reference the HashMap, in
-      most-recently-used order: the current project is at index 0.
+    - The ring (see ring.rs) holds keys that reference the HashMap, in ring
+      order and in most-recently-used order.
 */
 
 struct ProjectsStore {
@@ -101,15 +101,12 @@ impl<'a> Projects<'a> {
         self.0.all.get(&key).cloned()
     }
 
-    pub fn release(&mut self) {
-        self.0.ring.release();
-    }
-
+    /// Most recently used first.
     pub fn open(&self) -> Vec<Project> {
         let terminal_windows = config::TERMINAL.window_names();
         self.0
             .ring
-            .iter()
+            .recent()
             .filter_map(|k| self.0.all.get(k))
             .filter(|p| {
                 // Tasks always appear, projects only if they have terminal windows
@@ -179,9 +176,7 @@ impl<'a> Projects<'a> {
 
     pub fn remove(&mut self, key: &ProjectKey) -> bool {
         if self.0.all.remove(key).is_some() {
-            if let Some(i) = self.ring_index(key) {
-                self.0.ring.remove(i);
-            }
+            self.0.ring.retain(|k| k != key);
             notify_state_change();
             true
         } else {
@@ -190,8 +185,8 @@ impl<'a> Projects<'a> {
     }
 
     pub fn remove_from_ring(&mut self, key: &ProjectKey) {
-        if let Some(i) = self.ring_index(key) {
-            self.0.ring.remove(i);
+        if self.0.ring.contains(key) {
+            self.0.ring.retain(|k| k != key);
             notify_state_change();
         }
     }
@@ -221,10 +216,6 @@ impl<'a> Projects<'a> {
 
     pub fn get_mut(&mut self, key: &ProjectKey) -> Option<&mut Project> {
         self.0.all.get_mut(key)
-    }
-
-    fn ring_index(&self, key: &ProjectKey) -> Option<usize> {
-        self.0.ring.iter().position(|k| k == key)
     }
 
     pub fn print(&self) {

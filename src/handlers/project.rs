@@ -202,12 +202,11 @@ fn rotate_past_current_if_closing(names: &[String]) -> Option<ProjectPath> {
         .into_iter()
         .filter(|w| !closing.contains(w))
         .collect();
-    let mut projects = projects::lock();
-    let project = projects.step(Direction::Previous, |key| {
-        remaining.contains(&key.to_string())
-    });
-    projects.release();
-    project.map(|p| p.as_project_path())
+    projects::lock()
+        .step(Direction::Previous, |key| {
+            remaining.contains(&key.to_string())
+        })
+        .map(|p| p.as_project_path())
 }
 
 fn resolve(projects: &projects::Projects, name: &str) -> Option<Project> {
@@ -276,7 +275,7 @@ pub fn neighbors(active: bool) -> Response<Body> {
     let ring: Vec<serde_json::Value> = if active {
         let window_names = crate::tmux::window_names();
         projects
-            .open()
+            .all()
             .into_iter()
             .filter(|p| p.is_active(&window_names))
             .map(|p| serde_json::json!({ "project_key": p.store_key().to_string() }))

@@ -132,10 +132,6 @@ async fn route(
             project::navigate(crate::ring::Direction::Next, params);
             Response::new(Body::from(""))
         }
-        "/project/release" => {
-            crate::projects::lock().release();
-            Response::new(Body::from(""))
-        }
         "/project/pin" => require_post(method, || {
             thread::spawn(project::pin_current);
             Response::new(Body::from("Pinning current state..."))

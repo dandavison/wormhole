@@ -68,6 +68,10 @@ impl Ring {
         Some(reached)
     }
 
+    pub fn recent(&self) -> impl Iterator<Item = &ProjectKey> {
+        self.keys.iter()
+    }
+
     pub fn release(&mut self) {
         self.walk = None;
     }
@@ -101,10 +105,11 @@ mod tests {
     use super::*;
 
     fn ring(names: &str) -> Ring {
-        Ring {
-            keys: names.chars().map(key).collect(),
-            walk: None,
+        let mut r = Ring::default();
+        for c in names.chars() {
+            r.push_back(key(c));
         }
+        r
     }
 
     fn key(name: char) -> ProjectKey {
@@ -115,56 +120,30 @@ mod tests {
         ring.iter().map(|k| k.to_string()).collect()
     }
 
+    fn recency(ring: &Ring) -> String {
+        ring.recent().map(|k| k.to_string()).collect()
+    }
+
     fn step(ring: &mut Ring, direction: Direction) {
         ring.step(direction, |_| true);
     }
 
     #[test]
-    fn bring_to_front_makes_the_current_project_second() {
+    fn previous_goes_round_the_ring() {
         let mut r = ring("abcd");
-        r.bring_to_front(&key('c'));
-        assert_eq!(order(&r), "cabd");
-    }
-
-    #[test]
-    fn switching_among_a_few_projects_keeps_them_at_the_front() {
-        let mut r = ring("abcdef");
-        for k in ['e', 'b', 'e', 'a', 'b'] {
-            r.bring_to_front(&key(k));
+        for expected in ["bcda", "cdab", "dabc", "abcd"] {
+            step(&mut r, Direction::Previous);
+            assert_eq!(order(&r), expected);
         }
-        assert_eq!(order(&r), "baecdf");
     }
 
     #[test]
-    fn released_single_previous_steps_toggle() {
-        let mut r = ring("abc");
-        step(&mut r, Direction::Previous);
-        r.release();
-        assert_eq!(order(&r), "bac");
-        step(&mut r, Direction::Previous);
-        r.release();
-        assert_eq!(order(&r), "abc");
-    }
-
-    #[test]
-    fn steps_walk_the_snapshot_and_release_leaves_start_second() {
-        let mut r = ring("abcd");
-        step(&mut r, Direction::Previous);
-        assert_eq!(order(&r), "bacd");
-        step(&mut r, Direction::Previous);
-        assert_eq!(order(&r), "cabd");
-        r.release();
-        step(&mut r, Direction::Previous);
-        assert_eq!(order(&r), "acbd");
-    }
-
-    #[test]
-    fn next_wraps_to_least_recent_then_moves_toward_more_recent() {
+    fn next_goes_round_the_ring_the_other_way() {
         let mut r = ring("abcd");
         step(&mut r, Direction::Next);
         assert_eq!(order(&r), "dabc");
         step(&mut r, Direction::Next);
-        assert_eq!(order(&r), "cabd");
+        assert_eq!(order(&r), "cdab");
         step(&mut r, Direction::Previous);
         assert_eq!(order(&r), "dabc");
     }
@@ -177,22 +156,40 @@ mod tests {
     }
 
     #[test]
-    fn bring_to_front_ends_a_walk() {
+    fn bring_to_front_places_the_project_left_next_in_the_ring() {
         let mut r = ring("abcd");
+        r.bring_to_front(&key('c'));
+        assert_eq!(order(&r), "cabd");
         step(&mut r, Direction::Previous);
-        r.bring_to_front(&key('d'));
-        assert_eq!(order(&r), "dbac");
-        step(&mut r, Direction::Previous);
-        assert_eq!(order(&r), "bdac");
+        assert_eq!(order(&r), "abdc");
     }
 
     #[test]
-    fn walk_survives_projects_added_and_removed_meanwhile() {
+    fn recency_lists_the_project_left_second_after_steps() {
+        let mut r = ring("abcd");
+        step(&mut r, Direction::Previous);
+        assert_eq!(recency(&r), "bacd");
+        step(&mut r, Direction::Previous);
+        assert_eq!(recency(&r), "cbad");
+        r.bring_to_front(&key('a'));
+        assert_eq!(recency(&r), "acbd");
+    }
+
+    #[test]
+    fn switching_among_a_few_projects_keeps_them_most_recent() {
+        let mut r = ring("abcdef");
+        for k in ['e', 'b', 'e', 'a', 'b'] {
+            r.bring_to_front(&key(k));
+        }
+        assert_eq!(recency(&r), "baecdf");
+    }
+
+    #[test]
+    fn removed_projects_leave_both_orders() {
         let mut r = ring("abcd");
         step(&mut r, Direction::Previous);
         r.retain(|k| *k != key('c'));
-        r.push_front(key('e'));
-        step(&mut r, Direction::Previous);
-        assert_eq!(order(&r), "dabe");
+        assert_eq!(order(&r), "bda");
+        assert_eq!(recency(&r), "bad");
     }
 }

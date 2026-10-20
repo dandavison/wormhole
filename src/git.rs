@@ -258,10 +258,15 @@ pub fn create_worktree(
     }
 }
 
-/// Create a worktree with detached HEAD. The PR flow uses this so that
-/// `gh pr checkout` creates the branch itself, setting the correct upstream
-/// (including the fork remote for fork PRs).
-pub fn create_worktree_detached(repo_path: &Path, worktree_path: &Path) -> Result<(), String> {
+/// Create a worktree with detached HEAD, from which the caller will check out
+/// `branch_name`. The PR flow uses this so that `gh pr checkout` creates the
+/// branch itself, setting the correct upstream (including the fork remote for
+/// fork PRs).
+pub fn create_worktree_detached(
+    repo_path: &Path,
+    worktree_path: &Path,
+    _branch_name: &str,
+) -> Result<(), String> {
     prepare_worktree_dir(worktree_path)?;
     let output = Command::new("git")
         .args([
@@ -1014,7 +1019,7 @@ detached
             .unwrap();
 
         let worktree_path = repo.join("worktrees/pr-1");
-        create_worktree_detached(&repo, &worktree_path).unwrap();
+        create_worktree_detached(&repo, &worktree_path, "pr-branch").unwrap();
 
         assert!(worktree_path.join(".git").exists());
         // HEAD is detached: no symbolic ref, but a branch can be created here
@@ -1126,6 +1131,42 @@ detached
         let result = create_worktree(&repo, &worktree_path, "my-feature");
         assert!(result.is_ok(), "create_worktree failed: {:?}", result);
         assert!(worktree_path.exists());
+    }
+
+    #[test]
+    fn test_create_worktree_detached_vacates_checked_out_branch() {
+        use std::fs;
+
+        let temp = tempfile::tempdir().unwrap();
+        let repo = temp.path().join("repo");
+
+        fs::create_dir_all(&repo).unwrap();
+        Command::new("git")
+            .args(["init"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "--allow-empty", "-m", "init"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["checkout", "-b", "pr-branch"])
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+
+        let worktree_path = repo.join("worktrees/pr-branch");
+        create_worktree_detached(&repo, &worktree_path, "pr-branch").unwrap();
+
+        assert!(branch_checked_out_at(&repo, "pr-branch").is_none());
+        let checkout = Command::new("git")
+            .args(["checkout", "pr-branch"])
+            .current_dir(&worktree_path)
+            .output()
+            .unwrap();
+        assert!(checkout.status.success());
     }
 
     #[test]

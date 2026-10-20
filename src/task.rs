@@ -101,7 +101,7 @@ fn create_task_inner(repo: &str, branch: &str, detached: bool) -> Result<Project
 
     if !worktree_path.join(".git").exists() {
         if detached {
-            git::create_worktree_detached(&repo_path, &worktree_path)?;
+            git::create_worktree_detached(&repo_path, &worktree_path, branch)?;
         } else {
             git::create_worktree(&repo_path, &worktree_path, branch)?;
         }

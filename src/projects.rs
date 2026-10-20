@@ -512,39 +512,43 @@ fn generate_cards(task_info: &[(ProjectKey, Option<String>, std::path::PathBuf)]
     if commands.is_empty() {
         return;
     }
-    task_info.par_iter().for_each(|(_, _, path)| {
-        let task_dir = path.join(".task");
-        let _ = std::fs::create_dir_all(&task_dir);
-        let mut sections = Vec::new();
-        for cmd in &commands {
-            let output = std::process::Command::new("sh")
-                .args(["-c", cmd])
-                .current_dir(path)
-                .output();
-            match output {
-                Ok(o) => {
-                    let stdout = String::from_utf8_lossy(&o.stdout);
-                    let stderr = String::from_utf8_lossy(&o.stderr);
-                    if !stderr.trim().is_empty() {
-                        sections.push(format!("```\n{}{}```", stdout, stderr));
-                    } else {
-                        sections.push(format!("```\n{}```", stdout));
-                    }
+    task_info
+        .par_iter()
+        .for_each(|(_, _, path)| generate_card(path, &commands));
+}
+
+fn generate_card(path: &std::path::Path, commands: &[String]) {
+    let task_dir = path.join(".task");
+    let _ = std::fs::create_dir_all(&task_dir);
+    let mut sections = Vec::new();
+    for cmd in commands {
+        let output = std::process::Command::new("sh")
+            .args(["-c", cmd])
+            .current_dir(path)
+            .output();
+        match output {
+            Ok(o) => {
+                let stdout = String::from_utf8_lossy(&o.stdout);
+                let stderr = String::from_utf8_lossy(&o.stderr);
+                if !stderr.trim().is_empty() {
+                    sections.push(format!("```\n{}{}```", stdout, stderr));
+                } else {
+                    sections.push(format!("```\n{}```", stdout));
                 }
-                Err(e) => sections.push(format!("```\nerror: {}\n```", e)),
             }
+            Err(e) => sections.push(format!("```\nerror: {}\n```", e)),
         }
-        let generated = format!(
-            "{}\n{}\n{}",
-            CARD_GENERATED_BEGIN,
-            sections.join("\n"),
-            CARD_GENERATED_END,
-        );
-        let card_path = task_dir.join("card.md");
-        let existing = std::fs::read_to_string(&card_path).unwrap_or_default();
-        let new_content = splice_generated(&existing, &generated);
-        let _ = std::fs::write(card_path, new_content);
-    });
+    }
+    let generated = format!(
+        "{}\n{}\n{}",
+        CARD_GENERATED_BEGIN,
+        sections.join("\n"),
+        CARD_GENERATED_END,
+    );
+    let card_path = task_dir.join("card.md");
+    let existing = std::fs::read_to_string(&card_path).unwrap_or_default();
+    let new_content = splice_generated(&existing, &generated);
+    let _ = std::fs::write(card_path, new_content);
 }
 
 /// Replace the generated section in `existing`, or append it if absent.
@@ -597,6 +601,15 @@ fn jira_status_to_local(jira_status: &str) -> Option<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn generate_card_does_not_recreate_missing_task_dir() {
+        let missing =
+            std::env::temp_dir().join(format!("wormhole-card-{}/task", std::process::id()));
+        generate_card(&missing, &["echo hi".to_string()]);
+        assert!(!missing.exists());
+        assert!(!missing.parent().unwrap().exists());
+    }
 
     #[test]
     fn splice_into_empty() {

@@ -265,9 +265,12 @@ pub fn create_worktree(
 pub fn create_worktree_detached(
     repo_path: &Path,
     worktree_path: &Path,
-    _branch_name: &str,
+    branch_name: &str,
 ) -> Result<(), String> {
     prepare_worktree_dir(worktree_path)?;
+    if let Some(existing_path) = branch_checked_out_at(repo_path, branch_name) {
+        vacate_branch(&existing_path, branch_name)?;
+    }
     let output = Command::new("git")
         .args([
             "worktree",

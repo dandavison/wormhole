@@ -518,6 +518,9 @@ fn generate_cards(task_info: &[(ProjectKey, Option<String>, std::path::PathBuf)]
 }
 
 fn generate_card(path: &std::path::Path, commands: &[String]) {
+    if !path.is_dir() {
+        return;
+    }
     let task_dir = path.join(".task");
     let _ = std::fs::create_dir_all(&task_dir);
     let mut sections = Vec::new();

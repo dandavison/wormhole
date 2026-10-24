@@ -19,29 +19,31 @@ struct Window {
 // - a window pane's directory lies outside the project root
 // - all panes of a window are not in non-root subdirectories of the project
 pub fn project_directories() -> Vec<String> {
+    window_directories(&tmux(["list-panes", "-a", "-F", "#W #{pane_current_path}"]))
+}
+
+fn window_directories(list_panes_output: &str) -> Vec<String> {
     let mut directories = HashMap::<String, String>::new();
-    tmux(["list-panes", "-a", "-F", "#W #{pane_current_path}"])
-        .split_terminator("\n")
-        .for_each(|line| {
-            let mut fields = line.split(" ");
-            let window_name = fields.next().unwrap().to_string();
-            let directory = fields.next().unwrap().to_string();
-            if let Some(existing_directory) = directories.get(&window_name) {
-                let common_prefix: String = existing_directory
-                    .chars()
-                    .zip(directory.chars())
-                    .take_while(|(a, b)| a == b)
-                    .map(|(a, _)| a)
-                    .collect();
-                // If the common prefix is just "/", skip this window as it has
-                // disparate pane directories with no meaningful common root
-                if common_prefix != "/" {
-                    directories.insert(window_name, common_prefix);
-                }
-            } else {
-                directories.insert(window_name, directory);
+    list_panes_output.split_terminator("\n").for_each(|line| {
+        let mut fields = line.split(" ");
+        let window_name = fields.next().unwrap().to_string();
+        let directory = fields.next().unwrap().to_string();
+        if let Some(existing_directory) = directories.get(&window_name) {
+            let common_prefix: String = existing_directory
+                .chars()
+                .zip(directory.chars())
+                .take_while(|(a, b)| a == b)
+                .map(|(a, _)| a)
+                .collect();
+            // If the common prefix is just "/", skip this window as it has
+            // disparate pane directories with no meaningful common root
+            if common_prefix != "/" {
+                directories.insert(window_name, common_prefix);
             }
-        });
+        } else {
+            directories.insert(window_name, directory);
+        }
+    });
     directories
         .into_values()
         .filter(|dir| dir != "/") // Also filter out any remaining root directories
@@ -340,4 +342,14 @@ fn tmux_result(args: Vec<String>) -> Result<String, String> {
         .output()
         .map_err(|e| format!("Failed to execute {program}: {e}"))?;
     get_stdout(program, output)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pane_with_empty_directory_is_not_a_project_directory() {
+        assert_eq!(window_directories("a /x/a\nb \n"), vec!["/x/a".to_string()]);
+    }
 }

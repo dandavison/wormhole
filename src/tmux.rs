@@ -46,7 +46,7 @@ fn window_directories(list_panes_output: &str) -> Vec<String> {
     });
     directories
         .into_values()
-        .filter(|dir| dir != "/") // Also filter out any remaining root directories
+        .filter(|dir| !dir.is_empty() && dir != "/") // Also filter out any remaining root directories
         .collect()
 }
 

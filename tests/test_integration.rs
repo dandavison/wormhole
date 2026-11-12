@@ -1330,12 +1330,11 @@ fn test_close_zen_mode_window() {
 }
 
 #[test]
-fn test_worktree_whose_dir_does_not_match_its_branch() {
-    // A worktree directory named for one branch, holding another (e.g. the
-    // branch was renamed in place). The task is discovered under the branch
-    // name, so its computed worktree path does not exist on disk. Opening it
-    // must fail loudly rather than silently landing tmux in $HOME, and
-    // `doctor conform` must relocate the worktree to its canonical path.
+fn test_branch_renamed_in_worktree_keeps_its_project() {
+    // The worktree directory encodes the project's branch, and that is the
+    // project's identity whatever is checked out there, even once the
+    // directory's branch no longer exists. Renaming the branch in place leaves
+    // the project where it was, and `doctor conform` leaves the worktree alone.
     let test = harness::WormholeTest::new(8967);
 
     let home_proj = format!("{}mismatch-home", TEST_PREFIX);
@@ -1346,45 +1345,37 @@ fn test_worktree_whose_dir_does_not_match_its_branch() {
     init_git_repo(&home_dir);
     test.create_project(&home_dir, &home_proj);
 
-    let stale_worktree = test.create_worktree_directly(&home_dir, &home_proj, old_branch);
+    let worktree = test.create_worktree_directly(&home_dir, &home_proj, old_branch);
     Command::new("git")
         .args(["branch", "-m", old_branch, new_branch])
-        .current_dir(&stale_worktree)
+        .current_dir(&worktree)
         .output()
         .unwrap();
 
     test.cli("wormhole refresh").unwrap();
     assert!(
-        test.task_in_list(&home_proj, new_branch),
-        "task should be discovered under its branch name"
+        test.task_in_list(&home_proj, old_branch),
+        "the project should keep the branch its worktree directory encodes"
     );
-
-    let key = test.task_store_key(new_branch, &home_proj);
-    let err = test
-        .cli(&format!("wormhole open '{}'", key))
-        .expect_err("opening a task with no worktree at its canonical path must fail");
     assert!(
-        err.contains("does not exist"),
-        "expected a missing-worktree error, got: {}",
-        err
+        !test.task_in_list(&home_proj, new_branch),
+        "the renamed branch must not become a project of its own"
     );
 
     test.cli("wormhole doctor conform").unwrap();
-
-    let canonical = test.task_worktree_path(&home_proj, new_branch);
     assert!(
-        std::path::Path::new(&canonical).is_dir(),
-        "conform should move the worktree to {}",
-        canonical
+        std::path::Path::new(&worktree).is_dir(),
+        "conform should leave the worktree at {}",
+        worktree
     );
     assert!(
-        !std::path::Path::new(&stale_worktree).exists(),
-        "conform should leave nothing at {}",
-        stale_worktree
+        !std::path::Path::new(&test.task_worktree_path(&home_proj, new_branch)).exists(),
+        "conform should not create a worktree for the renamed branch"
     );
 
+    let key = test.task_store_key(old_branch, &home_proj);
     test.cli(&format!("wormhole open '{}'", key)).unwrap();
-    test.assert_tmux_cwd(&canonical);
+    test.assert_tmux_cwd(&worktree);
 }
 
 #[test]
@@ -1525,18 +1516,17 @@ fn urlencode(value: &str) -> String {
 }
 
 #[test]
-fn test_member_branches_belong_to_an_existing_task() {
-    // With `project_branches = { "*" = ["{project}-*"] }`, checking out
-    // `feature-2` inside the worktree of task `repo:feature` leaves the task's
-    // identity alone, and opening `repo:feature-2` lands in that same worktree
-    // rather than creating a second one.
-    let test =
-        harness::WormholeTest::new_with_env(18927, &[("WORMHOLE_PROJECT_BRANCHES", "{project}-*")]);
+fn test_branch_created_in_worktree_belongs_to_its_project() {
+    // A branch belongs to the project in whose worktree it is checked out:
+    // after `git checkout -b other` inside the worktree of `repo:feature`, the
+    // project is still `repo:feature`, and opening `repo:other` or `:other`
+    // lands in that worktree rather than creating a second one.
+    let test = harness::WormholeTest::new(18927);
 
-    let home_proj = format!("{}member-branches", TEST_PREFIX);
+    let home_proj = format!("{}checked-out-branch", TEST_PREFIX);
     let home_dir = format!("/tmp/{}", home_proj);
     let task_branch = format!("{}feature", TEST_PREFIX);
-    let member_branch = format!("{}-2", task_branch);
+    let other_branch = format!("{}other", TEST_PREFIX);
 
     init_git_repo(&home_dir);
     test.create_project(&home_dir, &home_proj);
@@ -1544,7 +1534,7 @@ fn test_member_branches_belong_to_an_existing_task() {
     let worktree = test.task_worktree_path(&home_proj, &task_branch);
 
     let checkout = std::process::Command::new("git")
-        .args(["checkout", "-b", &member_branch])
+        .args(["checkout", "-b", &other_branch])
         .current_dir(&worktree)
         .output()
         .unwrap();
@@ -1558,24 +1548,23 @@ fn test_member_branches_belong_to_an_existing_task() {
     std::thread::sleep(std::time::Duration::from_millis(300));
     assert!(
         test.task_in_list(&home_proj, &task_branch),
-        "task should keep its identity after checking out a member branch"
+        "the project should keep its identity after a branch is created in its worktree"
     );
     assert!(
-        !test.task_in_list(&home_proj, &member_branch),
-        "the member branch must not become a task of its own"
+        !test.task_in_list(&home_proj, &other_branch),
+        "the checked-out branch must not become a project of its own"
     );
 
-    test.cli(&format!("wormhole open '{}:{}'", home_proj, member_branch))
+    test.cli(&format!("wormhole open '{}:{}'", home_proj, other_branch))
         .unwrap();
     test.assert_tmux_cwd(&worktree);
     assert!(
-        !std::path::Path::new(&test.task_worktree_path(&home_proj, &member_branch)).exists(),
-        "no worktree should be created for a member branch of an existing task"
+        !std::path::Path::new(&test.task_worktree_path(&home_proj, &other_branch)).exists(),
+        "no worktree should be created for a branch checked out in an existing project"
     );
 
-    // The bare `:branch` form resolves through `project_branches` too.
     let resolved = test
-        .http_get(&format!("/project/switch/:{}?sync=1", member_branch))
+        .http_get(&format!("/project/switch/:{}?sync=1", other_branch))
         .unwrap();
     assert!(resolved.contains("ok"), "unexpected response: {}", resolved);
     test.assert_tmux_cwd(&worktree);

@@ -97,9 +97,8 @@ impl WormholeTest {
             .into_owned();
 
         // Isolate the daemon from the developer's own ~/.wormhole/wormhole.toml
-        // too: a `[project_branches]` rule there, say, changes which branches
-        // belong to which project, and tests assume what they configure. A
-        // test wanting a config passes WORMHOLE_CONFIG in `extra_env` instead.
+        // too: tests assume what they configure. A test wanting a config
+        // passes WORMHOLE_CONFIG in `extra_env` instead.
         let empty_config = format!("/tmp/wh-test-empty-config-{}.toml", port);
         std::fs::write(&empty_config, "").unwrap();
 

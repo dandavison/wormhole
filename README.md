@@ -314,15 +314,8 @@ editors = [
     { glob = "*-docs", editor = "code" },
 ]
 
-# The member branches of each project (see "Project branches" below). The key is
-# a glob over project keys; the values are globs, or /regexes/, over branch
-# names, in which `{project}` stands for the project's own branch.
-[project_branches]
-"*" = ["{project}-*", "{project}/*"]
-"wormhole:multi-branch-tasks" = ["mbt-fixups", "mbt/*", "/^stack-[0-9]+$/"]
-
 # Panes to add to a project's tmux window when it is first opened. The key is a
-# glob over project keys, as above; a project gets the panes of every entry
+# glob over project keys; a project gets the panes of every entry
 # matching it. The window opens with a shell in the project's working tree; each
 # pane splits off one more pane there and types `command` into its shell (a
 # plain shell if omitted). Each split divides the pane focused at that point.
@@ -350,41 +343,20 @@ editors = [
 
 ### Project branches
 
-A project is identified by one branch (`repo:branch`), and its worktree lives at a path derived
-from that branch. Work on a project often spans several branches: a stack of PRs, a follow-up, a
-rebased copy. The `project_branches` table declares which further branches — the project's
-_member branches_ — belong to the existing project instead of becoming projects of their own.
-
-A project's patterns are the union of those of every entry whose key glob matches its
-`repo:branch` key, with `{project}` replaced by its branch. A pattern is a glob unless delimited
-by `/`, in which case the text between the delimiters is a regex; both must match the whole
-branch name. With the entries above, `feature-x-2` and `feature-x/fixup` are member branches of
-`repo:feature-x`, and `mbt-fixups`, `mbt/2` and `stack-3` are member branches of
-`wormhole:multi-branch-tasks` alone.
-
-Concretely, given a project and its member branches:
-
-- Checking out a member branch inside the project's worktree leaves the project's identity,
-  worktree, tmux window and editor workspace alone, even once the original branch has been merged
-  and deleted: the worktree directory name carries the identity. (Without a match, the project is
-  renamed after the checked-out branch and `wormhole doctor conform` relocates the worktree.)
-- `wormhole open repo:feature-x-2`, `wormhole open :feature-x-2`, and opening a PR or issue whose
-  branch is a member branch all land in the existing project; no second worktree is created.
-- The browser extension's buttons on a PR page link to the project whose branch the PR's head
-  branch is, or is a member branch of, even when the worktree currently has a different branch
-  checked out.
-
-Membership is exclusive, and never decided by contest: if two projects claim the same branch (say
-`feature` and `feature-x` both exist, and the global entry above makes `feature-x-2` a member
-branch of each), it belongs to neither and the operation that asked for it fails with an error
-naming both. A branch is never a member branch of itself, and a branch that already has a project
-of its own is that project regardless of the table. The table is re-read by `wormhole refresh`.
+A project is identified by one branch (`repo:branch`), and its worktree lives at a path that
+encodes that branch, e.g. `~/worktrees/repo/feature/repo`. That directory decides the project:
+whatever branch is checked out in the worktree belongs to the project, including a branch created
+there with `git checkout -b`, and the project keeps its identity after its own branch is renamed,
+merged or deleted. So `wormhole open repo:other`, `wormhole open :other`, and opening a PR whose
+head branch is `other` all land in that project while `other` is checked out in its worktree. A
+branch that has a project of its own is that project. Wormhole has no record of which branches
+were checked out in a worktree in the past.
 
 `~` is expanded to `$HOME` at load time. `WORMHOLE_CONFIG` names a different file to read.
 
 Env var names follow the convention `WORMHOLE_` + SCREAMING_SNAKE of the TOML key. Env vars
 override config file values when set. `WORMHOLE_SEARCH_PATHS` is colon-separated; per-path excludes,
-`editors`, `project_branches`, `project_layout` and `worktree_links` are config-file-only features.
+`editors`, `project_layout` and `worktree_links` are config-file-only features.
 
 _Wormhole is pre-1.0. Configuration and environment variable names may change without backward
 compatibility._
@@ -397,7 +369,6 @@ compatibility._
 | `WORMHOLE_SEARCH_PATHS`   | Colon-separated directories to search for projects                 |
 | `WORMHOLE_WORKTREE_DIR`   | Where project worktrees are created (default: `~/worktrees`)       |
 | `WORMHOLE_DEFAULT_PROJECT` | Project used for a new branch project opened as `:branch`         |
-| `WORMHOLE_PROJECT_BRANCHES` | Whitespace-separated patterns, overriding `project_branches` with one `"*"` entry |
 | `WORMHOLE_PORT`           | HTTP API port (default: 7117)                                      |
 | `WORMHOLE_EDITOR`         | Editor to use (`cursor`, `code`, `code-insiders`, `emacs`, `none`) |
 | `JIRA_INSTANCE`           | JIRA instance name (e.g., `mycompany` for mycompany.atlassian.net) |

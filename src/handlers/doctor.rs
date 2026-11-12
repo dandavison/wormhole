@@ -75,7 +75,6 @@ pub fn conform(dry_run: bool) -> Response<Body> {
     let repo_paths: Vec<_> = available.into_iter().collect();
 
     let worktree_dir = config::worktree_dir();
-    let project_branches = config::project_branches();
     let results: Vec<ConformTaskResult> = repo_paths
         .par_iter()
         .filter(|(_, path)| git::is_git_repo(path))
@@ -84,9 +83,7 @@ pub fn conform(dry_run: bool) -> Response<Body> {
             git::list_worktrees(path)
                 .into_iter()
                 .filter(|wt| wt.path.starts_with(&worktree_base))
-                .filter_map(|wt| {
-                    conform_worktree(&wt, path, name.as_str(), &project_branches, dry_run)
-                })
+                .filter_map(|wt| conform_worktree(&wt, path, name.as_str(), dry_run))
                 .collect::<Vec<_>>()
         })
         .collect();
@@ -120,67 +117,27 @@ pub fn conform(dry_run: bool) -> Response<Body> {
     json_response(&result)
 }
 
-/// Relocate the worktree if its directory doesn't encode the branch that
-/// identifies its task — every lookup derives the path from (repo, branch), so
-/// such a worktree is unreachable — then conform its contents. A checked-out
-/// branch that is a member branch of the directory's branch is not a
-/// mismatch: the task keeps its identity and the worktree stays put.
+/// Conform the contents of a worktree. Its project is the one its directory
+/// encodes, whatever branch is checked out there.
 fn conform_worktree(
     wt: &git::Worktree,
     repo_path: &std::path::Path,
     repo: &str,
-    project_branches: &crate::project_branches::ProjectBranches,
     dry_run: bool,
 ) -> Option<ConformTaskResult> {
     let checked_out = wt.branch.as_deref()?;
     let branch =
-        match project_branches.project_branch_for_worktree(repo, &wt.path, checked_out, || {
-            git::list_branches(repo_path)
-        }) {
-            Ok(branch) => branch,
-            Err(e) => {
-                return Some(ConformTaskResult {
-                    task: format!("{}:{}", repo, checked_out),
-                    actions: Vec::new(),
-                    error: Some(e),
-                })
-            }
+        git::worktree_project_branch(&wt.path, checked_out, || git::list_branches(repo_path))?;
+    let (actions, error) =
+        match task::conform_task_worktree(&wt.path, repo_path, repo, &branch, dry_run) {
+            Ok(actions) => (actions, None),
+            Err(e) => (Vec::new(), Some(e)),
         };
-    let branch = branch.as_str();
-    let task = format!("{}:{}", repo, branch);
-    let mut actions = Vec::new();
-    let mut path = wt.path.clone();
-
-    let canonical = git::task_worktree_path(config::worktree_dir(), repo, branch);
-    if path != canonical {
-        actions.push(format!("move worktree to {}", canonical.display()));
-        if !dry_run {
-            if let Err(e) = git::move_worktree(repo_path, &path, &canonical) {
-                return Some(ConformTaskResult {
-                    task,
-                    actions,
-                    error: Some(e),
-                });
-            }
-            path = canonical;
-        }
-    }
-
-    match task::conform_task_worktree(&path, repo_path, repo, branch, dry_run) {
-        Ok(more) => {
-            actions.extend(more);
-            Some(ConformTaskResult {
-                task,
-                actions,
-                error: None,
-            })
-        }
-        Err(e) => Some(ConformTaskResult {
-            task,
-            actions,
-            error: Some(e),
-        }),
-    }
+    Some(ConformTaskResult {
+        task: format!("{}:{}", repo, branch),
+        actions,
+        error,
+    })
 }
 
 // --- persisted-data ---
